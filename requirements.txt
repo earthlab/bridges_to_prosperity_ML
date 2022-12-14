@@ -1,0 +1,10 @@
+fastai==1.0.61
+boto3
+geopandas
+shapely
+numpy
+rasterio
+GDAL
+rioxarray
+tqdm
+geojson

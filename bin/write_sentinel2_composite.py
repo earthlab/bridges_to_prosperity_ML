@@ -26,7 +26,7 @@ def get_median_slices(indir, outdir, number_of_slices):
     slice_width = band_length / number_of_slices
     slice_bounds = [int(i) for i in np.arange(0, band_length + slice_width, slice_width)]
 
-    coordinate_match = decode_coordinate_grid(indir)  # Should be a 5 character string like 36LUK
+    coordinate_match = decode_coordinate_grid(os.path.basename(indir))  # Should be a 5 character string like 36LUK
     if coordinate_match:
         coords = coordinate_match.groupdict()
         utm_code = coords['utm_code']

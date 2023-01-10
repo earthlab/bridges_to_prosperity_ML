@@ -276,7 +276,7 @@ def main(composite_path: str, region_name: str, model_path: str, progress_file: 
     cores = cores if cores is not None else multiprocessing.cpu_count() - 2
 
     # Call parent processes for parallel tasks
-    sp.call([sys.executable, os.path.join(PROJECT_DIR, 'tiling', 'make_tiles_from_composite.py'),
+    sp.call([sys.executable, os.path.join(PROJECT_DIR, 'tiling', 'tiles_from_composite.py'),
              '--composite_path', composite_path, '--out_dir', tiling_dir, '--geom_lookup_path', geom_lookup, '--cores',
              cores])
 

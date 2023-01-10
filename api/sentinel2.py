@@ -2,6 +2,7 @@ import getpass
 import multiprocessing as mp
 import os
 import pathlib
+import re
 import subprocess as sp
 from argparse import Namespace
 from datetime import datetime, timedelta
@@ -24,6 +25,7 @@ def _download_task(namespace: Namespace) -> None:
         Each value in the namespace must be a pickle-izable type (i.e. str).
     """
     s3 = boto3.client('s3')
+    os.makedirs(namespace.outdir, exist_ok=True)
     s3.download_file(namespace.bucket_name, namespace.available_file,
                      os.path.join(namespace.outdir, namespace.available_file.replace('/', '_')),
                      ExtraArgs={'RequestPayer': 'requester'}
@@ -178,6 +180,9 @@ class SinergiseSentinelAPI:
         api.download([27.876, -45.678, 28.012, -45.165], 1000, '/example/outdir', '2021-01-01', '2021-02-01')
     """
 
+    TILE_PATTERN = r'tiles/(?P<utm_code>\d+)/(?P<latitude_band>\S+)/(?P<square>\S+)/(?P<year>\d{4})/(?P<month>\d+)/(?P<day>\d+)/0/B(?P<band>\d{2})\.jp2.*'
+    CLOUD_PATTERN = r'tiles/(?P<utm_code>\d+)/(?P<latitude_band>\S+)/(?P<square>\S+)/(?P<year>\d{4})/(?P<month>\d+)/(?P<day>\d+)/0/qi/MSK_CLOUDS_B00.gml.*'
+
     def __init__(self, identikey: str = None) -> None:
         """
         Creates a boto3 client object for making requests. If using a CU AWS account the user's identikey can be input
@@ -224,10 +229,26 @@ class SinergiseSentinelAPI:
         total_data /= 1E9
 
         args = []
-        for file in available_files:
-            if '/preview/' in file[0]:
+        for file_info in available_files:
+            file_path = file_info[0]
+            print(file_path, os.path.basename(file_path))
+            if '/preview/' in file_path:
                 continue
-            args.append(Namespace(available_file=file[0], bucket_name=self._bucket_name, outdir=outdir))
+
+            tile_match = re.match(self.TILE_PATTERN, file_path)
+            cloud_match = re.match(self.CLOUD_PATTERN, file_path)
+            if tile_match:
+                groups = tile_match.groupdict()
+            elif cloud_match:
+                groups = cloud_match.groupdict()
+            else:
+                continue
+
+            grid_dir = groups['utm_code'] + groups['latitude_band'] + groups['square']
+            date_dir = groups['year'] + groups['month'] + groups['day']
+            file_dir = os.path.join(outdir, grid_dir, date_dir)
+
+            args.append(Namespace(available_file=file_path, bucket_name=self._bucket_name, outdir=file_dir))
 
         proceed = input(f'Found {len(args)} files for download. Total size of files is'
                         f' {round(total_data, 2)}GB and estimated cost will be ${round(0.09 * total_data, 2)}'
@@ -259,7 +280,10 @@ class SinergiseSentinelAPI:
         mgrs_grids = self._find_overlapping_mgrs(bounds)
 
         for grid_string in mgrs_grids:
-            grid = f'tiles/{grid_string[:2]}/{grid_string[2]}/{grid_string[3:5]}'
+            utm_code = grid_string[:2]
+            latitude_band = grid_string[2]
+            square = grid_string[3:5]
+            grid = f'tiles/{utm_code}/{latitude_band}/{square}'
             response = self._s3.list_objects_v2(
                 Bucket=self._bucket_name,
                 Prefix=grid + '/',
@@ -272,13 +296,14 @@ class SinergiseSentinelAPI:
             for date in date_paths:
                 response = self._s3.list_objects_v2(
                     Bucket=self._bucket_name,
-                    Prefix=grid + date + '0/',
+                    Prefix=grid + date + '0/',  # '0/' is for the sequence, which in most cases will be 0
                     MaxKeys=100,
                     RequestPayer='requester'
                 )
                 if 'Contents' in list(response.keys()):
                     info += [(v['Key'], v['Size']) for v in response['Contents'] if
-                             'B02.jp2' in v['Key'] or 'B03.jp2' in v['Key'] or 'B04.jp2' in v['Key']]
+                             'B02.jp2' in v['Key'] or 'B03.jp2' in v['Key'] or 'B04.jp2' in v['Key'] or
+                             'MSK_CLOUDS_B00.gml' in v['Key']]
 
         return info
 

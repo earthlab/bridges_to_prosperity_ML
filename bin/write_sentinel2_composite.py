@@ -177,8 +177,8 @@ def write_out(indir, outdir, region_name: str):
         with rasterio.open(out_path, 'w', driver='GTiff', width=10980, height=10980, count=1, crs=crs,
                            transform=transform, dtype=dtype) as dst:
             for file_name, file in over_bnd.items():
-                left_bound = file_name.split('_')[0]
-                right_bound = file_name.split('_')[1].replace('.tiff', '')
+                left_bound = int(file_name.split('_')[0])
+                right_bound = int(file_name.split('_')[1].replace('.tiff', ''))
                 dst.write(file.read(1), window=Window.from_slices(slice(left_bound, right_bound), slice(0, 10980)),
                           indexes=1)
 

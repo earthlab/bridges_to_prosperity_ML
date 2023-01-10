@@ -182,7 +182,7 @@ def write_out(indir, outdir, region_name: str):
                 dst.write(file.read(1), window=Window.from_slices(slice(left_bound, right_bound), slice(0, 10980)),
                           indexes=1)
 
-        file2 = rasterio.open('Multiband_median_corrected' + coordinate + band_dir + '.tiff')
+        file2 = rasterio.open(out_path)
 
         final_truecolor.append(file2)
 
@@ -233,6 +233,7 @@ def write_out(indir, outdir, region_name: str):
 
 
 def create_composite(input_dir, out_dir, region_name, slices):
+    os.makedirs(out_dir, exist_ok=True)
     slice_outdir = tempfile.mkdtemp(prefix='b2p')
 
     slices = 1 if slices is None else slices

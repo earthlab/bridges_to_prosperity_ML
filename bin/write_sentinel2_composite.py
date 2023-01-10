@@ -121,7 +121,7 @@ def get_median_slices(indir, outdir, number_of_slices):
 
             # Write the file for each band and slice, combining the data for each available day of data
             shape = dates_for_slice[0].shape
-            y2 = np.vstack(dates_for_slice)
+            y2 = np.vstack([dslice.ravel() for dslice in dates_for_slice])
 
             print(y2.shape)
 

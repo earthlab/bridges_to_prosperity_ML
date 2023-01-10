@@ -237,7 +237,8 @@ def create_composite(input_dir, out_dir, region_name, slices):
 
     slices = 1 if slices is None else slices
     get_median_slices(input_dir, slice_outdir, slices)
-    write_out(slice_outdir, out_dir, region_name)
+    for coorindate_dir in os.listdir(slice_outdir):
+        write_out(os.path.join(slice_outdir, coorindate_dir), out_dir, region_name)
     shutil.rmtree(slice_outdir)
 
 

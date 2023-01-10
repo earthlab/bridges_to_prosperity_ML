@@ -138,7 +138,10 @@ def get_median_slices(indir, outdir, number_of_slices):
             del y2
 
             z2 = np.uint16(z2.reshape(shape))
-            outpath = os.path.join(outdir, f'{os.path.basename(indir)}', band, f'{left_bound}_{right_bound}.tiff')
+
+            file_dir = os.path.join(outdir, f'{os.path.basename(indir)}', band)
+            os.makedirs(file_dir, exist_ok=True)
+            outpath = os.path.join(file_dir, f'{left_bound}_{right_bound}.tiff')
             true_color = rasterio.open(outpath, 'w', driver='Gtiff', width=shape[1], height=shape[0], count=1, crs=crs,
                                        transform=transform, dtype=z2.dtype)
 

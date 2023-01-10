@@ -35,3 +35,5 @@ if __name__ == '__main__':
     parser.add_argument('--slices', required=False, type=int, default=1,
                         help='Number of slices to split the tiles up into when making the composite. Default is 1')
     args = parser.parse_args()
+    download_and_make_composites(args.outdir, args.bbox, args.start_date, args.end_date, args.region_name, args.slices,
+                                 args.buffer)

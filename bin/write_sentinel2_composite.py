@@ -61,7 +61,7 @@ def get_median_slices(indir, outdir, number_of_slices):
                 if os.path.getsize(cloud_path) > 500:
                     cloud_file = gpd.read_file(cloud_path)
 
-                base_file_name = f'tiles_{utm_code}_{latitude_band}_{square}_{date.year}_{date.month}_{date.day}'
+                base_file_name = f'tiles_{utm_code}_{latitude_band}_{square}_{date.year}_{date.month}_{date.day}_0'
 
                 image_path = os.path.join(indir, dated_directory, base_file_name + f'_{band}.jp2')
                 if not os.path.exists(image_path):

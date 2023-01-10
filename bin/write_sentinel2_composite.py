@@ -77,13 +77,15 @@ def get_median_slices(indir, outdir, number_of_slices):
                     transform = image.transform
 
                 # Read in the file... going to try and do this so the file is only read in once
+                # Read it in as a float array so we can use np.nan later. If this is a space / performance issue
+                # an alternative can be found
                 image_slice = image.read(1, window=Window.from_slices(slice(left_bound, right_bound),
-                                                                      slice(0, band_length)))
+                                                                      slice(0, band_length))).astype(np.float32)
 
                 try:
                     if cloud_file is not None:
                         print('A')
-                        cloud_file.crs = ({'init': str(image_slice.crs)})
+                        cloud_file.crs = ({'init': str(image.crs)})
 
                         # convert the cloud mask data to a raster that has the same shape and transformation as the
                         # image raster data

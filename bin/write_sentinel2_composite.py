@@ -81,6 +81,7 @@ def get_median_slices(indir, outdir, number_of_slices):
 
                 try:
                     if cloud_file is not None:
+                        print('A')
                         cloud_file.crs = ({'init': str(image_slice.crs)})
 
                         # convert the cloud mask data to a raster that has the same shape and transformation as the
@@ -94,11 +95,15 @@ def get_median_slices(indir, outdir, number_of_slices):
                         # find the indices in the cloud mask raster data where the red channel is 0, the green channel
                         # is 1, and the blue channel is 0
                     else:
+                        print('B')
                         cloud_image = np.empty_like(image_read.shape)
                         cloud_channels = np.where(cloud_image == 0, 1, 1)
                 except:
+                    print('C')
                     cloud_image = np.empty_like(image_read.shape)
                     cloud_channels = np.where(cloud_image == 0, 1, 1)
+
+                print(cloud_image.shape, cloud_channels.shape, image_read.shape)
 
                 # select the image data from the current slice and index
                 image_slice = image_slice * cloud_channels[left_bound: right_bound, 0:10980]

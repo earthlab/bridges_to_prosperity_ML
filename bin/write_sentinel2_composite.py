@@ -85,7 +85,7 @@ def get_median_slices(indir, outdir, number_of_slices):
                 try:
                     if cloud_file is not None:
                         print('A')
-                        cloud_file.crs = ({'init': str(image.crs)})
+                        cloud_file.crs = (str(image.crs))
 
                         # convert the cloud mask data to a raster that has the same shape and transformation as the
                         # image raster data
@@ -119,15 +119,19 @@ def get_median_slices(indir, outdir, number_of_slices):
 
                 dates_for_slice.append(image_slice)
 
-            # Write the file for each band and slice, combining the data for each avaiable day of data
+            # Write the file for each band and slice, combining the data for each available day of data
             shape = dates_for_slice[0].shape
             y2 = np.vstack(dates_for_slice)
+
+            print(y2.shape)
 
             # Releasing memory
             dates_for_slice = []
             del dates_for_slice
 
             z2 = np.nanmedian(y2, axis=0, overwrite_input=True)
+
+            print(z2.shape)
 
             # Releasing memory
             y2 = []

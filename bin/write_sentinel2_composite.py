@@ -186,8 +186,6 @@ def write_out(indir, outdir, region_name: str):
 
         final_truecolor.append(file2)
 
-        file2.close()
-
     out_path = os.path.join(outdir, f'{region_name}_multiband_cld_NAN_median_corrected_{coordinate}.tiff')
     true = rasterio.open(out_path, 'w', driver='Gtiff', width=final_truecolor[0].width,
                          height=final_truecolor[0].height, count=3, crs=final_truecolor[0].crs,

@@ -2,8 +2,8 @@
 # composites
 import os
 from argparse import ArgumentParser
-from api.sentinel2 import SinergiseSentinelAPI
-from composites.sentinel2 import create_composite
+from src.api.sentinel2 import SinergiseSentinelAPI
+from bin.write_sentinel2_composite import create_composite
 
 
 def download_and_make_composites(outdir, bounds, start_date, end_date, region_name, slices, buffer):

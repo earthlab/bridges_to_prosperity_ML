@@ -11,7 +11,7 @@ import rasterio
 from rasterio import features
 from rasterio.windows import Window
 
-from utilities.imaging import scale
+from src.utilities.imaging import scale
 
 
 def decode_coordinate_grid(dirname: str):

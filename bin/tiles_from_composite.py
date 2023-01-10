@@ -7,7 +7,7 @@ import time
 from argparse import Namespace
 from multiprocessing import Pool
 
-from utilities.imaging import scale
+from src.utilities.imaging import scale
 
 import numpy as np
 import rasterio

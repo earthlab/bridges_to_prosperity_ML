@@ -97,12 +97,12 @@ def get_median_slices(indir, outdir, number_of_slices):
                         # is 1, and the blue channel is 0
                     else:
                         print('B')
-                        cloud_image = np.empty_like(image_read.shape)
+                        cloud_image = np.empty_like(image_read)
                         cloud_channels = np.where(cloud_image == 0, 1, 1)
                 except Exception as e:
                     print(str(e))
                     print('C')
-                    cloud_image = np.empty_like(image_read.shape)
+                    cloud_image = np.empty_like(image_read)
                     cloud_channels = np.where(cloud_image == 0, 1, 1)
 
                 print(cloud_image.shape, cloud_channels.shape, image_read.shape)

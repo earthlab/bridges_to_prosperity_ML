@@ -231,7 +231,6 @@ class SinergiseSentinelAPI:
         args = []
         for file_info in available_files:
             file_path = file_info[0]
-            print(file_path, os.path.basename(file_path))
             if '/preview/' in file_path:
                 continue
 

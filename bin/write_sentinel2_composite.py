@@ -26,7 +26,8 @@ def get_median_slices(indir, outdir, number_of_slices):
     slice_width = band_length / number_of_slices
     slice_bounds = [int(i) for i in np.arange(0, band_length + slice_width, slice_width)]
 
-    coordinate_match = decode_coordinate_grid(os.path.basename(indir))  # Should be a 5 character string like 36LUK
+    coordinate_match = decode_coordinate_grid(os.path.basename(indir).strip(os.path.sep))  # Should be a 5 character
+    # string like 36LUK
     if coordinate_match:
         coords = coordinate_match.groupdict()
         utm_code = coords['utm_code']
@@ -34,7 +35,7 @@ def get_median_slices(indir, outdir, number_of_slices):
         square = coords['square']
 
     else:
-        raise ValueError('Input directories should be named after the military grid, i.e. 36LUK')
+        raise ValueError("Input directory's final branch should be named after the military grid, i.e. 36LUK")
 
     for i in range(len(slice_bounds) - 1):
         left_bound = slice_bounds[i]
@@ -98,7 +99,8 @@ def get_median_slices(indir, outdir, number_of_slices):
                         print('B')
                         cloud_image = np.empty_like(image_read.shape)
                         cloud_channels = np.where(cloud_image == 0, 1, 1)
-                except:
+                except Exception as e:
+                    print(str(e))
                     print('C')
                     cloud_image = np.empty_like(image_read.shape)
                     cloud_channels = np.where(cloud_image == 0, 1, 1)

@@ -13,7 +13,7 @@ def download_and_make_composites(outdir, bounds, start_date, end_date, region_na
     if not outdir:
         raise FileNotFoundError('No files returned from the query parameters')
 
-    for coordinate_dir in outdir:
+    for coordinate_dir in os.listdir(outdir):
         in_out_dir = os.path.join(outdir, coordinate_dir)
         create_composite(in_out_dir, in_out_dir, region_name, slices)
 

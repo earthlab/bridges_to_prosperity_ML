@@ -12,6 +12,7 @@ from rasterio import features
 from rasterio.windows import Window
 
 from src.utilities.imaging import scale
+import gdal
 
 
 def decode_coordinate_grid(dirname: str):

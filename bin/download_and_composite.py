@@ -1,6 +1,8 @@
 # This file will call the Sentinel2 API to download data for a specified region and then clean that data by making
 # composites
 import os
+import shutil
+import tempfile
 from argparse import ArgumentParser
 from src.api.sentinel2 import SinergiseSentinelAPI
 from bin.write_sentinel2_composite import create_composite
@@ -14,8 +16,14 @@ def download_and_make_composites(outdir, bounds, start_date, end_date, region_na
         raise FileNotFoundError('No files returned from the query parameters')
 
     for coordinate_dir in os.listdir(outdir):
-        in_out_dir = os.path.join(outdir, coordinate_dir)
-        create_composite(in_out_dir, in_out_dir, region_name, slices)
+        tmp_dir = tempfile.mkdtemp(prefix='b2p')
+        in_dir = os.path.join(outdir, coordinate_dir)
+        create_composite(in_dir, tmp_dir, region_name, slices)
+        composite_dir = os.path.join(in_dir, 'composites')
+        os.makedirs(composite_dir, exist_ok=True)
+        for file in os.listdir(tmp_dir):
+            shutil.copy(os.path.join(tmp_dir, file), composite_dir)
+        shutil.rmtree(tmp_dir)
 
     print(f'Wrote sentinel2 files and composites to {outdir}')
 

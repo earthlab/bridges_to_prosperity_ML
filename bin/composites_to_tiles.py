@@ -15,7 +15,6 @@ import numpy as np
 import rasterio
 from osgeo import gdal
 
-
 def make_tiff_files_task(namespace: Namespace):
     dem = gdal.Open(namespace.output_scaled)
     gt = dem.GetGeoTransform()
@@ -40,8 +39,8 @@ def make_tiff_files_task(namespace: Namespace):
             xmax = xsteps[i + 1]
             ymax = ysteps[j]
             ymin = ysteps[j + 1]
-            tiff_filename = os.path.join(namespace.output_dir, 'dem' + namespace.composite_path.split('.')[0][-3:] +
-                                         str(i) + '_' + str(j) + '.tif')
+            tile_basename = 'dem' + namespace.composite_path.split('.')[0][-3:] + str(i) + '_' + str(j) + '.tif'
+            tiff_filename = os.path.join(namespace.output_dir, tile_basename)
             filenames.append(tiff_filename)
             gdal.Warp(tiff_filename, dem, outputBounds=(xmin, ymin, xmax, ymax), dstNodata=-999)
             if namespace.geom_lookup_outfile is not None:
@@ -135,12 +134,15 @@ def create_tiles(composite_path: str, output_dir: str, cores: int, geometry_look
 
     # TODO: Do some parallel file cleanup
 
-def composites_to_tiles(s2_dir, output_dir, cores, geom_lookup_path):
+def composite_to_tiles(s2_dir, output_dir, cores, geom_lookup_path):
     mp.set_start_method('spawn')
     files = glob.glob(os.path.join(s2_dir, "**/*multiband_cld_NAN_median_corrected*.tiff"),recursive=True)
-    for composite_path in tqdm.tqdm(files):
+    pbar = tqdm.tqdm(files)
+    for composite_path in pbar:
         prts = os.path.basename(composite_path).split('.')
-        abbrev = prts[0][-3:]
+        abbrev = prts[0][-5:]
+        pbar.set_description(f"Processing {abbrev}")
+        pbar.refresh()
         this_outdir = os.path.join(output_dir, abbrev)
         if not os.path.isdir(this_outdir):
             os.makedirs(this_outdir)
@@ -207,20 +209,14 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # make paths to the region 
     s2_dir = os.path.join(args.in_dir, args.region)
-
-
-    
     out_dir = os.path.join(args.out_dir, args.region)
     # call function 
-    if not os.path.isdir(outdir):
-        os.makedirs(outdir)
-    print(s2_dir)
-    print(out_dir )
-    print(args.cores)
-    print(args.geom_lookup_path)
-    # composites_to_tiles(
-    #     s2_dir,
-    #     out_dir, 
-    #     args.cores,
-    #     args.geom_lookup_path
-    # )
+    if not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
+
+    composite_to_tiles(
+        s2_dir,
+        out_dir, 
+        args.cores,
+        args.geom_lookup_path
+    )

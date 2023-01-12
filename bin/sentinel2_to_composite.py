@@ -13,7 +13,9 @@ from rasterio.windows import Window
 
 from src.utilities.imaging import scale
 import gdal
-
+import tqdm
+import multiprocessing as mp
+from argparse import Namespace
 
 def decode_coordinate_grid(dirname: str):
     directory_pattern = r'(?P<utm_code>\d+)(?P<latitude_band>\S{1})(?P<square>\S{2})'
@@ -21,8 +23,7 @@ def decode_coordinate_grid(dirname: str):
 
     return match
 
-
-def get_median_slices(indir, outdir, number_of_slices):
+def get_median_slices(indir, outdir, number_of_slices, debug=False):
     band_length = 10980
     slice_width = band_length / number_of_slices
     slice_bounds = [int(i) for i in np.arange(0, band_length + slice_width, slice_width)]
@@ -38,7 +39,7 @@ def get_median_slices(indir, outdir, number_of_slices):
     else:
         raise ValueError("Input directory's final branch should be named after the military grid, i.e. 36LUK")
 
-    for i in range(len(slice_bounds) - 1):
+    for i in tqdm.tqdm(range(len(slice_bounds) - 1), leave=False):
         left_bound = slice_bounds[i]
         right_bound = slice_bounds[i + 1]
 
@@ -80,12 +81,15 @@ def get_median_slices(indir, outdir, number_of_slices):
                 # Read in the file... going to try and do this so the file is only read in once
                 # Read it in as a float array so we can use np.nan later. If this is a space / performance issue
                 # an alternative can be found
-                image_slice = image.read(1, window=Window.from_slices(slice(left_bound, right_bound),
-                                                                      slice(0, band_length))).astype(np.float32)
+                image_slice = image.read(
+                    1, 
+                    window=Window.from_slices(slice(left_bound, right_bound),
+                    slice(0, band_length))
+                ).astype(np.float32)
 
                 try:
                     if cloud_file is not None:
-                        print('A')
+                        if debug: print('A')
                         cloud_file.crs = (str(image.crs))
 
                         # convert the cloud mask data to a raster that has the same shape and transformation as the
@@ -99,16 +103,16 @@ def get_median_slices(indir, outdir, number_of_slices):
                         # find the indices in the cloud mask raster data where the red channel is 0, the green channel
                         # is 1, and the blue channel is 0
                     else:
-                        print('B')
+                        if debug: print('B')
                         cloud_image = np.empty_like(image_read)
                         cloud_channels = np.where(cloud_image == 0, 1, 1)
                 except Exception as e:
-                    print(str(e))
-                    print('C')
+                    if debug: print(str(e))
+                    if debug: print('C')
                     cloud_image = np.empty_like(image_read)
                     cloud_channels = np.where(cloud_image == 0, 1, 1)
 
-                print(cloud_image.shape, cloud_channels.shape, image_read.shape)
+                if debug: print(cloud_image.shape, cloud_channels.shape, image_read.shape)
 
                 # select the image data from the current slice and index
                 image_slice = image_slice * cloud_channels[left_bound: right_bound, 0:10980]
@@ -124,7 +128,7 @@ def get_median_slices(indir, outdir, number_of_slices):
             shape = dates_for_slice[0].shape
             y2 = np.vstack([dslice.ravel() for dslice in dates_for_slice])
 
-            print(y2.shape)
+            if debug: print(y2.shape)
 
             # Releasing memory
             dates_for_slice = []
@@ -132,7 +136,7 @@ def get_median_slices(indir, outdir, number_of_slices):
 
             z2 = np.nanmedian(y2, axis=0, overwrite_input=True)
 
-            print(z2.shape)
+            if debug: print(z2.shape)
 
             # Releasing memory
             y2 = []
@@ -151,7 +155,6 @@ def get_median_slices(indir, outdir, number_of_slices):
 
             z2 = []
             del z2
-
 
 def write_out(indir, outdir, region_name: str):
     coordinate = os.path.basename(indir)
@@ -230,26 +233,86 @@ def write_out(indir, outdir, region_name: str):
 
     del r, g, b, dss, true
 
+def create_composite(n : Namespace):
+    input_dir = n.input_dir
+    tmp_dir = n.tmp_dir
+    region_name = n.region_name
+    slices = n.slices
+    composite_dir = os.path.join(input_dir, 'composites')
 
-def create_composite(input_dir, out_dir, region_name, slices):
-    os.makedirs(out_dir, exist_ok=True)
+    if os.path.isdir(composite_dir):
+        # already made this 
+        print(f'Already processed {composite_dir}')
+        return
+
+    os.makedirs(tmp_dir, exist_ok=True)
     slice_outdir = tempfile.mkdtemp(prefix='b2p')
 
     slices = 1 if slices is None else slices
     get_median_slices(input_dir, slice_outdir, slices)
     for coorindate_dir in os.listdir(slice_outdir):
-        write_out(os.path.join(slice_outdir, coorindate_dir), out_dir, region_name)
+        write_out(os.path.join(slice_outdir, coorindate_dir), tmp_dir, region_name)
     shutil.rmtree(slice_outdir)
 
+    # copy from tmp dir to final
+    os.makedirs(composite_dir, exist_ok=True)
+    for file in os.listdir(tmp_dir):
+        shutil.copy(os.path.join(tmp_dir, file), composite_dir)
+    shutil.rmtree(tmp_dir)
+    print(f'Done with {composite_dir}')
+
+def sentinel2_to_composite(s2_dir, region_name, slices):
+    args = []
+    s2_dir = os.path.join(s2_dir, region_name)
+    for coordinate_dir in os.listdir(s2_dir):
+        args.append(
+            Namespace(
+                input_dir=os.path.join(s2_dir, coordinate_dir), 
+                tmp_dir=tempfile.mkdtemp(prefix=f'b2p_{coordinate_dir}'), 
+                region_name=region_name, 
+                slices=slices
+            )
+        )
+    print('Building composites...')
+    for arg in tqdm.tqdm(args):
+        create_composite(arg)
 
 if __name__ == '__main__':
+    base_dir = os.path.abspath(
+        os.path.join(
+            os.path.dirname(
+                os.path.realpath(__file__)
+            ), 
+            '..'
+        )
+    )
     parser = ArgumentParser()
-    parser.add_argument('--input_dir', '-i', type=str, required=True, help="Path to the input directory contianing each"
-                                                                           " date's sentinel2 files")
-    parser.add_argument('--out_dir', '-o', type=str, required=True, help='Path to where composites will be written')
-    parser.add_argument('--region_name', '-r', type=str, required=True, help='Name of the composite region')
-    parser.add_argument('--slices', '-s', type=int, required=False, default=1,
-                        help='The number of slices to break the sentinel2 tiles up into before cloud-correcting. '
-                             'Default is 1')
+    parser.add_argument(
+        '--s2_dir',
+        '-i',
+        type=str,
+        required=False,
+        default=os.path.join(base_dir, "data", "sentinel2"),
+        help="Path to local sentinel2 data"
+    )
+    parser.add_argument(
+        '--region_name',
+        '-r',
+        type=str, 
+        required=True, 
+        help='Name of the composite region'
+        )
+    parser.add_argument(
+        '--slices',
+        '-s',
+        type=int, 
+        required=False, 
+        default=1,
+        help='The number of slices to break the sentinel2 tiles up into before cloud-correcting (Default is 1)'
+    )
     args = parser.parse_args()
-    create_composite(args.input_dir, args.out_dir, args.region_name, args.slices)
+    sentinel2_to_composite(
+        args.s2_dir, 
+        args.region_name, 
+        args.slices
+    )

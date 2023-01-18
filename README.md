@@ -1,9 +1,47 @@
-# bridges_to_prosperity_ML
+
+# Getting started 
+open a screen, install docker, set permissions, start docker instance with docker run (dont forget to mount repo)
+
+[Instructions](https://docs.google.com/document/d/1SiW0amSxxCDKeDycJTu-SBKYeerSx2lM9a7lR_F3PYs/edit#)
+get into aws instance
+``` bash 
+ssh -i niru8088.cer ec2-user@ec2-18-236-56-225.us-west-2.compute.amazonaws.com 
+```
+
+open screen and start docker container
+``` bash 
+screen -S njr
+sudo yum update 
+sudo amazon-linux-extras install docker
+sudo service docker start
+sudo chmod 666 /var/run/docker.sock
+docker system prune
+docker run --name hella --hostname localhost -v $PWD/bridges_to_prosperity_ML:/b2p -it -p 8888:8888 earthl
+ab/earth-analytics-python-env
+```
+exit with cntl+a,cntl+d
+
+exec into the docker container
+``` bash 
+docker exec -it hella /bin/bash
+cd /b2p
+source env.sh
+conda install --file requirements.txt
+ipython profile create
+echo "c.InteractiveShellApp.extensions = ['autoreload']" >> ~/.ipython/profile_default/ipython_config.py 
+echo "c.InteractiveShellApp.exec_lines = ['%autoreload 2']"  >> ~/.ipython/profile_default/ipython_config.py 
+```
+
+# scripts 
 
 
-## download_and_composite.py
+## download_sentinel2.py
 
-`python bin/download_and_composite.py --outdir <abs_path_to_your_outdir> --bbox <min_lon,min_lat,max_lon,max_lat> --start_date <date> --end_date <date> --region <region> --buffer 500 --slices 10`
+This script downloads the files from sentinel2 for a specified bounding box and date range. I have been told to use images from 2019 because more recent data is not always good/avaiable.
+
+### Dry Season 
+It is important to minimize the ammount of clouds in the data set, so check this (website)[https://www.worlddata.info/africa/ivory-coast/climate.php] for initial estimate of good dates per region. 
+`python bin/download_and_composite.py --bbox <min_lon,min_lat,max_lon,max_lat> --start_date <date> --end_date <date> --region <region> --buffer 500 --slices 10`
 ## b2p_train_optical
 
 This script trains all the RESNET models on 70% of the data from Uganda and Rwanda, exports the saved state of each RESNET model to a pkl file, and then evaluates all the RESNET models on the remaining 30% of the data from Uganda and Rwanda. 

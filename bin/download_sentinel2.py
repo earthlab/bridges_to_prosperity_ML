@@ -64,9 +64,16 @@ if __name__ == '__main__':
         default=1,
         help='Number of slices to split the tiles up into when making the composite. Default is 1'
     )
+    parser.add_argument(
+        '--region', 
+        required=True, 
+        type=int, 
+        default=1,
+        help='Region that the data pertains to (ie rwanda)'
+    )
     args = parser.parse_args()
     download_sentinel2(
-        args.outdir, 
+        os.path.join(args.outdir, args.region), 
         args.bbox, 
         args.start_date, 
         args.end_date, 

@@ -8,3 +8,4 @@ GDAL
 rioxarray
 tqdm
 geojson
+boto3

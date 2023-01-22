@@ -3,7 +3,6 @@
 import os
 from argparse import ArgumentParser
 from src.api.sentinel2 import SinergiseSentinelAPI
-from bin.write_sentinel2_composite import create_composite
 
 def download_sentinel2(outdir, bounds, start_date, end_date, region_name, slices, buffer):
     api = SinergiseSentinelAPI()
@@ -54,6 +53,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--buffer', 
         required=False, 
+        default=100,
         type=float, 
         help='Buffer for bounding box query in meters'
     )
@@ -67,13 +67,16 @@ if __name__ == '__main__':
     parser.add_argument(
         '--region', 
         required=True, 
-        type=int, 
+        type=str, 
         default=1,
         help='Region that the data pertains to (ie rwanda)'
     )
     args = parser.parse_args()
+    out_dir =  os.path.join(args.outdir, args.region)
+    if not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
     download_sentinel2(
-        os.path.join(args.outdir, args.region), 
+        out_dir, 
         args.bbox, 
         args.start_date, 
         args.end_date, 

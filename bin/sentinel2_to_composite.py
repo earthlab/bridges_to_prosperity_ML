@@ -145,7 +145,9 @@ def get_median_slices(indir, outdir, number_of_slices, debug=False):
             z2 = np.uint16(z2.reshape(shape))
 
             file_dir = os.path.join(outdir, f'{os.path.basename(indir)}', band)
-            os.makedirs(file_dir, exist_ok=True)
+            if not os.path.isdir(file_dir):
+                os.makedirs(file_dir, exist_ok=True)
+            assert os.path.isdir(file_dir)
             outpath = os.path.join(file_dir, f'{left_bound}_{right_bound}.tiff')
             true_color = rasterio.open(outpath, 'w', driver='Gtiff', width=shape[1], height=shape[0], count=1, crs=crs,
                                        transform=transform, dtype=z2.dtype)
@@ -264,6 +266,7 @@ def create_composite(n : Namespace):
 def sentinel2_to_composite(s2_dir, region_name, slices):
     args = []
     s2_dir = os.path.join(s2_dir, region_name)
+    _, region_name = os.path.split(region_name)
     for coordinate_dir in os.listdir(s2_dir):
         args.append(
             Namespace(

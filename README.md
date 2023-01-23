@@ -31,6 +31,8 @@ pip install -r requirements.txt
 ipython profile create
 echo "c.InteractiveShellApp.extensions = ['autoreload']" >> ~/.ipython/profile_default/ipython_config.py 
 echo "c.InteractiveShellApp.exec_lines = ['%autoreload 2']"  >> ~/.ipython/profile_default/ipython_config.py 
+git config --global user.email "nic.rummel@colorado.edu"
+git config --global user.name "Nic Rummel"
 ```
 
 # scripts 

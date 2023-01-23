@@ -9,3 +9,5 @@ rioxarray
 tqdm
 geojson
 boto3
+torch
+torchvision

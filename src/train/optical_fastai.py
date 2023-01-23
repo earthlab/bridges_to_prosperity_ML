@@ -17,7 +17,7 @@ def _fastai_format_inputs(
     csv_files: dict, 
     tiff_dirs: dict
     ):
-     # obtain the region names from the dictionary of csv files
+    # obtain the region names from the dictionary of csv files
     regions = csv_files.keys()
 
     # initialize empty lists that will store the values needed to create a dataframe
@@ -143,21 +143,6 @@ def _fastai_format_inputs(
 
     return train_df, val_df
 
-"""
-    given paths to tiff fi
-"""
-def format_inputs(
-    csv_files: dict, 
-    tiff_dirs: dict,
-    api: str ="fastai"
-    ):
-    if api == "fastai":
-        return _fastai_format_inputs(
-            csv_files: dict, 
-            tiff_dirs: dict
-        )
-    raise Exception(f"API {api} not implemented")
-
 def _fastai_train_optical(
     train_df,
     batch_sz,
@@ -249,24 +234,8 @@ def _fastai_train_optical(
         )
 
     return interps
+def _fastai_metrics(val_df, interps, resnt):
 
-def train_optical(
-    train_df, 
-    resnt, 
-    api="fastai",
-    batch_sz=16,
-    model_dir=None
-):
-    if api == "fastai":
-        return _fastai_train_optical(
-            train_df, 
-            batch_sz,
-            resnt,
-            model_dir
-        )
-    raise Exception(f"{api} not implemented")
-
-def metrics(val_df, interps, resnt):
     ## Evalutat over training data 
     # We will now examine more metrics to evaluate the performance of the models
     precisions, recalls, f1s = [], [], []

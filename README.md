@@ -9,7 +9,7 @@ ssh -i niru8088.cer ec2-user@ec2-18-236-56-225.us-west-2.compute.amazonaws.com
 ```
 
 open screen and start docker container
-``` bash 
+<!-- ``` bash 
 screen -S dockerRun
 sudo yum update 
 sudo amazon-linux-extras install docker
@@ -18,7 +18,7 @@ sudo chmod 666 /var/run/docker.sock
 docker system prune
 '
 docker run --name hella --hostname localhost -v $PWD/bridges_to_prosperity_ML:/b2p -it -p 8888:8888 earthlab/earth-analytics-python-env
-```
+``` -->
 exit with cntl+a,cntl+d
 
 exec into the docker container
@@ -27,12 +27,6 @@ screen -S dockerExec
 docker exec -it hella /bin/bash
 cd /b2p
 source env.sh
-pip install -r requirements.txt
-ipython profile create
-echo "c.InteractiveShellApp.extensions = ['autoreload']" >> ~/.ipython/profile_default/ipython_config.py 
-echo "c.InteractiveShellApp.exec_lines = ['%autoreload 2']"  >> ~/.ipython/profile_default/ipython_config.py 
-git config --global user.email "nic.rummel@colorado.edu"
-git config --global user.name "Nic Rummel"
 ```
 
 # scripts 

@@ -6,6 +6,12 @@ import warnings
 from enum import Enum
 from argparse import Namespace
 from datetime import date
+import geopandas as gpd
+import numpy as np
+from glob import glob
+import pandas as pd
+from matplotlib import pyplot as plt
+from shapely import Polygon
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -23,7 +29,7 @@ from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Subset
 
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '..'))
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..'))
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(models.__dict__[name])) 
@@ -57,21 +63,34 @@ DEFAULT_ARGS = Namespace(
 best_acc1 = 0
 best_model = None
 
-def _torch_prepare_inputs(regions, csv_files)
+def _torch_prepare_inputs(ground_truth_dir:str = None, out_dir:str = None, tile_dir:str = None):
+    if ground_truth_dir is None: 
+        ground_truth_dir = os.path.join(BASE_DIR, 'data', 'ground_truth')
+    if tile_dir is None: 
+        tile_dir = os.path.join(BASE_DIR, 'data', f'tiles')  
+    if out_dir is None: 
+        today = date.today()
+        datestr = today.strftime('%Y-%m-%d')
+        out_dir = os.path.join(BASE_DIR, 'data', f'torch_{datestr}')   
+    if not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
+    
+    truth_files = glob(os.path.join(ground_truth_dir,"*.csv"))
     file_names = []
     labels = []
 
     # iterate over all the regions for which we have training data
-    for region in regions:
+    for tFile in truth_files:
         # read the csv file of bridge locations for the current region into a dataframe
-        train_csv = pd.read_csv(csv_files[region])
+        region = tFile.split('.')[0]
+        tDf = pd.read_csv(tFile)
 
         # create a geopandas POINT geometry for each of the bridge locations in the current csv file
         # the x-coordinate is the longitude value in the dataframe and the y-coordinate is the latitude value in the dataframe 
-        train_geometry = gpd.points_from_xy(train_csv['Longitude'], train_csv['Latitude'])
+        train_geometry = gpd.points_from_xy(tDf['Longitude'], tDf['Latitude'])
 
         # obtain the path to the directory containing tiff tiles over the current region
-        train_dir = y[region]
+        train_dir = os.path.join(tile_dir, region)
 
         # iterate over all the tiff tiles in the directory containing tiff tiles for the current region
         for tiff in os.listdir(train_dir):
@@ -186,7 +205,7 @@ def _torch_train_optical(datadir:str=None, saveFile:str=None):
     if saveFile is None: 
         saveDir = os.path.join(BASE_DIR, 'data', 'models')
         today = date.today()
-        datestr = today.strftime('%Y-%m-%d'))
+        datestr = today.strftime('%Y-%m-%d')
         saveFile = os.path.join(saveDir, f'{args.model}_{datestr}.pkl')
     else:
         saveDir = os.path.dirname(saveFile)

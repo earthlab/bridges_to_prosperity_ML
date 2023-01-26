@@ -39,7 +39,7 @@ def make_tiff_files_task(namespace: Namespace):
             xmax = xsteps[i + 1]
             ymax = ysteps[j]
             ymin = ysteps[j + 1]
-            tile_basename = 'dem' + namespace.composite_path.split('.')[0][-3:] + str(i) + '_' + str(j) + '.tif'
+            tile_basename = 'dem' + namespace.composite_path.split('.')[0][-5:] + str(i) + '_' + str(j) + '.tif'
             tiff_filename = os.path.join(namespace.output_dir, tile_basename)
             filenames.append(tiff_filename)
             gdal.Warp(tiff_filename, dem, outputBounds=(xmin, ymin, xmax, ymax), dstNodata=-999)

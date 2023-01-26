@@ -11,7 +11,11 @@ import numpy as np
 from glob import glob
 import pandas as pd
 from matplotlib import pyplot as plt
-from shapely import Polygon
+import multiprocessing as mp 
+import json 
+import copy 
+import tqdm 
+import pickle
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -27,7 +31,9 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Subset
+from shapely.geometry import polygon
 
+from src.utilities.coords import *
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..'))
 model_names = sorted(name for name in models.__dict__
@@ -35,7 +41,7 @@ model_names = sorted(name for name in models.__dict__
     and callable(models.__dict__[name])) 
 
 DEFAULT_ARGS = Namespace(
-    datadir = os.path.join(BASE_DIR, "data", "training_data"),
+    datadir = os.path.join(BASE_DIR, "data", "torch"),
     arch = 'resnet18',
     workers = 4,
     epochs = 90,
@@ -63,140 +69,162 @@ DEFAULT_ARGS = Namespace(
 best_acc1 = 0
 best_model = None
 
+def split_list(list, n):
+    m = len(list)
+    step = int(round(m/n))
+    for i in range(n):
+        yield list[i*step:(i+1)*step] 
+
+def finder(args):
+    bridge_tiles = []
+    no_bridge_tiles = []
+    for tif, bbox in tqdm.tqdm(args.list, desc=f'hella {args.n}', position=args.n):
+        p = polygon.Polygon(bbox)
+        found = False
+        for loc in args.bridge_locations: 
+            # check if the current tiff tile contains the current verified bridge location
+            if p.contains(loc):
+                bridge_tiles.append(tif)
+                found = True
+                break
+        if not found:
+            no_bridge_tiles.append(tif)
+    return (bridge_tiles, no_bridge_tiles)
+
+def bitchen(FF) : 
+    hella_list = []
+    for f in FF: 
+        with open(f, 'r') as geo: 
+            g = json.load(geo)
+            for tif, bbox in g.items():
+                hella_list.append((tif, bbox))
+    return hella_list
+
+def mv(args):
+    for tif in tqdm.tqdm(args.args.file_list, position=args.n):
+        d, fn = os.path.split(tif)
+        _, abbrv =os.path.split(d)
+        shutil.copyfile(tif, os.path.join(args.dir, 'yes', f'{abbrv}_{fn}'))
+
+def mover(ix, file_list, dir):
+    n = mp.cpu_count() - 1
+    with mp.Pool(n) as p:
+        args = []
+        cnt = 0
+        for ii in split_list(ix, n):
+            args.append(
+                Namespace(
+                    file_list=[file_list[i] for i in ii], 
+                    dir=dir,
+                    n=cnt
+                )
+            )
+            cnt+=1
+        for _ in p.map(mv, args):
+            pass
+    
 def _torch_prepare_inputs(ground_truth_dir:str = None, out_dir:str = None, tile_dir:str = None):
+    # mp.set_start_method('spawn')
     if ground_truth_dir is None: 
         ground_truth_dir = os.path.join(BASE_DIR, 'data', 'ground_truth')
     if tile_dir is None: 
         tile_dir = os.path.join(BASE_DIR, 'data', f'tiles')  
     if out_dir is None: 
         today = date.today()
-        datestr = today.strftime('%Y-%m-%d')
-        out_dir = os.path.join(BASE_DIR, 'data', f'torch_{datestr}')   
+        # datestr = today.strftime('%Y-%m-%d')
+        out_dir = os.path.join(BASE_DIR, 'data', f'torch')   
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
-    
-    truth_files = glob(os.path.join(ground_truth_dir,"*.csv"))
-    file_names = []
-    labels = []
+    n = mp.cpu_count() - 1 # num cores 
 
-    # iterate over all the regions for which we have training data
-    for tFile in truth_files:
-        # read the csv file of bridge locations for the current region into a dataframe
-        region = tFile.split('.')[0]
-        tDf = pd.read_csv(tFile)
+    with Timer():
+        truth_files = glob(os.path.join(ground_truth_dir,"*.csv"))
+        geo_files = glob(os.path.join(tile_dir,'**', "geom_lookup.json"), recursive=True)
+        print('Made it through the globs')
 
-        # create a geopandas POINT geometry for each of the bridge locations in the current csv file
-        # the x-coordinate is the longitude value in the dataframe and the y-coordinate is the latitude value in the dataframe 
-        train_geometry = gpd.points_from_xy(tDf['Longitude'], tDf['Latitude'])
+    tiles_list = []
+    with Timer():
+        with mp.Pool(n) as p: 
+            res = p.map(bitchen, split_list(geo_files, n))
+            for r in res:
+                tiles_list += r
+            
+        print(f'tiles_list: {len(tiles_list)}')
 
-        # obtain the path to the directory containing tiff tiles over the current region
-        train_dir = os.path.join(tile_dir, region)
-
-        # iterate over all the tiff tiles in the directory containing tiff tiles for the current region
-        for tiff in os.listdir(train_dir):
-            # save the name of the region associated with the current tiff tile
-            region_name.append(region)
-            # save the name of the current tiff tile
-            file_names.append(tiff)
-
-            tiff_checks = []
-
-            # iterate over all of the verified bridge locations for the current region and check whether any of the bridge locations are located inside the bounding box of the current tiff tile
-            for geom in train_geometry:
-                # find the bounding box of the current tiff tile
-                tiff_bound = tiff.unary_union.bounds
-                tiff_bound = Polygon(
-                    (
-                        (tiff_bound[0], tiff_bound[1]), 
-                        (tiff_bound[0], tiff_bound[3]), 
-                        (tiff_bound[2], tiff_bound[3]), 
-                        (tiff_bound[2], tiff_bound[1])
+    bridge_locations = []
+    with Timer():
+        for tfile in truth_files:
+            tDf = pd.read_csv(tfile)
+            bridge_locations += gpd.points_from_xy(tDf['Latitude'], tDf['Longitude'])
+        print(f'bridge_locations : {len(bridge_locations)}')
+    # figure out which tiles have bridges in them 
+    bridge_tiles = []
+    no_bridge_tiles = []   
+    with mp.Pool(n) as p:
+        args = []
+        with Timer():
+            cnt = 0
+            for  t in split_list(tiles_list, n):
+                args.append(
+                    Namespace(
+                        n=n,
+                        list=t, 
+                        bridge_locations=copy.deepcopy(bridge_locations)
                     )
                 )
-                
-                # check if the current tiff tile contains the current verified bridge location
-                if tiff_bound.contains(geom):
-                    tiff_checks.append('yes')
-                else:
-                    tiff_checks.append('no')
+                cnt += 1
+            print('Prepared args')
+        res = None
+        with Timer():
+            res = p.map(finder, args)
+            print('found bridge locations')
+        
+        with Timer():
+            for r in res:
+                bridge_tiles += r[0]
+                no_bridge_tiles += r[1]
+            print('Combining results')
+    print(f'bridge_tiles : {len(bridge_tiles)}')
+    print(f'no_bridge_tiles : {len(no_bridge_tiles)}')
 
-            # label the current tiff tile as Yes if it contains any of the verified bridge locations in this region and label the tiff tile No otherwise
-            if np.any(tiff_checks == 'yes'):
-                labels.append('yes')
-            else:
-                labels.append('no')
+    with open(os.path.join(BASE_DIR, 'data', 'bridge_locations.pkl'), 'wb') as outp:
+        pickle.dump(bridge_tiles, outp, pickle.HIGHEST_PROTOCOL)
+        pickle.dump(no_bridge_tiles, outp, pickle.HIGHEST_PROTOCOL)
 
-    # create a dataframe for all the tiff tiles that provides the region for the tiff tile, the name of the tiff tile, and the label for the tiff tile
-    df = pd.DataFrame(
-        {
-            'Region': region_name, 
-            'Image Path': file_names, 
-            'Label': labels
-        }
-    )
+    b_train_ix = []
+    nb_train_ix = []
+    b_val_ix = []
+    nb_val_ix = []
+    with Timer():
+        # stratified sampling to set aside x% of data for traingin and 1-x% for validation
+        b_train_ix = np.random.choice(len(bridge_tiles), size = 0.7*len(bridge_tiles), replace = False)
+        nb_train_ix = np.random.choice(len(no_bridge_tiles), size = 0.7*len(no_bridge_tiles), replace = False)
+        b_val_ix = np.setdiff1d(np.arange(len(bridge_tiles)), b_train_ix)
+        nb_val_ix = np.setdiff1d(np.arange(len(no_bridge_tiles)), nb_train_ix)
+        print(f'b_train_ix: {len(b_train_ix)}')
+        print(f'nb_train_ix: {len(nb_train_ix)}')
+        print(f'b_val_ix: {len(b_val_ix)}')
+        print(f'nb_val_ix: {len(nb_val_ix)}')
 
-    # find the indices in the dataframe where the label is Yes
-    yes_labels = np.where(df['Label'] == 'yes')[0]
-    # find the indices in the dataframe where the label is No
-    no_labels = np.where(df['Label'] == 'no')[0]
+    # create directories for the training and validation
+    train_dir = os.path.join(out_dir, 'train')
+    val_dir = os.path.join(out_dir, 'val')
+    if not os.path.isdir(train_dir): 
+        os.makedirs(train_dir)
+        os.makedirs(os.path.join(train_dir, 'yes'))
+        os.makedirs(os.path.join(train_dir, 'no'))
+    if not os.path.isdir(val_dir): 
+        os.makedirs(val_dir)
+        os.makedirs(os.path.join(val_dir, 'yes'))
+        os.makedirs(os.path.join(val_dir, 'no'))
 
-    # randomly select 70% of the Yes indices to be in the training set
-    yes_train_indx = np.random.choice(yes_labels, size = 0.7*len(yes_labels), replace = False)
-    # randomly select 70% of the No indices to be in the training set
-    no_train_indx = np.random.choice(no_labels, size = 0.7*len(no_labels), replace = False)
-    # note that we select 70% of both the Yes and No tiles in order to stratify the training data by label
-    # combine the indices of the Yes and No training data to obtain a numpy array containing all the indices that will be in the training set
-    train_indx = np.concatenate([yes_train_indx, no_train_indx])
-
-    # select the training set from the dataframe, then shuffle the values and drop their index value
-    df_train = df.iloc[train_indx,:].copy()
-    df_train = df_train.sample(frac = 1).reset_index(drop = True)
-
-    # obtain the indices of the remaining indices from both the Yes and No labels, which will comprise the validation set
-    yes_val_indx = [i for i in yes_labels if i not in yes_train_indx]
-    no_val_indx = [i for i in no_labels if i not in no_train_indx]
-    # combine the Yes and No indices that will be in the validation set to obtain a list of all the indices in the validation set
-    val_indx = yes_val_indx + no_val_indx
-
-    # select the validation set from the dataframe, then shuffle the values and drop their index value
-    df_val = df.iloc[val_indx,:].copy()
-    df_val = df_val.sample(frac = 1).reset_index(drop = True) 
-
-    # we now define paths to folders that will store the training and validation tiff tiles, respectively
-    training_dir = os.get_cwd() + '/training_data'
-    val_dir = os.get_cwd() + '/validation_data'
-
-    # we will now make the folders that will store the training and validation tiff tiles if they do not already exist
-    os.mkdir(training_dir)
-    os.mkdir(val_dir)
-
-    # create two lists that will store the paths to each of the training and validation tiffs, respectively
-    training_paths = []
-    validation_paths = []
-
-    # iterate over all the indices in the original dataframe
-    for i in range(len(df['Region'])):
-        # obtain the region and filename
-        region = df.iloc[i, 0]
-        file = df.iloc[i, 1]
-
-        # if the current tiff belongs to the training set, copy it to the training folder and store its new path; if it belongs to the validation set, copy it to the validation folder and save its new path
-        if i in train_indx:
-            training_path = training_dir + '/' + file
-            training_paths.append(training_path)
-            shutil.copy(tiff_dirs[region] + '/' + file, training_path)
-        else:
-            validation_path = val_dir + '/' + file
-            validation_paths.append(validation_path)
-            shutil.copy(tiff_dirs[region] + '/' + file, validation_path)
-    
-    # create a new dataframe containing the paths to the training tiff tiles and their labels
-    train_df = pd.DataFrame({'image_file': training_paths, 'image_label': df_train['Label']})
-
-    # create a new dataframe containing the paths to the validation tiff tiles and their labels
-    val_df = pd.DataFrame({'image_file': validation_paths, 'image_label': df_val['Label']})
-
-    return train_df, val_df
+    with Timer():
+        mover(b_train_ix, bridge_tiles, os.makedirs(os.path.join(train_dir, 'yes')))
+        mover(nb_train_ix, bridge_tiles, os.makedirs(os.path.join(train_dir, 'no')))
+        mover(b_val_ix, bridge_tiles, os.makedirs(os.path.join(val_dir, 'yes')))
+        mover(nb_val_ix, bridge_tiles, os.makedirs(os.path.join(val_dir, 'no')))
+        
+    return None
 
 def _torch_train_optical(datadir:str=None, saveFile:str=None):
     args = DEFAULT_ARGS
@@ -354,8 +382,8 @@ def main_worker(gpu, ngpus_per_node, args, saveFile):
         train_dataset = datasets.FakeData(1281167, (3, 224, 224), 1000, transforms.ToTensor())
         val_dataset = datasets.FakeData(50000, (3, 224, 224), 1000, transforms.ToTensor())
     else:
-        traindir = os.path.join(args.data, 'train')
-        valdir = os.path.join(args.data, 'val')
+        traindir = os.path.join(args.datadir, 'train')
+        valdir = os.path.join(args.datadir, 'val')
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
 

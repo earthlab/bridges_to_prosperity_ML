@@ -5,19 +5,19 @@ from scr.train.optical_torch import _torch_format_inputs, _torch_train_optical, 
     given paths to tiff fi
 """
 def format_inputs(
-    csv_files: dict, 
-    tiff_dirs: dict,
+    args,
     api: str ="fastai"
     ):
     if api == "fastai":
         return _fastai_format_inputs(
-            csv_files, 
-            tiff_dirs
+            args.csv_files, 
+            args.tiff_dirs
         )
     elif api == "torch":
         return _torch_format_inputs(
-            csv_files,
-            tiff_dirs
+            args.ground_truth_dir,
+            args.out_dir, 
+            args.tile_dir
         )
     raise Exception(f"API {api} not implemented")
 

@@ -1,0 +1,5 @@
+name: b2p
+channels:
+   - conda-forge
+dependencies:
+   - gdal

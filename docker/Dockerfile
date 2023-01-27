@@ -22,11 +22,12 @@ ENV CONDA_DIR /opt/conda
 RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh && \
      /bin/bash ~/miniconda.sh -b -p /opt/conda
 
-# Put conda in path so we can use conda activate
-ENV PATH=$CONDA_DIR/bin:$PATH
-RUN conda init bash
-RUN conda activate
-RUN conda install -c conda-forge gdal
+RUN conda env create -f environment.yml
+
+# Override default shell and use bash
+SHELL ["conda", "run", "-n", "b2p", "/bin/bash", "-c"]
+
+RUN python -c "import gdal"
 RUN pip install -r requirements.txt
 
 ENTRYPOINT ["/bin/bash", "env.sh"]

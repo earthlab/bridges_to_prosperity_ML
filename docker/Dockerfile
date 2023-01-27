@@ -7,7 +7,9 @@ WORKDIR /usr/src/app/bridges_to_prosperity_ML
 RUN git checkout docker
 RUN pip install ipython
 
-RUN apt-get update && apt-get install gdal-bin && apt-get install libgdal-dev
+RUN apt-get update && apt-get install -y \
+    gdal-bin \
+    libgdal-dev
 
 RUN pip install -r requirements.txt
 ENTRYPOINT ["/bin/bash", "env.sh"]

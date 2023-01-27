@@ -18,7 +18,7 @@ RUN conda env create -f environment.yml
 # Override default shell and use bash
 SHELL ["conda", "run", "-n", "b2p", "/bin/bash", "-c"]
 
-RUN python -c "import gdal"
+#RUN python -c "import gdal"
 RUN pip install -r requirements.txt
 
 ENTRYPOINT ["/bin/bash", "env.sh"]

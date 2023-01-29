@@ -16,6 +16,7 @@ import json
 import copy 
 import tqdm 
 import pickle
+from itertools import repeat
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -32,6 +33,7 @@ import torchvision.transforms as transforms
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Subset
 from shapely.geometry import polygon
+from skimage import io, transform
 
 from src.utilities.coords import *
 
@@ -69,36 +71,51 @@ DEFAULT_ARGS = Namespace(
 best_acc1 = 0
 best_model = None
 
-def split_list(list, n):
+def split_list(list:list, n:int, const_args:Namespace):
     m = len(list)
     step = int(round(m/n))
     for i in range(n):
-        yield list[i*step:(i+1)*step] 
+        const_args.list = list[i*step:(i+1)*step]
+        yield const_args
 
-def finder(args):
-    bridge_tiles = []
-    no_bridge_tiles = []
-    for tif, bbox in tqdm.tqdm(args.list, desc=f'hella {args.n}', position=args.n):
-        p = polygon.Polygon(bbox)
-        found = False
-        for loc in args.bridge_locations: 
-            # check if the current tiff tile contains the current verified bridge location
-            if p.contains(loc):
-                bridge_tiles.append(tif)
-                found = True
-                break
-        if not found:
-            no_bridge_tiles.append(tif)
-    return (bridge_tiles, no_bridge_tiles)
-
-def bitchen(FF) : 
-    hella_list = []
-    for f in FF: 
-        with open(f, 'r') as geo: 
-            g = json.load(geo)
-            for tif, bbox in g.items():
-                hella_list.append((tif, bbox))
-    return hella_list
+def find_bridges(pid:int, geo_file:str, bridge_locations:list):
+    assert os.path.isfile(geo_file) 
+    out_file = os.path.join(os.path.dirname(geo_file), 'matched_df.csv')
+    if os.path.isfile(out_file):
+        return pd.read_csv(
+            out_file, 
+            index_col=0,
+            dtype={
+                'tif':str, 
+                'bbox':object, 
+                'is_bridge':bool, 
+                'bridge_loc':object
+            }
+        )
+    df = None
+    with open(geo_file, 'r') as rf:
+        geo_dict = json.load(rf)
+        df = pd.DataFrame(
+            columns=['tif','bbox', 'is_bridge', 'bridge_loc'],
+            index=range(len(geo_dict))
+        )
+        m = len(geo_dict)
+        # print(f'\tnumber of tiles to check {m}')
+        for j, (tif, bbox) in tqdm.tqdm(enumerate(geo_dict.items()), desc=f'pid:{pid} ', position=pid+1, total=m):
+        # for j, (tif, bbox) in enumerate(geo_dict.items()):
+            df.at[j, 'tif']  = tif
+            df.at[j, 'bbox'] = bbox
+            df.at[j, 'is_bridge']  = False 
+            df.at[j, 'bridge_loc'] = None
+            p = polygon.Polygon(bbox)
+            for loc in bridge_locations: 
+                # check if the current tiff tile contains the current verified bridge location
+                if p.contains(loc):
+                    df.at[j, 'is_bridge']  = True 
+                    df.at[j, 'bridge_loc'] = loc
+                    break
+    df.to_csv(out_file)
+    return df
 
 def mv(args):
     for tif in tqdm.tqdm(args.args.file_list, position=args.n):
@@ -135,96 +152,125 @@ def _torch_prepare_inputs(ground_truth_dir:str = None, out_dir:str = None, tile_
         out_dir = os.path.join(BASE_DIR, 'data', f'torch')   
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
-    n = mp.cpu_count() - 1 # num cores 
-
+    ## Make it so np doesn't yell about using str
+    warnings.simplefilter(action='ignore', category=FutureWarning)
+    ## glob for input files
     with Timer():
         truth_files = glob(os.path.join(ground_truth_dir,"*.csv"))
         geo_files = glob(os.path.join(tile_dir,'**', "geom_lookup.json"), recursive=True)
         print('Made it through the globs')
-
-    tiles_list = []
-    with Timer():
-        with mp.Pool(n) as p: 
-            res = p.map(bitchen, split_list(geo_files, n))
-            for r in res:
-                tiles_list += r
-            
-        print(f'tiles_list: {len(tiles_list)}')
-
+    ## locate all bridges
     bridge_locations = []
     with Timer():
         for tfile in truth_files:
             tDf = pd.read_csv(tfile)
             bridge_locations += gpd.points_from_xy(tDf['Latitude'], tDf['Longitude'])
         print(f'bridge_locations : {len(bridge_locations)}')
-    # figure out which tiles have bridges in them 
-    bridge_tiles = []
-    no_bridge_tiles = []   
-    with mp.Pool(n) as p:
-        args = []
+    ## find bridege in parallel  
+    matched_date_file = os.path.join(out_dir, 'matched_df.csv')
+    if os.path.isfile(matched_date_file):
         with Timer():
-            cnt = 0
-            for  t in split_list(tiles_list, n):
-                args.append(
-                    Namespace(
-                        n=n,
-                        list=t, 
-                        bridge_locations=copy.deepcopy(bridge_locations)
+            matched_df = pd.read_csv(
+                matched_date_file,
+                index_col=0,
+                dtype={
+                    'tif':str, 
+                    'bbox':object, 
+                    'is_bridge':bool, 
+                    'bridge_loc':object
+                }
+            )
+            print(f'Loaded {matched_date_file}')
+    else:
+        matched_data_arr = None
+        with Timer():
+            num_processes = mp.cpu_count() - 1
+            num_jobs = len(geo_files)
+            print(f'Kicking off {num_processes} processes to find bridges in {num_jobs} military grids')
+            with mp.Pool(processes=num_processes) as pool: 
+                matched_data_arr = tqdm.tqdm(
+                    pool.starmap(
+                        find_bridges,
+                        zip(range(num_jobs), geo_files, repeat(bridge_locations))
                     )
                 )
-                cnt += 1
-            print('Prepared args')
-        res = None
+            print('Found Bridges')
+        ## Combine results from parallel computing into one obj   
+        matched_df = None
         with Timer():
-            res = p.map(finder, args)
-            print('found bridge locations')
-        
-        with Timer():
-            for r in res:
-                bridge_tiles += r[0]
-                no_bridge_tiles += r[1]
+            matched_df = pd.concat(matched_data_arr, ignore_index=True)
             print('Combining results')
-    print(f'bridge_tiles : {len(bridge_tiles)}')
-    print(f'no_bridge_tiles : {len(no_bridge_tiles)}')
+        ## Save results to one big file
+        with Timer():
+            matched_df.to_csv(matched_date_file)
+            print(f'Writing to file: {matched_date_file}')
 
-    with open(os.path.join(BASE_DIR, 'data', 'bridge_locations.pkl'), 'wb') as outp:
-        pickle.dump(bridge_tiles, outp, pickle.HIGHEST_PROTOCOL)
-        pickle.dump(no_bridge_tiles, outp, pickle.HIGHEST_PROTOCOL)
-
-    b_train_ix = []
-    nb_train_ix = []
-    b_val_ix = []
-    nb_val_ix = []
+    print(f'bridge counts : \n{matched_df.is_bridge.value_counts()}')
+    print(f'bridge locations: {len(bridge_locations)}')
+    print()
+    
     with Timer():
         # stratified sampling to set aside x% of data for traingin and 1-x% for validation
-        b_train_ix = np.random.choice(len(bridge_tiles), size = 0.7*len(bridge_tiles), replace = False)
-        nb_train_ix = np.random.choice(len(no_bridge_tiles), size = 0.7*len(no_bridge_tiles), replace = False)
-        b_val_ix = np.setdiff1d(np.arange(len(bridge_tiles)), b_train_ix)
-        nb_val_ix = np.setdiff1d(np.arange(len(no_bridge_tiles)), nb_train_ix)
+        b_ix = matched_df.index[matched_df['is_bridge']].tolist()
+        nb_ix = matched_df.index[False == matched_df['is_bridge']].tolist()
+        b_train_ix = random.sample(b_ix, int(round(0.7*len(b_ix))))
+        nb_train_ix = random.sample(nb_ix, int(round(0.7*len(nb_ix))))
+        b_val_ix = np.setdiff1d(b_ix, b_train_ix)
+        nb_val_ix = np.setdiff1d(nb_ix, nb_train_ix)
         print(f'b_train_ix: {len(b_train_ix)}')
         print(f'nb_train_ix: {len(nb_train_ix)}')
         print(f'b_val_ix: {len(b_val_ix)}')
         print(f'nb_val_ix: {len(nb_val_ix)}')
 
-    # create directories for the training and validation
-    train_dir = os.path.join(out_dir, 'train')
-    val_dir = os.path.join(out_dir, 'val')
-    if not os.path.isdir(train_dir): 
-        os.makedirs(train_dir)
-        os.makedirs(os.path.join(train_dir, 'yes'))
-        os.makedirs(os.path.join(train_dir, 'no'))
-    if not os.path.isdir(val_dir): 
-        os.makedirs(val_dir)
-        os.makedirs(os.path.join(val_dir, 'yes'))
-        os.makedirs(os.path.join(val_dir, 'no'))
-
     with Timer():
-        mover(b_train_ix, bridge_tiles, os.makedirs(os.path.join(train_dir, 'yes')))
-        mover(nb_train_ix, bridge_tiles, os.makedirs(os.path.join(train_dir, 'no')))
-        mover(b_val_ix, bridge_tiles, os.makedirs(os.path.join(val_dir, 'yes')))
-        mover(nb_val_ix, bridge_tiles, os.makedirs(os.path.join(val_dir, 'no')))
-        
+        # Seperate the training and validation into seperate files
+        train_csv = os.path.join(out_dir, 'train_df.csv')
+        val_csv = os.path.join(out_dir, 'val_df.csv')
+        train_df = pd.concat(
+            [
+                matched_df.iloc[b_train_ix],
+                matched_df.iloc[nb_train_ix]
+            ], 
+            ignore_index=True
+        )
+        val_df = pd.concat(
+            [
+                matched_df.iloc[b_val_ix],
+                matched_df.iloc[nb_val_ix]
+            ], 
+            ignore_index=True
+        )
+        train_df.to_csv(train_csv) 
+        val_df.to_csv(val_csv) 
+        print(f'Saving to {train_csv} and {val_csv}')
     return None
+
+class B2PDataset(torch.utils.data.Dataset):
+    def __init__(self, csv_file, transform=None):
+        """
+        Args:
+            csv_file (string): Path to the csv file with annotations.
+            root_dir (string): Directory with all the images.
+            transform (callable, optional): Optional transform to be applied
+                on a sample.
+        """
+        self.df = pd.read_csv(csv_file)
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.df)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        tif_file = self.df.iloc[idx]['tif']
+        image = io.imread(tif_file)
+
+        if self.transform:
+            image = self.transform(image)
+
+        return image
 
 def _torch_train_optical(datadir:str=None, saveFile:str=None):
     args = DEFAULT_ARGS
@@ -382,13 +428,13 @@ def main_worker(gpu, ngpus_per_node, args, saveFile):
         train_dataset = datasets.FakeData(1281167, (3, 224, 224), 1000, transforms.ToTensor())
         val_dataset = datasets.FakeData(50000, (3, 224, 224), 1000, transforms.ToTensor())
     else:
-        traindir = os.path.join(args.datadir, 'train')
-        valdir = os.path.join(args.datadir, 'val')
+        train_csv = os.path.join(args.datadir, 'torch', 'train_df.csv')
+        val_csv = os.path.join(args.datadir, 'torch', 'val_df.csv')
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
 
-        train_dataset = datasets.ImageFolder(
-            traindir,
+        train_dataset = B2PDataset(
+            train_csv,
             transforms.Compose([
                 transforms.RandomResizedCrop(224),
                 transforms.RandomHorizontalFlip(),
@@ -396,8 +442,8 @@ def main_worker(gpu, ngpus_per_node, args, saveFile):
                 normalize,
             ]))
 
-        val_dataset = datasets.ImageFolder(
-            valdir,
+        val_dataset = B2PDataset(
+            val_csv,
             transforms.Compose([
                 transforms.Resize(256),
                 transforms.CenterCrop(224),

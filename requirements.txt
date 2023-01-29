@@ -11,3 +11,4 @@ geojson
 boto3
 torch
 torchvision
+skimage

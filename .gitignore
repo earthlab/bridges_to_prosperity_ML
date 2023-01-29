@@ -2,5 +2,6 @@
 /data/sentinel2
 /data/tiles
 /data/models
+/data/torch
 *.log
 *__pycache__*

@@ -1,4 +1,4 @@
-FROM continuumio/miniconda3:4.12.0
+FROM jupyter/minimal-notebook
 
 WORKDIR /usr/src/app
 

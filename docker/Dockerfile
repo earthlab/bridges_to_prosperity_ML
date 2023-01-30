@@ -1,4 +1,4 @@
-FROM jupyter/minimal-notebook
+FROM earthlab/earth-analytics-python-env
 
 #WORKDIR /usr/src/app
 

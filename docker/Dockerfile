@@ -15,6 +15,4 @@ RUN pip install ipython
 #     /opt/conda/bin/conda clean -afy
 
 RUN pip install -r requirements.txt
-
-ENTRYPOINT ["/bin/bash", "env.sh"]
-#CMD ["start-notebook.sh"]
+ENV PYTHONPATH "$PYTHONPATH:/home/jovyan/bridges_to_prosperity_ML"

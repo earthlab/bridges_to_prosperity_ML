@@ -16,4 +16,4 @@ RUN pip install ipython
 
 RUN pip install -r requirements.txt
 
-RUN source env.sh
+ENTRYPOINT ["env.sh"]

@@ -1,6 +1,6 @@
 FROM jupyter/minimal-notebook
 
-WORKDIR /usr/src/app
+#WORKDIR /usr/src/app
 
 RUN git init && git clone https://github.com/earthlab/bridges_to_prosperity_ML.git
 WORKDIR /usr/src/app/bridges_to_prosperity_ML

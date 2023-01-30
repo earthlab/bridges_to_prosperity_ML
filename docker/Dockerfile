@@ -16,5 +16,5 @@ RUN pip install ipython
 
 RUN pip install -r requirements.txt
 
-#ENTRYPOINT ["/bin/bash", "env.sh"]
+ENTRYPOINT ["/bin/bash", "env.sh"]
 #CMD ["start-notebook.sh"]

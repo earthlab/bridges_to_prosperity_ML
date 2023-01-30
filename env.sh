@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-source start-notebook.sh
-
 ## Optain top level directory: PATH/TO/bridges_to_prosperity_ML
 SOURCE=${BASH_SOURCE[0]}
 while [ -L "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
@@ -53,3 +51,4 @@ echo "c.InteractiveShellApp.exec_lines = ['%autoreload 2']"  >> ~/.ipython/profi
 # git config --global user.name "nrummel"
 # token: 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
 
+start-notebook.sh

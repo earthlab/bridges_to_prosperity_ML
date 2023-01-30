@@ -50,3 +50,5 @@ echo "c.InteractiveShellApp.exec_lines = ['%autoreload 2']"  >> ~/.ipython/profi
 # git config --global user.email "nicrummel@gmail.com"
 # git config --global user.name "nrummel"
 # token: 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
+
+source start-notebook.sh

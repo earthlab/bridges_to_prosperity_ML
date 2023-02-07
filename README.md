@@ -43,12 +43,12 @@ python bin/download_sentinel2.py --bbox <min_lon,min_lat,max_lon,max_lat> --star
 ### Dry Season 
 FIRST TRY: the dates of --start_date 2019-09-01 --end_date 2019-11-05 for all training data (Rwanda and Uganda)
 ### Preliminary Data analysis
-
+[https://cloudless.eox.at/] out of the box solution
 Motivations It is important to minimize the ammount of clouds in the data set.
 From visual inspection of [https://www.worlddata.info/africa/ivory-coast/climate.php] we get an inspection of . 
-
+for deep dive [https://www.visualcrossing.com/weather/weather-data-services#] (nic has an account)
 - Rwanda : all of Jun and July into the early part of Aug
-- Uganda : Dry season appears to be early Jun, all of July and the early part of Aug (Aug looks better than Rwanda)
+- Uganda : Dry season appears to be mid Jun, all of July and the early part of Aug (Aug looks better than Rwanda)
 - Ivory Coast : All of Dec - Jan
 - Ethiopia: all of Dec - Feb
 - Zambia: all of May-Sep

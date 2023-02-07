@@ -249,14 +249,16 @@ class SinergiseSentinelAPI:
 
             args.append(Namespace(available_file=file_path, bucket_name=self._bucket_name, outdir=file_dir))
 
-        proceed = input(f'Found {len(args)} files for download. Total size of files is'
-                        f' {round(total_data, 2)}GB and estimated cost will be ${round(0.09 * total_data, 2)}'
-                        f'. Proceed (y/n)?')
-
-        if proceed == 'y':
-            with mp.Pool(mp.cpu_count() - 1) as pool:
-                for _ in tqdm.tqdm(pool.imap_unordered(_download_task, args), total=len(args)):
-                    pass
+        # proceed = input(f'Found {len(args)} files for download. Total size of files is'
+        #                 f' {round(total_data, 2)}GB and estimated cost will be ${round(0.09 * total_data, 2)}'
+        #                 f'. Proceed (y/n)?')
+        print(f'Found {len(args)} files for download. Total size of files is'
+             f' {round(total_data, 2)}GB and estimated cost will be ${round(0.09 * total_data, 2)}'
+             )
+        # if proceed == 'y':
+        with mp.Pool(mp.cpu_count() - 1) as pool:
+            for _ in tqdm.tqdm(pool.imap_unordered(_download_task, args), total=len(args)):
+                pass
 
     def _find_available_files(self, bounds: List[float], start_date: str, end_date: str) -> List[Tuple[str, str]]:
         """

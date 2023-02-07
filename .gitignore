@@ -1,7 +1,5 @@
 *.png
-/data/sentinel2
-/data/tiles
-/data/models
-/data/torch
+/data
 *.log
 *__pycache__*
+core.*

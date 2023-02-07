@@ -4,7 +4,7 @@ import os
 from argparse import ArgumentParser
 from src.api.sentinel2 import SinergiseSentinelAPI
 
-def download_sentinel2(outdir, bounds, start_date, end_date, region_name, slices, buffer):
+def download_sentinel2(outdir, bounds, start_date, end_date, buffer):
     api = SinergiseSentinelAPI()
     api.download(bounds, buffer, outdir, start_date, end_date)
 
@@ -68,11 +68,17 @@ if __name__ == '__main__':
         '--region', 
         required=True, 
         type=str, 
-        default=1,
-        help='Region that the data pertains to (ie rwanda)'
+        help='Region that the data pertains to (ie Uganda)'
+    )
+    parser.add_argument(
+        '--district', 
+        required=False,
+        default='all', 
+        type=str, 
+        help='District is the sub-region (ex. Uganda->Ibanda)'
     )
     args = parser.parse_args()
-    out_dir =  os.path.join(args.outdir, args.region)
+    out_dir =  os.path.join(args.outdir, args.region, args.district)
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
     download_sentinel2(
@@ -80,7 +86,5 @@ if __name__ == '__main__':
         args.bbox, 
         args.start_date, 
         args.end_date, 
-        args.region, 
-        args.slices,
         args.buffer
     )

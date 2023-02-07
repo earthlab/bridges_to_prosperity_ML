@@ -48,6 +48,8 @@ pip install -r requirements.txt
 ipython profile create
 echo "c.InteractiveShellApp.extensions = ['autoreload']" >> ~/.ipython/profile_default/ipython_config.py 
 echo "c.InteractiveShellApp.exec_lines = ['%autoreload 2']"  >> ~/.ipython/profile_default/ipython_config.py 
+
+ln -s /b2p/ work/b2p
 # git config --global user.email "nicrummel@gmail.com"
 # git config --global user.name "nrummel"
 # token: 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

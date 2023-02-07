@@ -15,7 +15,7 @@ import multiprocessing as mp
 import json 
 import copy 
 import tqdm 
-import pickle
+import PIL
 from itertools import repeat
 
 import torch
@@ -48,7 +48,7 @@ DEFAULT_ARGS = Namespace(
     workers = 4,
     epochs = 90,
     start_epoch = 0,
-    batch_size = 256,
+    batch_size = 12,
     lr = 0.1,
     momentum = 0.9,
     weight_decay=1e-4,
@@ -70,13 +70,6 @@ DEFAULT_ARGS = Namespace(
 
 best_acc1 = 0
 best_model = None
-
-def split_list(list:list, n:int, const_args:Namespace):
-    m = len(list)
-    step = int(round(m/n))
-    for i in range(n):
-        const_args.list = list[i*step:(i+1)*step]
-        yield const_args
 
 def find_bridges(pid:int, geo_file:str, bridge_locations:list):
     assert os.path.isfile(geo_file) 
@@ -116,29 +109,6 @@ def find_bridges(pid:int, geo_file:str, bridge_locations:list):
                     break
     df.to_csv(out_file)
     return df
-
-def mv(args):
-    for tif in tqdm.tqdm(args.args.file_list, position=args.n):
-        d, fn = os.path.split(tif)
-        _, abbrv =os.path.split(d)
-        shutil.copyfile(tif, os.path.join(args.dir, 'yes', f'{abbrv}_{fn}'))
-
-def mover(ix, file_list, dir):
-    n = mp.cpu_count() - 1
-    with mp.Pool(n) as p:
-        args = []
-        cnt = 0
-        for ii in split_list(ix, n):
-            args.append(
-                Namespace(
-                    file_list=[file_list[i] for i in ii], 
-                    dir=dir,
-                    n=cnt
-                )
-            )
-            cnt+=1
-        for _ in p.map(mv, args):
-            pass
     
 def _torch_prepare_inputs(ground_truth_dir:str = None, out_dir:str = None, tile_dir:str = None):
     # mp.set_start_method('spawn')
@@ -246,6 +216,8 @@ def _torch_prepare_inputs(ground_truth_dir:str = None, out_dir:str = None, tile_
     return None
 
 class B2PDataset(torch.utils.data.Dataset):
+    ## Make it so np doesn't yell about using str
+    warnings.simplefilter(action='ignore', category=FutureWarning)
     def __init__(self, csv_file, transform=None):
         """
         Args:
@@ -254,7 +226,18 @@ class B2PDataset(torch.utils.data.Dataset):
             transform (callable, optional): Optional transform to be applied
                 on a sample.
         """
-        self.df = pd.read_csv(csv_file)
+        self.df = pd.read_csv(
+            csv_file,
+            index_col=0,
+            dtype={
+                'tif':str, 
+                'bbox':object, 
+                'is_bridge':bool, 
+                'bridge_loc':object
+            }
+        )
+        self.classes = ['bridge', 'no bridge']
+        self.class_to_idx = {'bridge': 1, 'no bridge': 0}
         self.transform = transform
 
     def __len__(self):
@@ -265,22 +248,23 @@ class B2PDataset(torch.utils.data.Dataset):
             idx = idx.tolist()
 
         tif_file = self.df.iloc[idx]['tif']
-        image = io.imread(tif_file)
+        is_bridge = self.df.iloc[idx]['is_bridge']
+        image = PIL.Image.open(tif_file).convert('RGB')
 
         if self.transform:
             image = self.transform(image)
 
-        return image
+        return (image, int(is_bridge)) # image then label
 
 def _torch_train_optical(datadir:str=None, saveFile:str=None):
     args = DEFAULT_ARGS
     if datadir is not None:
         args.datadir = datadir
     if saveFile is None: 
-        saveDir = os.path.join(BASE_DIR, 'data', 'models')
+        saveDir = os.path.join(BASE_DIR, 'data', 'torch')
         today = date.today()
         datestr = today.strftime('%Y-%m-%d')
-        saveFile = os.path.join(saveDir, f'{args.model}_{datestr}.pkl')
+        saveFile = os.path.join(saveDir, f'{args.arch}_{datestr}.pkl')
     else:
         saveDir = os.path.dirname(saveFile)
     if not os.path.isdir(saveDir):
@@ -315,7 +299,7 @@ def _torch_train_optical(datadir:str=None, saveFile:str=None):
         args.world_size = ngpus_per_node * args.world_size
         # Use torch.multiprocessing.spawn to launch distributed processes: the
         # main_worker process function
-        mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, args), saveFile=saveFile)
+        mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, args, saveFile))
     else:
         # Simply call main_worker function
         main_worker(args.gpu, ngpus_per_node, args, saveFile)
@@ -428,8 +412,8 @@ def main_worker(gpu, ngpus_per_node, args, saveFile):
         train_dataset = datasets.FakeData(1281167, (3, 224, 224), 1000, transforms.ToTensor())
         val_dataset = datasets.FakeData(50000, (3, 224, 224), 1000, transforms.ToTensor())
     else:
-        train_csv = os.path.join(args.datadir, 'torch', 'train_df.csv')
-        val_csv = os.path.join(args.datadir, 'torch', 'val_df.csv')
+        train_csv = os.path.join(args.datadir, 'train_df.csv')
+        val_csv = os.path.join(args.datadir, 'val_df.csv')
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
 
@@ -488,23 +472,31 @@ def main_worker(gpu, ngpus_per_node, args, saveFile):
 
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
-            save_checkpoint({
-                'epoch': epoch + 1,
-                'arch': args.arch,
-                'state_dict': model.state_dict(),
-                'best_acc1': best_acc1,
-                'optimizer' : optimizer.state_dict(),
-                'scheduler' : scheduler.state_dict()
-            }, is_best)
+            save_checkpoint(
+                {
+                    'epoch': epoch + 1,
+                    'arch': args.arch,
+                    'state_dict': model.state_dict(),
+                    'best_acc1': best_acc1,
+                    'optimizer' : optimizer.state_dict(),
+                    'scheduler' : scheduler.state_dict()
+                }, 
+                is_best, 
+                os.path.join(args.datadir, f'{args.arch}.chkpt{epoch+1}.tar')
+            )
         
-    torch.save({
-        'epoch': epoch + 1,
-        'arch': args.arch,
-        'state_dict': model.state_dict(),
-        'best_acc1': best_acc1,
-        'optimizer' : optimizer.state_dict(),
-        'scheduler' : scheduler.state_dict()
-    }, saveFile)
+    save_checkpoint(
+        {
+            'epoch': epoch + 1,
+            'arch': args.arch,
+            'state_dict': model.state_dict(),
+            'best_acc1': best_acc1,
+            'optimizer' : optimizer.state_dict(),
+            'scheduler' : scheduler.state_dict()
+        }, 
+        is_best, 
+        os.path.join(args.datadir, f'{args.arch}.final.tar')
+    )
 
 def train(train_loader, model, criterion, optimizer, epoch, device, args):
     batch_time = AverageMeter('Time', ':6.3f')
@@ -612,10 +604,16 @@ def validate(val_loader, model, criterion, args):
 
     return top1.avg
 
-def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+def save_checkpoint(state, is_best, filename):
     torch.save(state, filename)
     if is_best:
-        shutil.copyfile(filename, 'model_best.pth.tar')
+        d = os.path.dirname(filename)
+        f = os.path.basename(filename)
+        prts = f.split('.')
+        shutil.copyfile(
+            filename, 
+            os.path.join(d,'.'.join([prts[0], 'best']+prts[-2:]))
+        )
 
 class Summary(Enum):
     NONE = 0

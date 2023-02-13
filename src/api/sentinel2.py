@@ -26,8 +26,11 @@ def _download_task(namespace: Namespace) -> None:
     """
     s3 = boto3.client('s3')
     os.makedirs(namespace.outdir, exist_ok=True)
+    dst = os.path.join(namespace.outdir, namespace.available_file.replace('/', '_'))
+    if os.path.isfile(dst): 
+        return 
     s3.download_file(namespace.bucket_name, namespace.available_file,
-                     os.path.join(namespace.outdir, namespace.available_file.replace('/', '_')),
+                     dst,
                      ExtraArgs={'RequestPayer': 'requester'}
                      )
 

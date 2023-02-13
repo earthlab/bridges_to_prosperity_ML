@@ -1,7 +1,8 @@
 import boto3
 import glob
 import os
-import tqdm
+from tqdm import tqdm
+from glob import glob
 def sync_s3():
     base_dir = os.path.abspath(
         os.path.join(
@@ -11,17 +12,20 @@ def sync_s3():
             '..'
         )
     )
-    comp_files = glob.glob(os.path.join(base_dir, "**/*multiband_cld_NAN_median_corrected*.tiff"),recursive=True)
-    s3 = boto3.resource('s3')
-    bucket = s3.Bucket('b2p.njr')
-    pbar = tqdm.tqdm(comp_files)
-    for cF in pbar:
-        pbar.set_description(os.path.basename(cF))
-        pbar.refresh()
-        r = cF.split('sentinel2/')[1].split('/')[0]
-        oF = os.path.join('composites', r, os.path.basename(cF))
-        with open(cF, 'rb') as data:
-            bucket.put_object(Body=data, Key=oF)
+    comp_files = glob
+    session = boto3.Session()
+    s3 = session.client('s3')
+    bucket = 'b2p.njr'
+    for filename in tqdm(comp_files, leave=True, position=0):
+        filesize = os.stat(filename).st_size
+        key = os.path.join('sentinel2_raw', os.basename(filename))
+        with tqdm.tqdm(total=filesize, unit='B', unit_scale=True, desc=filename, leave=False, position=1) as pbar:
+            s3.upload_file(
+                Filename=filename,
+                Bucket=bucket,
+                Key=key,
+                Callback=lambda bytes_transferred: pbar.update(bytes_transferred),
+            )
 if __name__ == "__main__":
     sync_s3()
     

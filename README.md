@@ -53,6 +53,9 @@ for deep dive [https://www.visualcrossing.com/weather/weather-data-services#] (n
 - Ethiopia: all of Dec - Feb
 - Zambia: all of May-Sep
 
+## Optical data pre-processing
+https://blogs.fu-berlin.de/reseda/sentinel-2-preprocessing/#:~:text=Sentinel%202%20data%20is%20delivered,shown%20in%20Section%20Sentinel%202). talks about resampling to include more bands
+
 ## sentinel2_to_composite 
 
 c
@@ -66,6 +69,8 @@ aforementioned dictionary.
 ## Jupyter notebook
 In a docker 
 `docker exec -it hella bash`
+May need to make b2p visible
+`ln -s /b2p /work/b2p`
 `jupyter notebook list `  -> gives a URL 
 Take URL open in browser back on personal machine
 EX: http://0.0.0.0:8888/?token=38e9d27171d4c02e1841b90ab5f003848ffa0dedb8b7172a

@@ -90,8 +90,6 @@ def _batch_task(arg:Namespace):
                 torch.save(tensor, pt_file)
                 df.at[k, 'tile']  = pt_file
             os.remove(tile_tiff)  
-            if k > 5: 
-                assert False, 'stop'
             k += 1 
     return df
 

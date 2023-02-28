@@ -44,6 +44,7 @@ model_names = sorted(name for name in models.__dict__
 
 DEFAULT_ARGS = Namespace(
     datadir = os.path.join(BASE_DIR, "data", "torch"),
+    tile_dir = os.path.join(BASE_DIR, "data", "final_tiles"),
     arch = 'resnet18',
     workers = 4,
     epochs = 90,
@@ -247,10 +248,12 @@ class B2PDataset(torch.utils.data.Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        tif_file = self.df.iloc[idx]['tile']
+        tile_file = self.df.iloc[idx]['tile']
         is_bridge = self.df.iloc[idx]['is_bridge']
-        image = PIL.Image.open(tif_file).convert('RGB')
-
+        image = torch.load(tile_file)
+        w, c, h = image.shape
+        if w == h and w != c:
+            image = torch.moveaxis(image, 1, 0)
         if self.transform:
             image = self.transform(image)
 
@@ -407,31 +410,28 @@ def main_worker(gpu, ngpus_per_node, args, saveFile):
 
 
     # Data loading code
-    train_csv = os.path.join(args.datadir, 'train_df.csv')
-    val_csv = os.path.join(args.datadir, 'val_df.csv')
+    train_csv = os.path.join(args.tile_dir, 'train_df_lite.csv')
+    val_csv = os.path.join(args.tile_dir, 'val_df_lite.csv')
     # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
     #                                 std=[0.229, 0.224, 0.225])
-
+    tform = transforms.Compose(
+        [
+            # transforms.ToTensor(), # take a 0, 255 image and scales it tp [0,1]
+            transforms.RandomVerticalFlip(), # flip image 1/2 the time
+            transforms.RandomHorizontalFlip(), # flip image 1/2 the time
+            # transforms.adjust_brightness(0.1) # copied from fastai leaving out now
+            # normalize,
+        ]
+    )
     train_dataset = B2PDataset(
             train_csv,
-            transforms.Compose(
-            [
-                transforms.ToTensor(), # take a 0, 255 image and scales it tp [0,1]
-                transforms.RandomVerticalFlip(), # flip image 1/2 the time
-                # transforms.adjust_brightness(0.1) # copied from fastai leaving out now
-                # normalize,
-            ]
+            tform
         )
-    )
 
     val_dataset = B2PDataset(
         val_csv,
-        transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            normalize,
-        ]))
+        tform
+        )
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -607,10 +607,10 @@ def save_checkpoint(state, is_best, filename):
     if is_best:
         d = os.path.dirname(filename)
         f = os.path.basename(filename)
-        prts = f.split('.')
+        prts = f.split('.chkpt')
         shutil.copyfile(
             filename, 
-            os.path.join(d,'.'.join([prts[0], 'best']+prts[-2:]))
+            os.path.join(d,'.'.join([prts[0], 'best'])+".tar")
         )
 
 class Summary(Enum):

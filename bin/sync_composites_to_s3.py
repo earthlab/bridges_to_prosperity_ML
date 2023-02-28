@@ -12,14 +12,14 @@ def sync_s3():
             '..'
         )
     )
-    comp_files = glob
+    comp_files = glob(os.path.join(base_dir, "data/composites/**/*_multiband.tiff" ), recursive=True)
     session = boto3.Session()
     s3 = session.client('s3')
     bucket = 'b2p.njr'
     for filename in tqdm(comp_files, leave=True, position=0):
         filesize = os.stat(filename).st_size
-        key = os.path.join('sentinel2_raw', os.basename(filename))
-        with tqdm.tqdm(total=filesize, unit='B', unit_scale=True, desc=filename, leave=False, position=1) as pbar:
+        key = filename.split('data/')[1]
+        with tqdm(total=filesize, unit='B', unit_scale=True, desc=filename, leave=False, position=1) as pbar:
             s3.upload_file(
                 Filename=filename,
                 Bucket=bucket,

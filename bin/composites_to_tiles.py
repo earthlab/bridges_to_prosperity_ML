@@ -39,7 +39,19 @@ def scale_multiband_composite(multiband_tiff:str):
             wf.write(scale(rf.read(2)).astype('uint8'), 2)
     return scaled_tiff
 
+def bridge_in_bbox(bbox, bridge_locations):
+    p = polygon.Polygon(bbox)
+    is_bridge  = False 
+    bridge_loc = None
+    for loc in bridge_locations: 
+        # check if the current tiff tile contains the current verified bridge location
+        if p.contains(loc):
+            is_bridge  = True 
+            bridge_loc = loc
+            break
+    return is_bridge, bridge_loc
 def _batch_task(arg:Namespace):
+    rf = gdal.Open(arg.multiband_tiff)
     torchTformer = ToTensor()
     df = pd.DataFrame(
         columns=['tile', 'bbox', 'is_bridge', 'bridge_loc'],
@@ -49,35 +61,37 @@ def _batch_task(arg:Namespace):
     for i in range(len(arg.xsteps)-1):
         for j in range(len(arg.ysteps)-1):
             xmin = arg.xsteps[i]
-            xmax = arg.xsteps[i + 1]
+            xmax = arg.xsteps[i + 1] - 1
             ymax = arg.ysteps[j]
-            ymin = arg.ysteps[j + 1]
-            
+            ymin = arg.ysteps[j + 1] - 1
+            print(f'xmin {xmin}')
+            print(f'xmax {xmax}')
+            print(f'ymax {ymax}')
+            print(f'ymin {ymin}')
             tile_basename = str(xmin) + '_' + str(ymin) + '.tif'
             tile_tiff = os.path.join(arg.grid_dir, tile_basename)
             gdal.Warp(
                 tile_tiff, 
-                arg.rf,
+                rf,
                 outputBounds=(xmin, ymin, xmax, ymax),
                 dstNodata=-999
             )
             bbox = tiff_to_bbox(tile_tiff)
+            df.at[k, 'tile']  = tile_tiff
             df.at[k, 'bbox'] = bbox
-            df.at[k, 'is_bridge']  = False 
-            df.at[k, 'bridge_loc'] = None
-            p = polygon.Polygon(bbox)
-            for loc in arg.bridge_locations: 
-                # check if the current tiff tile contains the current verified bridge location
-                if p.contains(loc):
-                    df.at[k, 'is_bridge']  = True 
-                    df.at[k, 'bridge_loc'] = loc
-                    break
+            df.at[k, 'is_bridge'], df.at[k, 'bridge_loc'] = bridge_in_bbox(bbox, arg.bridge_locations)
+            
             with rasterio.open(tile_tiff, 'r') as tmp:
                 pt_file = tile_tiff.split('.')[0]+'.pt'
-                tensor = torchTformer(scale(tmp.read()).astype(np.uint8))
+                scale_img = scale(tmp.read()).astype(np.uint8)
+                print(scale_img.shape)
+                scale_img = np.moveaxis(scale_img, 0, -1) # make dims be c, w, h
+                tensor = torchTformer(scale_img)
                 torch.save(tensor, pt_file)
                 df.at[k, 'tile']  = pt_file
             os.remove(tile_tiff)  
+            if k > 5: 
+                assert False, 'stop'
             k += 1 
     return df
 
@@ -86,7 +100,7 @@ def make_tiles(
     tile_dir, 
     bridge_locations,
     cores,
-    div:int=300
+    div:int=300 # in meters
 ):
     root, military_grid = os.path.split(multiband_tiff) 
     military_grid = military_grid[:5]
@@ -102,31 +116,27 @@ def make_tiles(
     os.makedirs(grid_dir, exist_ok=True)
 
     rf = gdal.Open(multiband_tiff)
-    gt = rf.GetGeoTransform()
-    xmin = gt[0]
-    ymax = gt[3]
-    res = gt[1]
+    _, xres, _, _, _, yres = rf.GetGeoTransform()
 
-    xlen = res * rf.RasterXSize
-    ylen = res * rf.RasterYSize
-    xsize = xlen / div
-    ysize = ylen / div
-    xsteps = [xmin + xsize * i for i in range(div + 1)]
-    ysteps = [ymax - ysize * i for i in range(div + 1)]
-    
+    xsteps = np.arange(0, abs(xres)*rf.RasterXSize+1, div).astype(np.int64).tolist()
+    ysteps = np.arange(0, abs(yres)*rf.RasterYSize+1, div).astype(np.int64).tolist()
+   
     df = None
     with Pool(cores) as p:
         args = [
             Namespace(
                 xsteps=xx,
                 ysteps=ysteps,
-                rf=rf,
+                multiband_tiff=multiband_tiff,
                 bridge_locations=bridge_locations,
                 grid_dir=grid_dir
             )
             for xx in np.array_split(xsteps, cores)
         ]
-        dfs = p.map(_batch_task, args)
+        # dfs = p.map(_batch_task, args)
+        dfs = []
+        for arg in args:
+            dfs.append(_batch_task(arg))
         df = pd.concat(dfs, ignore_index=True)
     df.to_csv(grid_geoloc_file)
     return df
@@ -156,7 +166,7 @@ def create_tiles(
     for multiband_tiff in tqdm(composites)]
     df = pd.concat(dfs, ignore_index=True)
     df.to_csv(os.path.join(tile_dir,'geoloc.csv'))
-
+    return df
 if __name__ == '__main__':
     
     base_dir = os.path.abspath(
@@ -184,7 +194,7 @@ if __name__ == '__main__':
         '-o', 
         type=str, 
         required=False, 
-        default=os.path.join(base_dir, "data", "tmp_tiles"),
+        default=os.path.join(base_dir, "data", "tiles"),
          help='Path to directory where output files will be written'
     )
     parser.add_argument(

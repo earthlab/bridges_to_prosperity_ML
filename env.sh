@@ -49,7 +49,7 @@ pip install -r requirements.txt > /dev/null 2>&1
 ipython profile create
 echo "c.InteractiveShellApp.extensions = ['autoreload']" >> ~/.ipython/profile_default/ipython_config.py 
 echo "c.InteractiveShellApp.exec_lines = ['%autoreload 2']"  >> ~/.ipython/profile_default/ipython_config.py 
-if [ ! -f ~/work/b2p ]
+if [ ! -f ~/work/b2p ]; then
   echo "Creating link in ~/work/b2p"
   ln -s /b2p/ ~/work/b2p
 fi

@@ -22,19 +22,19 @@ def lat_long_bbox(bbox, transform):
 
 def tiff_to_bbox(tiff:str, debug:bool=False):
     src = gdal.Open(tiff)
-    ulx, xres, xskew, uly, yskew, yres  = src.GetGeoTransform()
-    lrx = ulx + (src.RasterXSize * xres)
-    lry = uly + (src.RasterYSize * yres)
+    lx, xres, xskew, ty, yskew, yres  = src.GetGeoTransform()
+    rx = lx + (src.RasterXSize * xres)
+    by = ty + (src.RasterYSize * yres)
 
     tform = get_transform(tiff)
 
     # Transform the point. You can also create an ogr geometry and use the more generic `point.Transform()`
     # return transform.TransformPoint(ulx, uly)
-    ul = (ulx, uly)
-    ll = (ulx, lry)
-    ur = (lrx, uly)
-    lr = (lrx, lry)
-    bbox = lat_long_bbox((ul,ll,ur,lr), tform)
+    tl = (lx, ty)
+    bl = (lx, by)
+    tr = (rx, ty)
+    br = (rx, by)
+    bbox = lat_long_bbox((tl,bl,tr,br), tform)
     
     if debug: 
         print(f'ul: {bbox[0]}')

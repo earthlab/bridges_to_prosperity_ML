@@ -79,7 +79,7 @@ def find_bridges(pid:int, geo_file:str, bridge_locations:list):
             out_file, 
             index_col=0,
             dtype={
-                'tif':str, 
+                'tile':str, 
                 'bbox':object, 
                 'is_bridge':bool, 
                 'bridge_loc':object
@@ -89,14 +89,14 @@ def find_bridges(pid:int, geo_file:str, bridge_locations:list):
     with open(geo_file, 'r') as rf:
         geo_dict = json.load(rf)
         df = pd.DataFrame(
-            columns=['tif','bbox', 'is_bridge', 'bridge_loc'],
+            columns=['tile','bbox', 'is_bridge', 'bridge_loc'],
             index=range(len(geo_dict))
         )
         m = len(geo_dict)
         # print(f'\tnumber of tiles to check {m}')
         for j, (tif, bbox) in tqdm.tqdm(enumerate(geo_dict.items()), desc=f'pid:{pid} ', position=pid+1, total=m):
         # for j, (tif, bbox) in enumerate(geo_dict.items()):
-            df.at[j, 'tif']  = tif
+            df.at[j, 'tile']  = tif
             df.at[j, 'bbox'] = bbox
             df.at[j, 'is_bridge']  = False 
             df.at[j, 'bridge_loc'] = None
@@ -144,7 +144,7 @@ def _torch_prepare_inputs(ground_truth_dir:str = None, out_dir:str = None, tile_
                 matched_date_file,
                 index_col=0,
                 dtype={
-                    'tif':str, 
+                    'tile':str, 
                     'bbox':object, 
                     'is_bridge':bool, 
                     'bridge_loc':object
@@ -230,7 +230,7 @@ class B2PDataset(torch.utils.data.Dataset):
             csv_file,
             index_col=0,
             dtype={
-                'tif':str, 
+                'tile':str, 
                 'bbox':object, 
                 'is_bridge':bool, 
                 'bridge_loc':object
@@ -247,7 +247,7 @@ class B2PDataset(torch.utils.data.Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        tif_file = self.df.iloc[idx]['tif']
+        tif_file = self.df.iloc[idx]['tile']
         is_bridge = self.df.iloc[idx]['is_bridge']
         image = PIL.Image.open(tif_file).convert('RGB')
 
@@ -407,33 +407,31 @@ def main_worker(gpu, ngpus_per_node, args, saveFile):
 
 
     # Data loading code
-    if args.dummy:
-        print("=> Dummy data is used!")
-        train_dataset = datasets.FakeData(1281167, (3, 224, 224), 1000, transforms.ToTensor())
-        val_dataset = datasets.FakeData(50000, (3, 224, 224), 1000, transforms.ToTensor())
-    else:
-        train_csv = os.path.join(args.datadir, 'train_df.csv')
-        val_csv = os.path.join(args.datadir, 'val_df.csv')
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
+    train_csv = os.path.join(args.datadir, 'train_df.csv')
+    val_csv = os.path.join(args.datadir, 'val_df.csv')
+    # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+    #                                 std=[0.229, 0.224, 0.225])
 
-        train_dataset = B2PDataset(
+    train_dataset = B2PDataset(
             train_csv,
-            transforms.Compose([
-                transforms.RandomResizedCrop(224),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                normalize,
-            ]))
+            transforms.Compose(
+            [
+                transforms.ToTensor(), # take a 0, 255 image and scales it tp [0,1]
+                transforms.RandomVerticalFlip(), # flip image 1/2 the time
+                # transforms.adjust_brightness(0.1) # copied from fastai leaving out now
+                # normalize,
+            ]
+        )
+    )
 
-        val_dataset = B2PDataset(
-            val_csv,
-            transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                normalize,
-            ]))
+    val_dataset = B2PDataset(
+        val_csv,
+        transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            normalize,
+        ]))
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)

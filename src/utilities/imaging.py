@@ -11,9 +11,18 @@ import geopandas as gpd
 import copy
 from tqdm.notebook import tqdm 
 import warnings
-
-def scale(x) -> Union[float, np.array]:
-    return x / 2500 * 255
+BANDS_TO_IX = {
+    'B02': 3, # Blue
+    'B03': 2, # Green
+    'B04': 1 # Red
+}
+MAX_PIXEL_VAL = 4000
+# the max_pixel_val was set to 2500? this probably should match with the max allowed value for clouds or it shouldnt be included...
+def scale(
+    x:Union[float, np.array], 
+    max_pixel_val:float = MAX_PIXEL_VAL
+) -> Union[float, np.array]:
+    return x / max_pixel_val * 255
 
 def getImgFromFile(img_path, g_ncols, dtype, row_bound=None):
     img = rasterio.open(img_path, driver='JP2OpenJPEG')
@@ -54,7 +63,7 @@ def getCloudMaskFromFile(cloud_path, crs, transform, shape, row_bound=None):
     except: 
         return None
 
-def nanClouds(pixels, cloud_channels, max_pixel_val:float=4000):
+def nanClouds(pixels, cloud_channels, max_pixel_val:float=MAX_PIXEL_VAL):
     cp = pixels * cloud_channels
     mask = np.where(np.logical_or(cp == 0, cp > max_pixel_val ))
     cp[mask] = np.nan
@@ -154,9 +163,39 @@ def createComposite(s2_dir:str, composite_dir:str, coord:str, bands:list, dtype:
         transform=transform, 
         dtype=dtype
     ) as wf: 
-        for j, band in tqdm(enumerate(bands), total=n_bands, desc='Combining bands...', leave=False, position=1, disable=pbar):
+        for band in tqdm(bands, total=n_bands, desc='Combining bands...', leave=False, position=1, disable=pbar):
+            j = BANDS_TO_IX[bands]
             with rasterio.open(os.path.join(composite_dir, coord, f'{band}.tiff'), 'r', driver='GTiff') as rf:
-                wf.write(rf.read(1), indexes=j+1)
+                wf.write(rf.read(1), indexes=j)
     shutil.rmtree(os.path.join(composite_dir, coord))
     return multiband_file_path
     
+def flipRGB(infile, outfile, dtype = np.float32): 
+    crs, transform, g_ncols, g_nrows, = None, None, None, None
+    b02, b03, b04 = None, None, None
+    with rasterio.open(
+        infile, 
+        'r',
+        driver='GTiff', 
+    ) as rf: 
+        g_nrows, g_ncols = rf.meta['width'], rf.meta['height']
+        crs = rf.crs
+        transform = rf.transform
+        b02 = rf.read(1)
+        b03 = rf.read(2)
+        b04 = rf.read(3)
+    with rasterio.open(
+        outfile, 
+        'w',
+        driver='GTiff', 
+        width=g_ncols, 
+        height=g_nrows, 
+        count=3, 
+        crs=crs, 
+        transform=transform, 
+        dtype=dtype
+    ) as wf: 
+        wf.write(b04, indexes=1)
+        wf.write(b03, indexes=2)
+        wf.write(b02, indexes=3)
+    return None

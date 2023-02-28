@@ -4,154 +4,158 @@ import json
 import logging
 import os
 import time
-import glob
-import tqdm
+from glob import glob
 from argparse import Namespace
 from multiprocessing import Pool
-
+import pandas as pd
 from src.utilities.imaging import scale
-
+from src.utilities.coords import tiff_to_bbox
+from shapely.geometry import polygon
 import numpy as np
 import rasterio
 from osgeo import gdal
+from tqdm import tqdm
+import torch
+from torchvision.transforms import ToTensor
+import geopandas as gpd
 
-def make_tiff_files_task(namespace: Namespace):
-    dem = gdal.Open(namespace.output_scaled)
-    gt = dem.GetGeoTransform()
+def scale_multiband_composite(multiband_tiff:str):
+    assert os.path.isfile(multiband_tiff)
+    scaled_tiff = multiband_tiff.split('.')[0] + '_scaled.tiff'
+
+    with gdal.Open(multiband_tiff, 'r') as rf:
+        with rasterio.open(
+            str(scaled_tiff), 
+            'w', 
+            driver='Gtiff',
+            width=rf.width, height=rf.height,
+            count=3,
+            crs=rf.crs,
+            transform=rf.transform,
+            dtype='uint8'
+        ) as wf:
+            wf.write(scale(rf.read(0)).astype('uint8'), 0)
+            wf.write(scale(rf.read(1)).astype('uint8'), 1)
+            wf.write(scale(rf.read(2)).astype('uint8'), 2)
+    return scaled_tiff
+
+def _batch_task(arg:Namespace):
+    torchTformer = ToTensor()
+    df = pd.DataFrame(
+        columns=['tile', 'bbox', 'is_bridge', 'bridge_loc'],
+        index=range((len(arg.xsteps)-1)*(len(arg.ysteps)-1))
+    )
+    k = 0
+    for i in range(len(arg.xsteps)-1):
+        for j in range(len(arg.ysteps)-1):
+            xmin = arg.xsteps[i]
+            xmax = arg.xsteps[i + 1]
+            ymax = arg.ysteps[j]
+            ymin = arg.ysteps[j + 1]
+            
+            tile_basename = str(xmin) + '_' + str(ymin) + '.tif'
+            tile_tiff = os.path.join(arg.grid_dir, tile_basename)
+            gdal.Warp(
+                tile_tiff, 
+                arg.rf,
+                outputBounds=(xmin, ymin, xmax, ymax),
+                dstNodata=-999
+            )
+            bbox = tiff_to_bbox(tile_tiff)
+            df.at[k, 'bbox'] = bbox
+            df.at[k, 'is_bridge']  = False 
+            df.at[k, 'bridge_loc'] = None
+            p = polygon.Polygon(bbox)
+            for loc in arg.bridge_locations: 
+                # check if the current tiff tile contains the current verified bridge location
+                if p.contains(loc):
+                    df.at[k, 'is_bridge']  = True 
+                    df.at[k, 'bridge_loc'] = loc
+                    break
+            with rasterio.open(tile_tiff, 'r') as tmp:
+                pt_file = tile_tiff.split('.')[0]+'.pt'
+                tensor = torchTformer(scale(tmp.read()).astype(np.uint8))
+                torch.save(tensor, pt_file)
+                df.at[k, 'tile']  = pt_file
+            os.remove(tile_tiff)  
+            k += 1 
+    return df
+
+def make_tiles(
+    multiband_tiff,
+    tile_dir, 
+    bridge_locations,
+    cores,
+    div:int=300
+):
+    root, military_grid = os.path.split(multiband_tiff) 
+    military_grid = military_grid[:5]
+    root, region = os.path.split(root)
+    root, country = os.path.split(root)
+    this_tile_dir = os.path.join(tile_dir, country, region)
+
+    grid_geoloc_file = os.path.join(this_tile_dir, military_grid+'_geoloc.csv')
+    if os.path.isfile(grid_geoloc_file):
+        return pd.read_csv(grid_geoloc_file)
+    
+    grid_dir = os.path.join(this_tile_dir, military_grid)
+    os.makedirs(grid_dir, exist_ok=True)
+
+    rf = gdal.Open(multiband_tiff)
+    gt = rf.GetGeoTransform()
     xmin = gt[0]
     ymax = gt[3]
     res = gt[1]
 
-    xlen = res * dem.RasterXSize
-    ylen = res * dem.RasterYSize
-    div = 366
+    xlen = res * rf.RasterXSize
+    ylen = res * rf.RasterYSize
     xsize = xlen / div
     ysize = ylen / div
     xsteps = [xmin + xsize * i for i in range(div + 1)]
     ysteps = [ymax - ysize * i for i in range(div + 1)]
-
-    del gt, xmin, ymax, res, xlen, ylen
-    geom_lookup = {}
-    filenames = []
-    for i in range(namespace.tile_start, namespace.tile_stop):
-        for j in range(div):
-            xmin = xsteps[i]
-            xmax = xsteps[i + 1]
-            ymax = ysteps[j]
-            ymin = ysteps[j + 1]
-            tile_basename = 'dem' + namespace.composite_path.split('.')[0][-5:] + str(i) + '_' + str(j) + '.tif'
-            tiff_filename = os.path.join(namespace.output_dir, tile_basename)
-            filenames.append(tiff_filename)
-            gdal.Warp(tiff_filename, dem, outputBounds=(xmin, ymin, xmax, ymax), dstNodata=-999)
-            if namespace.geom_lookup_outfile is not None:
-                geom_lookup[os.path.basename(tiff_filename)] = ((xmin, ymin), (xmin, ymax), (xmax, ymax), (xmax, ymin),
-                                                                (xmin, ymin))
-
-            del xmin, xmax, ymax, ymin
-
-    if namespace.geom_lookup_outfile is not None:
-        with open(namespace.geom_lookup_outfile, 'w+') as f:
-            json.dump(geom_lookup, f)
-
-
-def create_tiles(composite_path: str, output_dir: str, cores: int, geometry_lookup_path: str = None):
-    """
-
-    """
-    logging.info('Starting tiff file creation')
-    t1 = time.time()
-    ds = gdal.Open(composite_path)
-    r = scale(ds.GetRasterBand(3).ReadAsArray()).astype('uint8')
-    g = scale(ds.GetRasterBand(2).ReadAsArray()).astype('uint8')
-    b = scale(ds.GetRasterBand(1).ReadAsArray()).astype('uint8')
-    ds = None
-    del ds
-
-    dss = rasterio.open(composite_path)
-
-    output_scaled = os.path.join(output_dir,
-                                 'multiband_scaled_corrected' + os.path.basename(composite_path).split('.')[0][-3:] + '.tiff')
-    true = rasterio.open(str(output_scaled), 'w', driver='Gtiff',
-                         width=dss.width, height=dss.height,
-                         count=3,
-                         crs=dss.crs,
-                         transform=dss.transform,
-                         dtype='uint8'
-                         )
-    true.write(r, 3)
-    true.write(g, 2)
-    true.write(b, 1)
-    true.close()
-
-    del r, g, b, true
-
-    div = 366
-    batch_space = np.linspace(0, div, cores + 1)
-    batches = []
-    for i in range(1, len(batch_space)):
-        batches.append((int(batch_space[i-1]), int(batch_space[i])))
-
-    output_parallel_files = os.path.join(output_dir, 'tiff_parallel_output')
-    os.makedirs(output_parallel_files, exist_ok=True)
-
-    with Pool(len(batches)) as p:
-        args = []
-        for i, batch in enumerate(batches):
-            geom_lookup_outfile = None if geometry_lookup_path is None else os.path.join(output_parallel_files,
-                                                                                         f'geom_lookup_{i}.json')
-            args.append(
-                Namespace(
-                    output_scaled=output_scaled, 
-                    output_dir=output_dir, 
-                    composite_path=composite_path,
-                    tile_start=batch[0], 
-                    tile_stop=batch[1], 
-                    geom_lookup_outfile=geom_lookup_outfile
-                )
+    
+    df = None
+    with Pool(cores) as p:
+        args = [
+            Namespace(
+                xsteps=xx,
+                ysteps=ysteps,
+                rf=rf,
+                bridge_locations=bridge_locations,
+                grid_dir=grid_dir
             )
+            for xx in np.array_split(xsteps, cores)
+        ]
+        dfs = p.map(_batch_task, args)
+        df = pd.concat(dfs, ignore_index=True)
+    df.to_csv(grid_geoloc_file)
+    return df
 
-        # Block until all processes are done
-        for result in p.map(make_tiff_files_task, args):
-            pass 
-            # print(result)
+def get_bridge_locations(truth_dir):
+    bridge_locations = []
+    for csv in glob(os.path.join(truth_dir, "*csv")):
+        tDf = pd.read_csv(csv)
+        bridge_locations += gpd.points_from_xy(tDf['Latitude'], tDf['Longitude'])
+    return bridge_locations
 
-    # Combine the parallel output
-    if geometry_lookup_path is not None:
-        geom_lookup = {}
-        for file in os.listdir(output_parallel_files):
-            file_path = os.path.join(output_parallel_files, file)
-            if file.startswith('geom_lookup'):
-                with open(file_path, 'r') as f:
-                    geoms = json.load(f)
-                    for geom in geoms:
-                        geom_lookup[geom] = geoms[geom]
+def create_tiles(
+    composite_dir: str, 
+    tile_dir: str,
+    truth_dir: str,
+    cores: int):
 
-        with open(geometry_lookup_path, 'w+') as f:
-            json.dump({'geom_lookup': geom_lookup}, f)
-
-    logging.info(f'Wrote tiff files in {time.time() - t1}s')
-    print(f'Wrote tiff files to {output_dir}')
-
-    # TODO: Do some parallel file cleanup
-
-def composite_to_tiles(s2_dir, output_dir, cores, geom_lookup_path):
-    mp.set_start_method('spawn')
-    files = glob.glob(os.path.join(s2_dir, "**/*multiband_cld_NAN_median_corrected*.tiff"),recursive=True)
-    pbar = tqdm.tqdm(files)
-    for composite_path in pbar:
-        prts = os.path.basename(composite_path).split('.')
-        abbrev = prts[0][-5:]
-        pbar.set_description(f"Processing {abbrev}")
-        pbar.refresh()
-        this_outdir = os.path.join(output_dir, abbrev)
-        if not os.path.isdir(this_outdir):
-            os.makedirs(this_outdir)
-        create_tiles(
-            composite_path,
-            this_outdir,
-            cores,
-            geom_lookup_path
-        )
+    bridge_locations = get_bridge_locations(truth_dir)  
+    composites = glob(os.path.join(composite_dir, "**/*multiband.tiff"), recursive=True)
+    dfs = [
+        make_tiles(
+            multiband_tiff, 
+            tile_dir, 
+            bridge_locations,
+            cores
+        ) 
+    for multiband_tiff in tqdm(composites)]
+    df = pd.concat(dfs, ignore_index=True)
+    df.to_csv(os.path.join(tile_dir,'geoloc.csv'))
 
 if __name__ == '__main__':
     
@@ -166,19 +170,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        '--region', 
-        '-r', 
-        type=str, 
-        help='Region for tiling'
-    )
-    parser.add_argument(
         '--in_dir', 
         '-i', 
         type=str, 
         required=False, 
         default=os.path.join(base_dir, 
         "data", 
-        "sentinel2"), 
+        "composites"), 
         help='path to inpt directory where s2 path is'
     )
     parser.add_argument(
@@ -186,8 +184,16 @@ if __name__ == '__main__':
         '-o', 
         type=str, 
         required=False, 
-        default=os.path.join(base_dir, "data", "tiles"),
+        default=os.path.join(base_dir, "data", "tmp_tiles"),
          help='Path to directory where output files will be written'
+    )
+    parser.add_argument(
+        '--truth-dir', 
+        '-t', 
+        type=str, 
+        required=False, 
+        default=os.path.join(base_dir, "data", "ground_truth"),
+         help='Path to directory where csv bridge locs'
     )
     parser.add_argument(
         '--cores', 
@@ -197,26 +203,16 @@ if __name__ == '__main__':
         required=False, 
         help='Number of cores to use in parallel for tiling'
     )
-    parser.add_argument(
-        '--geom_lookup_path', 
-        '-g', 
-        type=str, 
-        required=False,
-        default=None,
-        help='If specified the a tiff geometry lookup file will be written here'
-    )
     
     args = parser.parse_args()
-    # make paths to the region 
-    s2_dir = os.path.join(args.in_dir, args.region)
-    out_dir = os.path.join(args.out_dir, args.region)
+   
     # call function 
-    if not os.path.isdir(out_dir):
-        os.makedirs(out_dir)
+    if not os.path.isdir(args.out_dir):
+        os.makedirs(args.out_dir)
 
-    composite_to_tiles(
-        s2_dir,
-        out_dir, 
+    create_tiles(
+        args.in_dir,
+        args.out_dir,
+        args.truth_dir, 
         args.cores,
-        args.geom_lookup_path
     )

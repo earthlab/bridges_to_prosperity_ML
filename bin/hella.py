@@ -51,11 +51,11 @@ print('======================================================')
 print('Staring Scipt')
 for region, info in region_info.items():
     dates = info['dates']
-    if region == 'Rwanda': 
+    if region != "Cote d'Ivoire": 
         continue
     for district, district_info in info['districts'].items():
-        if district_info['spec'] != 'train':
-            continue
+        # if district_info['spec'] != 'train':
+        #     continue
         bbox = district_info['bbox']
         print(f'{region}/{district}\n' 
             f'\tdates : {dates}\n'

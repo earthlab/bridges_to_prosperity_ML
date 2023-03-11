@@ -1,5 +1,11 @@
 from osgeo import osr, gdal
+from shapely.geometry import polygon
 import time 
+from glob import glob
+import os
+import pandas as pd
+import geopandas as gpd
+
 def get_transform(tiff):
     src = gdal.Open(tiff)
     # Setup the source projection - you can also import from epsg, proj4...
@@ -42,6 +48,27 @@ def tiff_to_bbox(tiff:str, debug:bool=False):
         print(f'ur: {bbox[2]}')
         print(f'lr: {bbox[3]}')
     return bbox
+
+def bridge_in_bbox(bbox, bridge_locations):
+    p = polygon.Polygon(bbox)
+    is_bridge  = False 
+    bridge_loc = None
+    ix = None
+    for i, loc in enumerate(bridge_locations): 
+        # check if the current tiff tile contains the current verified bridge location
+        if p.contains(loc):
+            is_bridge  = True 
+            bridge_loc = loc
+            ix = i 
+            break
+    return is_bridge, bridge_loc, ix
+
+def get_bridge_locations(truth_dir):
+    bridge_locations = []
+    for csv in glob(os.path.join(truth_dir, "*csv")):
+        tDf = pd.read_csv(csv)
+        bridge_locations += gpd.points_from_xy(tDf['Latitude'], tDf['Longitude'])
+    return bridge_locations
 
 class Timer(object):
     def __init__(self, name=None):

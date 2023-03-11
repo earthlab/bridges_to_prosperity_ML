@@ -1,16 +1,25 @@
 from typing import Union
 import numpy as np
-
+import warnings
 import os
 import shutil
 from glob import glob 
+from tqdm import tqdm
+from argparse import Namespace
+from time import sleep
+from multiprocessing import Pool
+from osgeo import gdal
 import rasterio
 from rasterio import features
 from rasterio.windows import Window
 import geopandas as gpd
-import copy
-from tqdm.notebook import tqdm 
-import warnings
+import pandas as pd 
+import torch
+from torchvision.transforms import ToTensor
+from shapely.geometry import polygon
+
+from src.utilities.coords import tiff_to_bbox, bridge_in_bbox
+
 BANDS_TO_IX = {
     'B02': 3, # Blue
     'B03': 2, # Green
@@ -22,7 +31,7 @@ def scale(
     x:Union[float, np.array], 
     max_pixel_val:float = MAX_PIXEL_VAL
 ) -> Union[float, np.array]:
-    return x / max_pixel_val * 255
+    return x / max_pixel_val
 
 def getImgFromFile(img_path, g_ncols, dtype, row_bound=None):
     img = rasterio.open(img_path, driver='JP2OpenJPEG')
@@ -169,8 +178,8 @@ def createComposite(s2_dir:str, composite_dir:str, coord:str, bands:list, dtype:
                 wf.write(rf.read(1), indexes=j)
     shutil.rmtree(os.path.join(composite_dir, coord))
     return multiband_file_path
-    
-def flipRGB(infile, outfile, dtype = np.float32): 
+''' In case you flip B02 with B04'''    
+def _flipRGB(infile, outfile, dtype = np.float32): 
     crs, transform, g_ncols, g_nrows, = None, None, None, None
     b02, b03, b04 = None, None, None
     with rasterio.open(
@@ -199,3 +208,106 @@ def flipRGB(infile, outfile, dtype = np.float32):
         wf.write(b03, indexes=2)
         wf.write(b02, indexes=3)
     return None
+
+def scale_multiband_composite(multiband_tiff:str):
+    assert os.path.isfile(multiband_tiff)
+    scaled_tiff = multiband_tiff.split('.')[0] + '_scaled.tiff'
+
+    with gdal.Open(multiband_tiff, 'r') as rf:
+        with rasterio.open(
+            str(scaled_tiff), 
+            'w', 
+            driver='Gtiff',
+            width=rf.width, height=rf.height,
+            count=3,
+            crs=rf.crs,
+            transform=rf.transform,
+            dtype='uint8'
+        ) as wf:
+            wf.write((scale(rf.read(0))*255).astype('uint8'), 0)
+            wf.write((scale(rf.read(1))*255).astype('uint8'), 1)
+            wf.write((scale(rf.read(2))*255).astype('uint8'), 2)
+    return scaled_tiff
+
+def tiff_to_tiles(
+    multiband_tiff,
+    tile_dir, 
+    bridge_locations,
+    n=None,
+    N=200,
+    div:int=300 # in meters
+):
+    root, military_grid = os.path.split(multiband_tiff) 
+    military_grid = military_grid[:5]
+    root, region = os.path.split(root)
+    root, country = os.path.split(root)
+    this_tile_dir = os.path.join(tile_dir, country, region)
+
+    grid_geoloc_file = os.path.join(this_tile_dir, military_grid+'_geoloc.csv')
+    if os.path.isfile(grid_geoloc_file):
+        return pd.read_csv(grid_geoloc_file)
+    
+    grid_dir = os.path.join(this_tile_dir, military_grid)
+    os.makedirs(grid_dir, exist_ok=True)
+
+    rf = gdal.Open(multiband_tiff)
+    _, xres, _, _, _, yres = rf.GetGeoTransform()
+    nxpix = int(div/abs(xres))
+    nypix = int(div/abs(yres))
+    xsteps = np.arange(0, rf.RasterXSize, nxpix).astype(np.int64).tolist()
+    ysteps = np.arange(0, rf.RasterYSize, nypix).astype(np.int64).tolist()
+    
+    bbox = tiff_to_bbox(multiband_tiff)
+    this_bridge_locs = []
+    p = polygon.Polygon(bbox)
+    for loc in bridge_locations:
+        if p.contains(loc):
+            this_bridge_locs.append(loc)
+
+    torchTformer = ToTensor()
+    df = pd.DataFrame(
+        columns=['tile', 'bbox', 'is_bridge', 'bridge_loc'],
+        index=range((len(xsteps)-1)*(len(ysteps)-1))
+    )
+    if n is None: 
+        pos = 0
+    else:
+        pos = n
+    with tqdm(
+        position=pos,
+        total=len(xsteps)*len(ysteps),
+        desc=multiband_tiff,
+        miniters=N,
+        disable=(n is None)
+    ) as pbar:
+        k = 0
+        for xmin in xsteps:
+            for ymin in ysteps:
+                tile_basename = str(xmin) + '_' + str(ymin) + '.tif'
+                tile_tiff = os.path.join(grid_dir, tile_basename)
+                pt_file = tile_tiff.split('.')[0]+'.pt'
+                gdal.Translate(
+                    tile_tiff,
+                    rf,
+                    srcWin=(xmin, ymin, nxpix, nypix),
+                )
+                bbox = tiff_to_bbox(tile_tiff)
+                df.at[k, 'tile']  = tile_tiff
+                df.at[k, 'bbox'] = bbox
+                df.at[k, 'is_bridge'], df.at[k, 'bridge_loc'], ix = bridge_in_bbox(bbox, this_bridge_locs)
+                if ix is not None: 
+                    this_bridge_locs.pop(ix)
+
+                with rasterio.open(tile_tiff, 'r') as tmp:
+                    scale_img = scale(tmp.read())
+                    scale_img = np.moveaxis(scale_img, 0, -1) # make dims be c, w, h
+                    tensor = torchTformer(scale_img)
+                    torch.save(tensor, pt_file)
+                    df.at[k, 'tile']  = pt_file
+                os.remove(tile_tiff)  
+                k += 1 
+                pbar.update()
+                if k % N == 0:
+                    pbar.refresh()
+    df.to_csv(grid_geoloc_file)
+    return df

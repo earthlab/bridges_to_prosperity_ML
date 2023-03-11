@@ -1,5 +1,6 @@
 from glob import glob
 from tqdm import tqdm
+from tqdm.contrib.concurrent import process_map
 import os 
 import pandas as pd
 import numpy as np
@@ -13,6 +14,21 @@ COMPOSITE_DIR = os.path.join(BASE_DIR, 'data', 'tmp_composites')
 TILE_DIR = os.path.join(BASE_DIR, 'data', 'tmp_tiles')
 TRUTH_DIR = os.path.join(BASE_DIR, 'data', 'ground_truth')
 CORES = mp.cpu_count() - 1
+
+def this_download(ks):
+    key, sz, n = ks
+    s3 = boto3.resource('s3')
+    b = s3.Bucket('b2p.njr')
+    dst = os.path.join(COMPOSITE_DIR, key)
+    if os.path.isfile(dst):
+        return None
+    dstRoot = os.path.split(dst)[0]
+    os.makedirs(dstRoot, exist_ok=True)
+    # print(key)
+    with tqdm(total=sz, unit='B', unit_scale=True, desc=key, leave=False, position=n) as pbar:
+        b.download_file(key, dst, Callback=lambda bytes_transferred: pbar.update(bytes_transferred))
+    return None
+
 def main():
     ## load composites from s3
     folders = [
@@ -23,23 +39,17 @@ def main():
     ]
     s3 = boto3.resource('s3')
     b = s3.Bucket('b2p.njr')
-    def download_from_s3(p):
-        composites = list(b.objects.filter(Prefix=p))
-        for obj in tqdm(composites, leave=True, position=1):
-            key = obj.key
-            dst = os.path.join(COMPOSITE_DIR, key)
-            dstRoot = os.path.split(dst)[0]
-            os.makedirs(dstRoot, exist_ok=True)
-            # print(key)
-            with tqdm(total=obj.size, unit='B', unit_scale=True, desc=obj.key, leave=False, position=2) as pbar:
-                b.download_file(key, dst, Callback=lambda bytes_transferred: pbar.update(bytes_transferred))
-            # break
-    for p in tqdm(folders, desc=f'Processing ...', leave=True, position=0, total=len(folders)):
-        download_from_s3(p)
-        # break
+    
+    composites = [] 
+    n = 1
+    for p in folders:
+        for obj in b.objects.filter(Prefix=p):
+            composites.append((obj.key, obj.size, n%CORES+1))
+            n += 1  
+    process_map(this_download, composites, max_workers=CORES)
     ## call composites to tiles
     print('Making tiles...')
-    
+
     matched_df = create_tiles(
         COMPOSITE_DIR,
         TILE_DIR,

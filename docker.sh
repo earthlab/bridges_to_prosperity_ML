@@ -7,4 +7,5 @@ sudo amazon-linux-extras install docker
 sudo service docker start
 sudo chmod 666 /var/run/docker.sock
 docker system prune -f
-docker run --name hella --hostname localhost -v $SCRIPT_DIR:/b2p -it -p 8888:8888 earthlab/earth-analytics-python-env
+docker run --name hella --hostname localhost -v $SCRIPT_DIR:/b2p -it -P 763104351884.dkr.ecr.us-west-2.amazonaws.com/pytorch-inference:1.13.1-gpu-py39-cu117-ubuntu20.04-ec2
+# docker run --name hella --hostname localhost -v $SCRIPT_DIR:/b2p -it -p 8888:8888 earthlab/earth-analytics-python-env

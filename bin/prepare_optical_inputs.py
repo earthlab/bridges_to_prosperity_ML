@@ -10,10 +10,10 @@ import boto3
 
 from bin.composites_to_tiles import create_tiles
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '..'))
-COMPOSITE_DIR = os.path.join(BASE_DIR, 'data', 'tmp_composites')
-TILE_DIR = os.path.join(BASE_DIR, 'data', 'tmp_tiles')
+COMPOSITE_DIR = os.path.join(BASE_DIR, 'data', 'composites')
+TILE_DIR = os.path.join(BASE_DIR, 'data', 'tiles')
 TRUTH_DIR = os.path.join(BASE_DIR, 'data', 'ground_truth')
-CORES = mp.cpu_count() - 1
+CORES = 1#mp.cpu_count() - 1
 
 def this_download(ks):
     key, sz, n = ks
@@ -46,16 +46,16 @@ def main():
         for obj in b.objects.filter(Prefix=p):
             composites.append((obj.key, obj.size, n%CORES+1))
             n += 1  
-    process_map(this_download, composites, max_workers=CORES)
+    # process_map(this_download, composites, max_workers=CORES)
     ## call composites to tiles
     print('Making tiles...')
-
     matched_df = create_tiles(
         COMPOSITE_DIR,
         TILE_DIR,
         TRUTH_DIR,
         CORES
     )
+    print("Creating data set")
     ## create training sets and validation sets
     # Seperate the training and validation into seperate files
     b_ix = matched_df.index[matched_df['is_bridge']].tolist()

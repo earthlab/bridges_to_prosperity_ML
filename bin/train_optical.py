@@ -1,7 +1,9 @@
 import os
 from argparse import ArgumentParser
-from src.ml.train import _torch_train_optical
-
+from src.ml.train import train_torch
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '..'))
+TILE_DIR = os.path.join(BASE_DIR, 'data', 'tiles')
+DATA_DIR = os.path.join(BASE_DIR, 'data', 'torch')
 if __name__ == '__main__':
     # parser = ArgumentParser()
     # parser.add_argument(
@@ -53,5 +55,13 @@ if __name__ == '__main__':
     #     args.country,
     #     args.resnt,
     # )
-    _torch_train_optical()
+    if not os.path.isdir(DATA_DIR):
+        os.makedirs(DATA_DIR)
+    assert os.path.isdir(TILE_DIR), f"Please create tiles prior to training {TILE_DIR} DNE"
+    for arch in ['resnet18', 'resnet34', 'resnet50']:
+        train_torch(
+            DATA_DIR, 
+            TILE_DIR, 
+            arch
+        )
    

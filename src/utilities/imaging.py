@@ -4,7 +4,7 @@ import warnings
 import os
 import shutil
 from glob import glob 
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from argparse import Namespace
 from time import sleep
 from multiprocessing import Pool
@@ -233,8 +233,8 @@ def tiff_to_tiles(
     multiband_tiff,
     tile_dir, 
     bridge_locations,
-    n=None,
-    N=200,
+    tqdm_pos=None,
+    tqdm_updateRate=None,
     div:int=300 # in meters
 ):
     root, military_grid = os.path.split(multiband_tiff) 
@@ -245,7 +245,8 @@ def tiff_to_tiles(
 
     grid_geoloc_file = os.path.join(this_tile_dir, military_grid+'_geoloc.csv')
     if os.path.isfile(grid_geoloc_file):
-        return pd.read_csv(grid_geoloc_file)
+        df = pd.read_csv(grid_geoloc_file)
+        return df
     
     grid_dir = os.path.join(this_tile_dir, military_grid)
     os.makedirs(grid_dir, exist_ok=True)
@@ -263,22 +264,22 @@ def tiff_to_tiles(
     for loc in bridge_locations:
         if p.contains(loc):
             this_bridge_locs.append(loc)
-
+    numTiles = len(xsteps)*len(ysteps)
     torchTformer = ToTensor()
     df = pd.DataFrame(
         columns=['tile', 'bbox', 'is_bridge', 'bridge_loc'],
-        index=range((len(xsteps)-1)*(len(ysteps)-1))
+        index=range(numTiles)
     )
-    if n is None: 
-        pos = 0
+    if tqdm_updateRate is None:
+        tqdm_updateRate = int(round(numTiles / 100))
     else:
-        pos = n
+        assert type(tqdm_updateRate) == int
     with tqdm(
-        position=pos,
-        total=len(xsteps)*len(ysteps),
-        desc=multiband_tiff,
-        miniters=N,
-        disable=(n is None)
+        position=tqdm_pos,
+        total=numTiles,
+        desc=military_grid,
+        miniters=tqdm_updateRate,
+        disable=(tqdm_pos is None)
     ) as pbar:
         k = 0
         for xmin in xsteps:
@@ -286,28 +287,34 @@ def tiff_to_tiles(
                 tile_basename = str(xmin) + '_' + str(ymin) + '.tif'
                 tile_tiff = os.path.join(grid_dir, tile_basename)
                 pt_file = tile_tiff.split('.')[0]+'.pt'
-                gdal.Translate(
-                    tile_tiff,
-                    rf,
-                    srcWin=(xmin, ymin, nxpix, nypix),
-                )
+                if not os.path.isfile(tile_tiff):
+                    gdal.Translate(
+                        tile_tiff,
+                        rf,
+                        srcWin=(xmin, ymin, nxpix, nypix),
+                    )
                 bbox = tiff_to_bbox(tile_tiff)
                 df.at[k, 'tile']  = tile_tiff
                 df.at[k, 'bbox'] = bbox
                 df.at[k, 'is_bridge'], df.at[k, 'bridge_loc'], ix = bridge_in_bbox(bbox, this_bridge_locs)
                 if ix is not None: 
                     this_bridge_locs.pop(ix)
-
-                with rasterio.open(tile_tiff, 'r') as tmp:
-                    scale_img = scale(tmp.read())
-                    scale_img = np.moveaxis(scale_img, 0, -1) # make dims be c, w, h
-                    tensor = torchTformer(scale_img)
-                    torch.save(tensor, pt_file)
-                    df.at[k, 'tile']  = pt_file
-                os.remove(tile_tiff)  
+                if not os.path.isfile(pt_file):
+                    with rasterio.open(tile_tiff, 'r') as tmp:
+                        scale_img = scale(tmp.read())
+                        scale_img = np.moveaxis(scale_img, 0, -1) # make dims be c, w, h
+                        tensor = torchTformer(scale_img)
+                        torch.save(tensor, pt_file)
+                        df.at[k, 'tile']  = pt_file
+                # os.remove(tile_tiff)  
                 k += 1 
                 pbar.update()
-                if k % N == 0:
+                if k % tqdm_updateRate == 0:
                     pbar.refresh()
-    df.to_csv(grid_geoloc_file)
+                if k % int(round(numTiles/4)) == 0:
+                    percent = int(round(k/int(round(numTiles))*100))
+                    pbar.set_description(f'Saving {military_grid} {percent}%')   
+                    df.to_csv(grid_geoloc_file, index=False)
+        pbar.set_description(f'Saving to file {grid_geoloc_file}')   
+    df.to_csv(grid_geoloc_file, index=False)
     return df

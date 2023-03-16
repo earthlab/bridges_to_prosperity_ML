@@ -329,8 +329,8 @@ def main_worker(gpu, ngpus_per_node, args):
 
 
     # Data loading code
-    train_csv = os.path.join(args.tile_dir, 'train_df_lite.csv')
-    val_csv = os.path.join(args.tile_dir, 'val_df_lite.csv')
+    train_csv = os.path.join(args.tile_dir, 'train_df.csv')
+    val_csv = os.path.join(args.tile_dir, 'val_df.csv')
     assert os.path.isfile(train_csv), f'file dne: {train_csv}'
     assert os.path.isfile(val_csv), f'file dne: {val_csv}'
     train_dataset = B2PDataset(

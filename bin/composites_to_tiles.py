@@ -17,27 +17,29 @@ def create_tiles(
     cores: int):
 
     bridge_locations = get_bridge_locations(truth_dir)  
-    composites = []
-    for multiband_tiff in glob(os.path.join(composite_dir, "**/*multiband.tiff"), recursive=True):
-        root, military_grid = os.path.split(multiband_tiff) 
-        military_grid = military_grid[:5]
-        root, region = os.path.split(root)
-        root, country = os.path.split(root)
-        this_tile_dir = os.path.join(tile_dir, country, region)
-
-        grid_geoloc_file = os.path.join(this_tile_dir, military_grid+'_geoloc.csv')
-        if not os.path.isfile(grid_geoloc_file):
-            composites.append(multiband_tiff)
-    
+    composites = glob(os.path.join(composite_dir, "**/*multiband.tiff"), recursive=True)
+   
+    df = None
     if cores > 1:
-        with mp.Pool(cores) as p:
+        with mp.Pool(CORES) as p:
             items = [
-                (multiband_tiff, tile_dir, copy(bridge_locations), n%cores+1)
+                (multiband_tiff, TILE_DIR, copy(bridge_locations), n%cores+1)
             for n, multiband_tiff in enumerate(composites)]
-            p.starmap(tiff_to_tiles,items)
+            df = list(p.starmap(tiff_to_tiles,items))
     else:
+        df = []
+        print(len(composites))
         for multiband_tiff in tqdm(composites, position=0, leave=True):
-            tiff_to_tiles(multiband_tiff, tile_dir, bridge_locations,1)
+            df_i = tiff_to_tiles(multiband_tiff, tile_dir, bridge_locations,1)
+            print(type(df_i))
+            print(df_i.shape)
+            df.append(
+                df_i
+            )
+    print(type(df))
+    print(len(df))
+    df = pd.concat(df, ignore_index=True)
+    return df
 
 if __name__ == '__main__':
     

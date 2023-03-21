@@ -17,7 +17,7 @@ import copy
 import tqdm 
 import PIL
 from itertools import repeat
-
+from math import isnan, floor
 import torch
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
@@ -37,6 +37,9 @@ from shapely.geometry import polygon
 from skimage import io, transform
 
 from src.utilities.coords import *
+# import yaml
+
+# yaml.safe_load(env["TORCH_PARAMS"])
 
 TFORM = transforms.Compose(
         [
@@ -55,7 +58,7 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file_
 class B2PDataset(torch.utils.data.Dataset):
     ## Make it so np doesn't yell about using str
     warnings.simplefilter(action='ignore', category=FutureWarning)
-    def __init__(self, csv_file, transform=None):
+    def __init__(self, csv_file, transform=None,batch_size=1):
         """
         Args:
             csv_file (string): Path to the csv file with annotations.
@@ -63,7 +66,7 @@ class B2PDataset(torch.utils.data.Dataset):
             transform (callable, optional): Optional transform to be applied
                 on a sample.
         """
-        self.df = pd.read_csv(
+        df = pd.read_csv(
             csv_file,
             index_col=0,
             dtype={
@@ -73,21 +76,26 @@ class B2PDataset(torch.utils.data.Dataset):
                 'bridge_loc':object
             }
         )
+        self.tiles = df['tile']
+        self.bbox = df['bbox']
+        self.is_bridge = df['is_bridge']
         self.classes = ['bridge', 'no bridge']
         self.class_to_idx = {'bridge': 1, 'no bridge': 0}
         self.transform = transform
+        self.batch_size = batch_size
 
     def __len__(self):
-        return len(self.df)
+        return int(floor(len(self.tiles)/ self.batch_size) * self.batch_size)
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        tile_file = self.df.iloc[idx]['tile']
-        is_bridge = self.df.iloc[idx]['is_bridge']
+        tile_file = self.tiles[idx]
+        is_bridge = self.is_bridge[idx]
+        assert type(tile_file) == str, 'tile_file is a {}, = {}'.format(type(tile_file), tile_file)
         image = torch.load(tile_file)
-        bbox = self.df.iloc[idx]['bbox']
+        bbox = self.bbox[idx]
         w, c, h = image.shape
         if w == h and w != c:
             image = torch.moveaxis(image, 1, 0)
@@ -118,7 +126,7 @@ class AverageMeter(object):
 
     def update(self, val, n=1):
         self.val = val
-        if np.isnan(val): return
+        if isnan(val): return
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count

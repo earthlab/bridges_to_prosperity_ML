@@ -244,9 +244,9 @@ def tiff_to_tiles(
     this_tile_dir = os.path.join(tile_dir, country, region)
 
     grid_geoloc_file = os.path.join(this_tile_dir, military_grid+'_geoloc.csv')
-    if os.path.isfile(grid_geoloc_file):
-        df = pd.read_csv(grid_geoloc_file)
-        return df
+    # if os.path.isfile(grid_geoloc_file):
+    #     df = pd.read_csv(grid_geoloc_file)
+    #     return df
     
     grid_dir = os.path.join(this_tile_dir, military_grid)
     os.makedirs(grid_dir, exist_ok=True)
@@ -294,7 +294,7 @@ def tiff_to_tiles(
                         srcWin=(xmin, ymin, nxpix, nypix),
                     )
                 bbox = tiff_to_bbox(tile_tiff)
-                df.at[k, 'tile']  = tile_tiff
+                df.at[k, 'tile']  = pt_file
                 df.at[k, 'bbox'] = bbox
                 df.at[k, 'is_bridge'], df.at[k, 'bridge_loc'], ix = bridge_in_bbox(bbox, this_bridge_locs)
                 if ix is not None: 
@@ -305,13 +305,12 @@ def tiff_to_tiles(
                         scale_img = np.moveaxis(scale_img, 0, -1) # make dims be c, w, h
                         tensor = torchTformer(scale_img)
                         torch.save(tensor, pt_file)
-                        df.at[k, 'tile']  = pt_file
                 # os.remove(tile_tiff)  
                 k += 1 
                 pbar.update()
                 if k % tqdm_updateRate == 0:
                     pbar.refresh()
-                if k % int(round(numTiles/4)) == 0:
+                if k % int(round(numTiles/4)) == 0 and k < numTiles-1:
                     percent = int(round(k/int(round(numTiles))*100))
                     pbar.set_description(f'Saving {military_grid} {percent}%')   
                     df.to_csv(grid_geoloc_file, index=False)

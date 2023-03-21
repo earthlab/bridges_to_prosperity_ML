@@ -5,6 +5,7 @@ from glob import glob
 import os
 import pandas as pd
 import geopandas as gpd
+from dateutil import parser
 
 def get_transform(tiff):
     src = gdal.Open(tiff)
@@ -64,10 +65,12 @@ def bridge_in_bbox(bbox, bridge_locations):
     return is_bridge, bridge_loc, ix
 
 def get_bridge_locations(truth_dir):
-    bridge_locations = []
-    for csv in glob(os.path.join(truth_dir, "*csv")):
-        tDf = pd.read_csv(csv)
-        bridge_locations += gpd.points_from_xy(tDf['Latitude'], tDf['Longitude'])
+    csv_files = glob(os.path.join(truth_dir, "*csv"))
+    dates = [parser.parse(csv, fuzzy=True) for csv in csv_files]
+    max_ix = dates.index(max(dates))
+    print(csv_files[max_ix])
+    tDf = pd.read_csv(csv_files[max_ix])
+    bridge_locations = gpd.points_from_xy(tDf['Latitude'], tDf['Longitude'])
     return bridge_locations
 
 class Timer(object):

@@ -12,14 +12,6 @@ DIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
 ## Set python path
 export PYTHONPATH=$DIR:$PYTHONPATH
 
-## set bash shortcuts 
-# .bashrc
-
-# Source global definitions
-if [ -f /etc/bashrc ]; then
-	. /etc/bashrc
-fi
-
 # up and down arrows search 
 bind '"\e[A": history-search-backward'
 bind '"\e[B": history-search-forward'
@@ -43,16 +35,39 @@ alias gk="gitk &"
 alias gka="gitk --all &"
 alias gf="git fetch"
 alias gfa="git fetch --all"
-
-echo "Pip install requirements..."
-pip install -r requirements.txt > /dev/null 2>&1
-ipython profile create
-echo "c.InteractiveShellApp.extensions = ['autoreload']" >> ~/.ipython/profile_default/ipython_config.py 
-echo "c.InteractiveShellApp.exec_lines = ['%autoreload 2']"  >> ~/.ipython/profile_default/ipython_config.py 
-if [ ! -f ~/work/b2p ]; then
-  echo "Creating link in ~/work/b2p"
-  ln -s /b2p/ ~/work/b2p
+if pip -vvv freeze -r requirements.txt | grep "not installed"
+then 
+  echo "Pip install requirements..."
+  pip install -r requirements.txt > /dev/null 2>&1
+else
+  echo "All python requirements met"
 fi
+## Set up ipython with readload
+IPYTHON_CONFIG=~/.ipython/profile_default/ipython_config.py
+if [ ! -f $IPYTHON_CONFIG ]; then 
+  ipython profile create
+fi
+RELOAD1="c.InteractiveShellApp.extensions = ['autoreload']"
+RELOAD2="c.InteractiveShellApp.exec_lines = ['%autoreload 2']"
+if ! grep -Fxq "$READLOAD1" $IPYTHON_CONFIG
+then
+  echo "$READLOAD1" >> $IPYTHON_CONFIG
+fi
+if ! grep -Fxq "$READLOAD2" $IPYTHON_CONFIG 
+then
+  echo "$READLOAD2"  >> $IPYTHON_CONFIG 
+fi
+
+# if [ ! -f ~/work/b2p ]; then
+#   echo "Creating link in ~/work/b2p"
+#   ln -s /b2p/ ~/work/b2p
+# fi
 # git config --global user.email "nicrummel@gmail.com"
 # git config --global user.name "nrummel"
-# token: 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
+cwd=$PWD
+cd $DIR
+echo "Activating conda env"
+conda activate .
+cd $cwd 
+export BASE_DIR=$DIR
+export TORCH_PARAMS="$DIR/data/torch.yaml"

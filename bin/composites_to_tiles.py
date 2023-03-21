@@ -21,23 +21,18 @@ def create_tiles(
    
     df = None
     if cores > 1:
-        with mp.Pool(CORES) as p:
+        with mp.Pool(cores) as p:
             items = [
-                (multiband_tiff, TILE_DIR, copy(bridge_locations), n%cores+1)
+                (multiband_tiff, tile_dir, copy(bridge_locations), n%cores+1)
             for n, multiband_tiff in enumerate(composites)]
             df = list(p.starmap(tiff_to_tiles,items))
     else:
         df = []
-        print(len(composites))
         for multiband_tiff in tqdm(composites, position=0, leave=True):
             df_i = tiff_to_tiles(multiband_tiff, tile_dir, bridge_locations,1)
-            print(type(df_i))
-            print(df_i.shape)
             df.append(
                 df_i
             )
-    print(type(df))
-    print(len(df))
     df = pd.concat(df, ignore_index=True)
     return df
 

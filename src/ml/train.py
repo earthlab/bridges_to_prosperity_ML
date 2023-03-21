@@ -8,10 +8,10 @@ DEFAULT_ARGS = Namespace(
     datadir = os.path.join(BASE_DIR, "data", "torch"),
     tile_dir = os.path.join(BASE_DIR, "data", "final_tiles"),
     arch = 'resnet34',
-    workers = 12,
+    workers = 4,
     epochs = 20,
     start_epoch = 0,
-    batch_size = 12,
+    batch_size = 1000 ,
     lr = 0.1,
     momentum = 0.9,
     weight_decay=1e-4,
@@ -284,6 +284,7 @@ def main_worker(gpu, ngpus_per_node, args):
             model = torch.nn.DataParallel(model).cuda()
 
     if torch.cuda.is_available():
+        print('Using CUDA')
         if args.gpu:
             device = torch.device('cuda:{}'.format(args.gpu))
         else:
@@ -334,13 +335,15 @@ def main_worker(gpu, ngpus_per_node, args):
     assert os.path.isfile(train_csv), f'file dne: {train_csv}'
     assert os.path.isfile(val_csv), f'file dne: {val_csv}'
     train_dataset = B2PDataset(
-            train_csv,
-            TFORM
-        )
+        train_csv,
+        TFORM,
+        args.batch_size
+    )
 
     val_dataset = B2PDataset(
         val_csv,
-        TFORM
+        TFORM,
+        args.batch_size
         )
 
     if args.distributed:

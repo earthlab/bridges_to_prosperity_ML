@@ -1,5 +1,31 @@
-
+# 
 # Getting started 
+## without docker 
+
+clone code 
+`git clone repo`
+
+install anaconda and move to 3.8
+<https://phoenixnap.com/kb/how-to-install-anaconda-centos-7>
+`cd repo`
+`conda activate .` 
+`conda install python=3.8`
+
+install gdal
+```
+yum install gdal-devel
+sudo yum install python3-devel
+export CPLUS_INCLUDE_PATH=/usr/include/gdal  # path from `gdal-config --cflags`
+export C_INCLUDE_PATH=/usr/include/gdal
+pip3 install setuptools==58
+pip3 install GDAL==$(gdal-config --version | awk -F'[.]' '{print $1"."$2}')
+```
+install the rest of the requirements
+```
+cd repo
+pip install -r requirements.txt
+```
+## with docker
 open a screen, install docker, set permissions, start docker instance with docker run (dont forget to mount repo)
 
 [Instructions](https://docs.google.com/document/d/1SiW0amSxxCDKeDycJTu-SBKYeerSx2lM9a7lR_F3PYs/edit#)

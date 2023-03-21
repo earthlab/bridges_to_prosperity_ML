@@ -12,4 +12,5 @@ ipython
 matplotlib
 scikit-learn
 scikit-image
-plotly==5.13.1
+plotly
+plotly_express

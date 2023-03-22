@@ -103,6 +103,7 @@ def main():
         inputs, 
         max_workers=CORES
     )
+    matched_df = pd.concat(matched_df, ignore_index=True)
     
     print("Creating data set")
     creat_dset_csv(matched_df, 0.7)

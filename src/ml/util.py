@@ -58,7 +58,7 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file_
 class B2PDataset(torch.utils.data.Dataset):
     ## Make it so np doesn't yell about using str
     warnings.simplefilter(action='ignore', category=FutureWarning)
-    def __init__(self, csv_file, transform=None,batch_size=1):
+    def __init__(self, csv_file, transform=None, batch_size=1, ratio=None, replacement=False):
         """
         Args:
             csv_file (string): Path to the csv file with annotations.
@@ -76,17 +76,41 @@ class B2PDataset(torch.utils.data.Dataset):
                 'bridge_loc':object
             }
         )
-        self.tiles = df['tile']
-        self.bbox = df['bbox']
-        self.is_bridge = df['is_bridge']
+        self.df = df
+        self.ratio = ratio
+        self.replacement = replacement
+        self.ix_already_sampled = []
+        if ratio is not None:
+            assert float == type(ratio), 'Ratio must be a number'
+            self.update()
+        else:
+            self.tiles = df['tile']
+            self.bbox = df['bbox']
+            self.is_bridge = df['is_bridge']
+            
         self.classes = ['bridge', 'no bridge']
         self.class_to_idx = {'bridge': 1, 'no bridge': 0}
         self.transform = transform
         self.batch_size = batch_size
+    def update(self): 
+        if self.ratio is None: 
+            return 
+        ix_bridge = np.where(self.df['is_bridge'].to_numpy())[0]
+        ix_no_bridge = np.where(not self.df['is_bridge'].to_numpy())[0]
+        if not self.replacement: ix_no_bridge = np.setdiff1d(ix_no_bridge, self.ix_already_sampled)
+        num_bridge = len(ix_bridge)
+        num_no_bridge = int(round(self.ratio*num_bridge)) # ratio = num_no_bridge / num_bridge
+        ix_no_bridge = np.random.choice(ix_no_bridge, num_no_bridge)
+        self.ix_already_sampled = np.concatenate((ix_no_bridge, self.ix_already_sampled), dim=0)
+        ix_dset = np.concatenate((ix_no_bridge, ix_bridge), axis=0)
+        np.random.shuffle(ix_dset)
+        self.tiles = self.df['tile'][ix_dset]
+        self.bbox = self.df['bbox'][ix_dset]
+        self.is_bridge = self.df['is_bridge'][ix_dset]
 
     def __len__(self):
-        return int(floor(len(self.tiles)/ self.batch_size) * self.batch_size)
-
+        return len(self.tiles)
+    
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()

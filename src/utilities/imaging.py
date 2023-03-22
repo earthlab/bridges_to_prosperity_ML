@@ -244,9 +244,9 @@ def tiff_to_tiles(
     this_tile_dir = os.path.join(tile_dir, country, region)
 
     grid_geoloc_file = os.path.join(this_tile_dir, military_grid+'_geoloc.csv')
-    # if os.path.isfile(grid_geoloc_file):
-    #     df = pd.read_csv(grid_geoloc_file)
-    #     return df
+    if os.path.isfile(grid_geoloc_file):
+        df = pd.read_csv(grid_geoloc_file)
+        return df
     
     grid_dir = os.path.join(this_tile_dir, military_grid)
     os.makedirs(grid_dir, exist_ok=True)
@@ -307,8 +307,8 @@ def tiff_to_tiles(
                         torch.save(tensor, pt_file)
                 # os.remove(tile_tiff)  
                 k += 1 
-                pbar.update()
                 if k % tqdm_updateRate == 0:
+                    pbar.update(tqdm_updateRate)
                     pbar.refresh()
                 if k % int(round(numTiles/4)) == 0 and k < numTiles-1:
                     percent = int(round(k/int(round(numTiles))*100))

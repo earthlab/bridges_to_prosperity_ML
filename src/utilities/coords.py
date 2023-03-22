@@ -21,11 +21,11 @@ def get_transform(tiff):
     return osr.CoordinateTransformation(srcRef, tgtRef)
 
 def lat_long_bbox(bbox, transform):
-    ul = transform.TransformPoint(*bbox[0])[:2] 
-    ll = transform.TransformPoint(*bbox[1])[:2] 
-    ur = transform.TransformPoint(*bbox[2])[:2] 
-    lr = transform.TransformPoint(*bbox[3])[:2]
-    return (ul,ll,ur,lr)
+    tl = transform.TransformPoint(*bbox[0])[:2] 
+    tr = transform.TransformPoint(*bbox[1])[:2] 
+    br = transform.TransformPoint(*bbox[2])[:2]
+    bl = transform.TransformPoint(*bbox[3])[:2] 
+    return (tl,tr,br,bl)
 
 def tiff_to_bbox(tiff:str, debug:bool=False):
     src = gdal.Open(tiff)
@@ -41,7 +41,7 @@ def tiff_to_bbox(tiff:str, debug:bool=False):
     bl = (lx, by)
     tr = (rx, ty)
     br = (rx, by)
-    bbox = lat_long_bbox((tl,bl,tr,br), tform)
+    bbox = lat_long_bbox((tl,tr,br,bl), tform)
     
     if debug: 
         print(f'ul: {bbox[0]}')
@@ -66,10 +66,11 @@ def bridge_in_bbox(bbox, bridge_locations):
 
 def get_bridge_locations(truth_dir):
     csv_files = glob(os.path.join(truth_dir, "*csv"))
-    dates = [parser.parse(csv, fuzzy=True) for csv in csv_files]
+    dates = [parser.parse(os.path.basename(csv), fuzzy=True) for csv in csv_files]
     max_ix = dates.index(max(dates))
     print(csv_files[max_ix])
     tDf = pd.read_csv(csv_files[max_ix])
+    tDf = tDf.dropna(subset=['Latitude', 'Longitude'])
     bridge_locations = gpd.points_from_xy(tDf['Latitude'], tDf['Longitude'])
     return bridge_locations
 

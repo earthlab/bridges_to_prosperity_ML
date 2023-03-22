@@ -35,13 +35,7 @@ alias gk="gitk &"
 alias gka="gitk --all &"
 alias gf="git fetch"
 alias gfa="git fetch --all"
-if pip -vvv freeze -r requirements.txt | grep "not installed"
-then 
-  echo "Pip install requirements..."
-  pip install -r requirements.txt > /dev/null 2>&1
-else
-  echo "All python requirements met"
-fi
+
 ## Set up ipython with readload
 IPYTHON_CONFIG=~/.ipython/profile_default/ipython_config.py
 if [ ! -f $IPYTHON_CONFIG ]; then 
@@ -69,5 +63,14 @@ cd $DIR
 echo "Activating conda env"
 conda activate .
 cd $cwd 
+
+if pip -vvv freeze -r requirements.txt | grep "not installed"
+then 
+  echo "Pip install requirements..."
+  pip install -r requirements.txt > /dev/null 2>&1
+else
+  echo "All python requirements met"
+fi
+
 export BASE_DIR=$DIR
 export TORCH_PARAMS="$DIR/data/torch.yaml"

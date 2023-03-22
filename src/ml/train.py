@@ -28,156 +28,14 @@ DEFAULT_ARGS = Namespace(
     multiprocessing_distributed = False,
     dummy = False,
     best_acc1 = 0,
-    distributed = False
+    distributed = False,
+    ratio=1
 )
 
 BEST_ACC1 = 0
 
-def find_bridges(pid:int, geo_file:str, bridge_locations:list):
-    assert os.path.isfile(geo_file) 
-    out_file = os.path.join(os.path.dirname(geo_file), 'matched_df.csv')
-    if os.path.isfile(out_file):
-        return pd.read_csv(
-            out_file, 
-            index_col=0,
-            dtype={
-                'tile':str, 
-                'bbox':object, 
-                'is_bridge':bool, 
-                'bridge_loc':object
-            }
-        )
-    df = None
-    with open(geo_file, 'r') as rf:
-        geo_dict = json.load(rf)
-        df = pd.DataFrame(
-            columns=['tile','bbox', 'is_bridge', 'bridge_loc'],
-            index=range(len(geo_dict))
-        )
-        m = len(geo_dict)
-        # print(f'\tnumber of tiles to check {m}')
-        for j, (tif, bbox) in tqdm.tqdm(enumerate(geo_dict.items()), desc=f'pid:{pid} ', position=pid+1, total=m):
-        # for j, (tif, bbox) in enumerate(geo_dict.items()):
-            df.at[j, 'tile']  = tif
-            df.at[j, 'bbox'] = bbox
-            df.at[j, 'is_bridge']  = False 
-            df.at[j, 'bridge_loc'] = None
-            p = polygon.Polygon(bbox)
-            for loc in bridge_locations: 
-                # check if the current tiff tile contains the current verified bridge location
-                if p.contains(loc):
-                    df.at[j, 'is_bridge']  = True 
-                    df.at[j, 'bridge_loc'] = loc
-                    break
-    df.to_csv(out_file)
-    return df
-    
-def _torch_prepare_inputs(ground_truth_dir:str = None, out_dir:str = None, tile_dir:str = None):
-    # mp.set_start_method('spawn')
-    if ground_truth_dir is None: 
-        ground_truth_dir = os.path.join(BASE_DIR, 'data', 'ground_truth')
-    if tile_dir is None: 
-        tile_dir = os.path.join(BASE_DIR, 'data', f'tiles')  
-    if out_dir is None: 
-        today = date.today()
-        # datestr = today.strftime('%Y-%m-%d')
-        out_dir = os.path.join(BASE_DIR, 'data', f'torch')   
-    if not os.path.isdir(out_dir):
-        os.makedirs(out_dir)
-    ## Make it so np doesn't yell about using str
-    warnings.simplefilter(action='ignore', category=FutureWarning)
-    ## glob for input files
-    with Timer():
-        truth_files = glob(os.path.join(ground_truth_dir,"*.csv"))
-        geo_files = glob(os.path.join(tile_dir,'**', "geom_lookup.json"), recursive=True)
-        print('Made it through the globs')
-    ## locate all bridges
-    bridge_locations = []
-    with Timer():
-        for tfile in truth_files:
-            tDf = pd.read_csv(tfile)
-            bridge_locations += gpd.points_from_xy(tDf['Latitude'], tDf['Longitude'])
-        print(f'bridge_locations : {len(bridge_locations)}')
-    ## find bridege in parallel  
-    matched_date_file = os.path.join(out_dir, 'matched_df.csv')
-    if os.path.isfile(matched_date_file):
-        with Timer():
-            matched_df = pd.read_csv(
-                matched_date_file,
-                index_col=0,
-                dtype={
-                    'tile':str, 
-                    'bbox':object, 
-                    'is_bridge':bool, 
-                    'bridge_loc':object
-                }
-            )
-            print(f'Loaded {matched_date_file}')
-    else:
-        matched_data_arr = None
-        with Timer():
-            num_processes = mp.cpu_count() - 1
-            num_jobs = len(geo_files)
-            print(f'Kicking off {num_processes} processes to find bridges in {num_jobs} military grids')
-            with mp.Pool(processes=num_processes) as pool: 
-                matched_data_arr = tqdm.tqdm(
-                    pool.starmap(
-                        find_bridges,
-                        zip(range(num_jobs), geo_files, repeat(bridge_locations))
-                    )
-                )
-            print('Found Bridges')
-        ## Combine results from parallel computing into one obj   
-        matched_df = None
-        with Timer():
-            matched_df = pd.concat(matched_data_arr, ignore_index=True)
-            print('Combining results')
-        ## Save results to one big file
-        with Timer():
-            matched_df.to_csv(matched_date_file)
-            print(f'Writing to file: {matched_date_file}')
-
-    print(f'bridge counts : \n{matched_df.is_bridge.value_counts()}')
-    print(f'bridge locations: {len(bridge_locations)}')
-    print()
-    
-    with Timer():
-        # stratified sampling to set aside x% of data for traingin and 1-x% for validation
-        b_ix = matched_df.index[matched_df['is_bridge']].tolist()
-        nb_ix = matched_df.index[False == matched_df['is_bridge']].tolist()
-        b_train_ix = random.sample(b_ix, int(round(0.7*len(b_ix))))
-        nb_train_ix = random.sample(nb_ix, int(round(0.7*len(nb_ix))))
-        b_val_ix = np.setdiff1d(b_ix, b_train_ix)
-        nb_val_ix = np.setdiff1d(nb_ix, nb_train_ix)
-        print(f'b_train_ix: {len(b_train_ix)}')
-        print(f'nb_train_ix: {len(nb_train_ix)}')
-        print(f'b_val_ix: {len(b_val_ix)}')
-        print(f'nb_val_ix: {len(nb_val_ix)}')
-
-    with Timer():
-        # Seperate the training and validation into seperate files
-        train_csv = os.path.join(out_dir, 'train_df.csv')
-        val_csv = os.path.join(out_dir, 'val_df.csv')
-        train_df = pd.concat(
-            [
-                matched_df.iloc[b_train_ix],
-                matched_df.iloc[nb_train_ix]
-            ], 
-            ignore_index=True
-        )
-        val_df = pd.concat(
-            [
-                matched_df.iloc[b_val_ix],
-                matched_df.iloc[nb_val_ix]
-            ], 
-            ignore_index=True
-        )
-        train_df.to_csv(train_csv) 
-        val_df.to_csv(val_csv) 
-        print(f'Saving to {train_csv} and {val_csv}')
-    return None
-
-def train_torch(datadir:str=None, tile_dir:str=None, _arch:str=None):
+def train_torch(datadir:str=None, tile_dir:str=None, _arch:str=None, ratio:float=None):
+    ## Arg parsing 
     args = DEFAULT_ARGS
     if _arch is not None: 
         args.arch = _arch
@@ -188,6 +46,9 @@ def train_torch(datadir:str=None, tile_dir:str=None, _arch:str=None):
     if not(args.arch in args.datadir):
         args.datadir = os.path.join(args.datadir, args.arch)
         os.makedirs(args.datadir,exist_ok=True)
+    if ratio is not None:
+        args.ratio = ratio
+
     if args.seed is not None:
         random.seed(args.seed)
         torch.manual_seed(args.seed)
@@ -353,19 +214,22 @@ def main_worker(gpu, ngpus_per_node, args):
         train_sampler = None
         val_sampler = None
 
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
-        num_workers=args.workers, pin_memory=True, sampler=train_sampler)
-
-    val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=args.batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=True, sampler=val_sampler)
-
     if args.evaluate:
+        val_loader = torch.utils.data.DataLoader(
+            val_dataset, batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers, pin_memory=True, sampler=val_sampler)
         validate(val_loader, model, criterion, args)
         return
 
     for epoch in range(args.start_epoch, args.epochs):
+        
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
+            num_workers=args.workers, pin_memory=True, sampler=train_sampler)
+        val_loader = torch.utils.data.DataLoader(
+            val_dataset, batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers, pin_memory=True, sampler=val_sampler)
+        
         if args.distributed:
             train_sampler.set_epoch(epoch)
 
@@ -387,7 +251,7 @@ def main_worker(gpu, ngpus_per_node, args):
                 {
                     'epoch': epoch + 1,
                     'arch': args.arch,
-                    'state_dict': model.state_dict(),
+                    'state_dict': model.state_dict(), # this was full of NaN with all the training data
                     'best_acc1': BEST_ACC1,
                     'total_acc': acc1,
                     'bridge_acc': bridge_acc,
@@ -398,6 +262,8 @@ def main_worker(gpu, ngpus_per_node, args):
                 is_best, 
                 os.path.join(args.datadir, f'{args.arch}.chkpt{epoch+1}.tar')
             )
+        train_dataset.update()
+        val_dataset.update()
 
 def train(train_loader, model, criterion, optimizer, epoch, device, args):
     batch_time = AverageMeter('Time', ':6.3f')

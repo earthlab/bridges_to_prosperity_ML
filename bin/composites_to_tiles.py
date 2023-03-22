@@ -6,33 +6,19 @@ from copy import copy
 import pandas as pd
 from tqdm import tqdm
 import numpy as np
-
+from tqdm.contrib.concurrent import process_map
 from src.utilities.imaging import tiff_to_tiles
 from src.utilities.coords import get_bridge_locations
 
-def create_tiles(
-    composite_dir: str, 
-    tile_dir: str,
-    truth_dir: str,
-    cores: int):
-
-    bridge_locations = get_bridge_locations(truth_dir)  
-    composites = glob(os.path.join(composite_dir, "**/*multiband.tiff"), recursive=True)
+def create_tiles(arg):
+    composites, tile_dir, bridge_locations, pos = arg
    
-    df = None
-    if cores > 1:
-        with mp.Pool(cores) as p:
-            items = [
-                (multiband_tiff, tile_dir, copy(bridge_locations), n%cores+1)
-            for n, multiband_tiff in enumerate(composites)]
-            df = list(p.starmap(tiff_to_tiles,items))
-    else:
-        df = []
-        for multiband_tiff in tqdm(composites, position=0, leave=True):
-            df_i = tiff_to_tiles(multiband_tiff, tile_dir, bridge_locations,1)
-            df.append(
-                df_i
-            )
+    df = []
+    for multiband_tiff in tqdm(composites, position=0, leave=True):
+        df_i = tiff_to_tiles(multiband_tiff, tile_dir, bridge_locations, pos)
+        df.append(
+            df_i
+        )
     df = pd.concat(df, ignore_index=True)
     return df
 
@@ -89,9 +75,28 @@ if __name__ == '__main__':
     if not os.path.isdir(args.out_dir):
         os.makedirs(args.out_dir)
 
-    create_tiles(
-        args.in_dir,
-        args.out_dir,
-        args.truth_dir, 
-        args.cores,
-    )
+    bridge_locations = get_bridge_locations(args.truth_dir)  
+    composites = glob(os.path.join(args.in_dir, "**/*multiband.tiff"), recursive=True)
+    if args.cores == 1:
+        create_tiles(
+            (
+                composites,
+                args.out_dir,
+                bridge_locations, 
+                1
+            )
+        )
+    else:
+        inputs = [
+            (
+                cs,
+                args.out_dir,
+                bridge_locations, 
+                n 
+            )
+        for n, cs in enumerate(np.array_split(composites, args.cores))]
+        process_map(
+            create_tiles, 
+            inputs, 
+            max_workers=args.cores
+        )

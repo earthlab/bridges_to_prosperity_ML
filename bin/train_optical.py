@@ -59,7 +59,7 @@ if __name__ == '__main__':
         os.makedirs(DATA_DIR)
     assert os.path.isdir(TILE_DIR), f"Please create tiles prior to training {TILE_DIR} DNE"
     for arch in ['resnet18', 'resnet34', 'resnet50']:
-        for ratio in [.5, 1 ...]:
+        for ratio in [.5, 1, 1.5, 2, 2.5, 3, 5]:
             train_torch(
                 os.path.join(DATA_DIR, f'{arch}', f'ratio_{ratio}'), 
                 TILE_DIR, 

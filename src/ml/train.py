@@ -1,51 +1,52 @@
 from src.ml.util import *
 
 MODEL_NAME = sorted(name for name in models.__dict__
-    if name.islower() and not name.startswith("__")
-    and callable(models.__dict__[name])) 
+                    if name.islower() and not name.startswith("__")
+                    and callable(models.__dict__[name]))
 
 DEFAULT_ARGS = Namespace(
-    datadir = os.path.join(BASE_DIR, "data", "torch"),
-    tile_dir = os.path.join(BASE_DIR, "data", "final_tiles"),
-    arch = 'resnet34',
-    workers = 4,
-    epochs = 20,
-    start_epoch = 0,
-    batch_size = 1000 ,
-    lr = 0.1,
-    momentum = 0.9,
+    datadir=os.path.join(BASE_DIR, "data", "torch"),
+    tile_dir=os.path.join(BASE_DIR, "data", "final_tiles"),
+    arch='resnet34',
+    workers=4,
+    epochs=20,
+    start_epoch=0,
+    batch_size=1000,
+    lr=0.1,
+    momentum=0.9,
     weight_decay=1e-4,
     print_freq=10,
-    resume = '',
-    evaluate = False,
-    pretrained = False,
-    world_size= -1,
-    rank =  -1,
+    resume='',
+    evaluate=False,
+    pretrained=False,
+    world_size=-1,
+    rank=-1,
     dist_url='tcp://224.66.41.62:23456',
     dist_backend='nccl',
-    seed = None,
-    gpu = None,
-    multiprocessing_distributed = False,
-    dummy = False,
-    best_acc1 = 0,
-    distributed = False,
+    seed=None,
+    gpu=None,
+    multiprocessing_distributed=False,
+    dummy=False,
+    best_acc1=0,
+    distributed=False,
     ratio=1
 )
 
 BEST_ACC1 = 0
 
-def train_torch(datadir:str=None, tile_dir:str=None, _arch:str=None, ratio:float=None):
+
+def train_torch(datadir: str = None, tile_dir: str = None, _arch: str = None, ratio: float = None):
     ## Arg parsing 
     args = DEFAULT_ARGS
-    if _arch is not None: 
+    if _arch is not None:
         args.arch = _arch
     if datadir is not None:
         args.datadir = datadir
     if tile_dir is not None:
         args.tile_dir = tile_dir
-    if not(args.arch in args.datadir):
+    if not (args.arch in args.datadir):
         args.datadir = os.path.join(args.datadir, args.arch)
-        os.makedirs(args.datadir,exist_ok=True)
+        os.makedirs(args.datadir, exist_ok=True)
     if ratio is not None:
         args.ratio = ratio
 
@@ -83,6 +84,7 @@ def train_torch(datadir:str=None, tile_dir:str=None, _arch:str=None, ratio:float
     else:
         # Simply call main_worker function
         main_worker(args.gpu, ngpus_per_node, args)
+
 
 def main_worker(gpu, ngpus_per_node, args):
     global BEST_ACC1
@@ -160,10 +162,10 @@ def main_worker(gpu, ngpus_per_node, args):
     optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
-    
+
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
     scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
-    
+
     # optionally resume from a checkpoint
     if args.resume:
         if os.path.isfile(args.resume):
@@ -174,7 +176,7 @@ def main_worker(gpu, ngpus_per_node, args):
                 # Map model to be loaded to specified single gpu.
                 loc = 'cuda:{}'.format(args.gpu)
                 checkpoint = torch.load(args.resume, map_location=loc)
-            else: 
+            else:
                 assert False, "Shouldn't happen"
             args.start_epoch = checkpoint['epoch']
             BEST_ACC1 = checkpoint['best_acc1']
@@ -189,7 +191,6 @@ def main_worker(gpu, ngpus_per_node, args):
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
-
     # Data loading code
     train_csv = os.path.join(args.tile_dir, 'train_df.csv')
     val_csv = os.path.join(args.tile_dir, 'val_df.csv')
@@ -198,14 +199,16 @@ def main_worker(gpu, ngpus_per_node, args):
     train_dataset = B2PDataset(
         train_csv,
         TFORM,
-        args.batch_size
+        args.batch_size,
+        ratio=args.ratio
     )
 
     val_dataset = B2PDataset(
         val_csv,
         TFORM,
-        args.batch_size
-        )
+        args.batch_size,
+        ratio=args.ratio
+    )
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -222,14 +225,14 @@ def main_worker(gpu, ngpus_per_node, args):
         return
 
     for epoch in range(args.start_epoch, args.epochs):
-        
+
         train_loader = torch.utils.data.DataLoader(
             train_dataset, batch_size=args.batch_size, shuffle=(train_sampler is None),
             num_workers=args.workers, pin_memory=True, sampler=train_sampler)
         val_loader = torch.utils.data.DataLoader(
             val_dataset, batch_size=args.batch_size, shuffle=False,
             num_workers=args.workers, pin_memory=True, sampler=val_sampler)
-        
+
         if args.distributed:
             train_sampler.set_epoch(epoch)
 
@@ -238,32 +241,33 @@ def main_worker(gpu, ngpus_per_node, args):
 
         # evaluate on validation set
         acc1, bridge_acc, no_bridge_acc = validate(val_loader, model, criterion, args)
-        
+
         scheduler.step()
-        
+
         # remember best acc@1 and save checkpoint
         is_best = acc1 > BEST_ACC1
         BEST_ACC1 = max(acc1, BEST_ACC1)
 
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
-                and args.rank % ngpus_per_node == 0):
+                                                    and args.rank % ngpus_per_node == 0):
             save_checkpoint(
                 {
                     'epoch': epoch + 1,
                     'arch': args.arch,
-                    'state_dict': model.state_dict(), # this was full of NaN with all the training data
+                    'state_dict': model.state_dict(),  # this was full of NaN with all the training data
                     'best_acc1': BEST_ACC1,
                     'total_acc': acc1,
                     'bridge_acc': bridge_acc,
                     'no_bridge_acc': no_bridge_acc,
-                    'optimizer' : optimizer.state_dict(),
-                    'scheduler' : scheduler.state_dict()
-                }, 
-                is_best, 
-                os.path.join(args.datadir, f'{args.arch}.chkpt{epoch+1}.tar')
+                    'optimizer': optimizer.state_dict(),
+                    'scheduler': scheduler.state_dict()
+                },
+                is_best,
+                os.path.join(args.datadir, f'{args.arch}.chkpt{epoch + 1}.tar')
             )
         train_dataset.update()
         val_dataset.update()
+
 
 def train(train_loader, model, criterion, optimizer, epoch, device, args):
     batch_time = AverageMeter('Time', ':6.3f')
@@ -281,7 +285,7 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
     model.train()
 
     end = time.time()
-    for i, (images, target,_,_) in enumerate(train_loader):
+    for i, (images, target, _, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
 
@@ -312,12 +316,12 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
         if i % args.print_freq == 0:
             progress.display(i + 1)
 
-def validate(val_loader, model, criterion, args):
 
+def validate(val_loader, model, criterion, args):
     def run_validate(loader, base_progress=0):
         with torch.no_grad():
             end = time.time()
-            for i, (images, target,_,_) in enumerate(loader):
+            for i, (images, target, _, _) in enumerate(loader):
                 i = base_progress + i
                 if args.gpu is not None and torch.cuda.is_available():
                     images = images.cuda(args.gpu, non_blocking=True)
@@ -376,6 +380,7 @@ def validate(val_loader, model, criterion, args):
 
     return total_mt.avg, bridge_mt.avg, no_bridge_mt.avg
 
+
 def save_checkpoint(state, is_best, filename):
     root, _ = os.path.split(filename)
     if not os.path.isdir(root):
@@ -386,6 +391,6 @@ def save_checkpoint(state, is_best, filename):
         f = os.path.basename(filename)
         prts = f.split('.chkpt')
         shutil.copyfile(
-            filename, 
-            os.path.join(d,'.'.join([prts[0], 'best'])+".tar")
+            filename,
+            os.path.join(d, '.'.join([prts[0], 'best']) + ".tar")
         )

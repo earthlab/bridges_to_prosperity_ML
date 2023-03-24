@@ -96,7 +96,7 @@ class B2PDataset(torch.utils.data.Dataset):
         if self.ratio is None: 
             return 
         ix_bridge = np.where(self.df['is_bridge'].to_numpy())[0]
-        ix_no_bridge = np.where(not self.df['is_bridge'].to_numpy())[0]
+        ix_no_bridge = np.where(np.logical_not(self.df['is_bridge'].to_numpy()))[0]
         if not self.replacement: ix_no_bridge = np.setdiff1d(ix_no_bridge, self.ix_already_sampled)
         num_bridge = len(ix_bridge)
         num_no_bridge = int(round(self.ratio*num_bridge)) # ratio = num_no_bridge / num_bridge

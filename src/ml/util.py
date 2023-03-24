@@ -142,11 +142,14 @@ class B2PDataset(torch.utils.data.Dataset):
 
     def __next__(self):
         # Terminate if range over, otherwise return current, calculate next.
-        if self.__curr > self.__term:
-            self.__curr = 0
-            raise StopIteration()
-        (cur, self.__curr) = (self.__curr, self.__curr + 1)
-        return self._calc_item(cur)
+        try:
+            if self.__curr > self.__term:
+                self.__curr = 0
+                raise StopIteration()
+            (cur, self.__curr) = (self.__curr, self.__curr + 1)
+            return self._calc_item(cur)
+        except KeyError:
+            self._curr = 0
 
 
 class Summary(Enum):

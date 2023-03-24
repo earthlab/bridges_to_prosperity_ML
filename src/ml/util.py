@@ -101,7 +101,7 @@ class B2PDataset(torch.utils.data.Dataset):
         num_bridge = len(ix_bridge)
         num_no_bridge = int(round(self.ratio*num_bridge)) # ratio = num_no_bridge / num_bridge
         ix_no_bridge = np.random.choice(ix_no_bridge, num_no_bridge)
-        self.ix_already_sampled = np.concatenate((ix_no_bridge, self.ix_already_sampled), dim=0)
+        self.ix_already_sampled = np.concatenate((ix_no_bridge, self.ix_already_sampled), axis=0)
         ix_dset = np.concatenate((ix_no_bridge, ix_bridge), axis=0)
         np.random.shuffle(ix_dset)
         self.tiles = self.df['tile'][ix_dset]

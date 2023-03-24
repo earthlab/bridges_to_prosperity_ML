@@ -58,6 +58,7 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file_
 class B2PDataset(torch.utils.data.Dataset):
     ## Make it so np doesn't yell about using str
     warnings.simplefilter(action='ignore', category=FutureWarning)
+
     def __init__(self, csv_file, transform=None, batch_size=1, ratio=None, replacement=False):
         """
         Args:
@@ -92,6 +93,11 @@ class B2PDataset(torch.utils.data.Dataset):
         self.class_to_idx = {'bridge': 1, 'no bridge': 0}
         self.transform = transform
         self.batch_size = batch_size
+
+        # Set info for iteration
+        self.__term = len(self.tiles) - 1
+        self.__curr = 0
+
     def update(self): 
         if self.ratio is None: 
             return 
@@ -108,10 +114,7 @@ class B2PDataset(torch.utils.data.Dataset):
         self.bbox = self.df['bbox'][ix_dset]
         self.is_bridge = self.df['is_bridge'][ix_dset]
 
-    def __len__(self):
-        return len(self.tiles)
-    
-    def __getitem__(self, idx):
+    def _calc_item(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
@@ -126,8 +129,26 @@ class B2PDataset(torch.utils.data.Dataset):
         if self.transform:
             image = self.transform(image)
 
-        return (image, int(is_bridge), tile_file, bbox) # image, label, file name, bbox
+        return image, int(is_bridge), tile_file, bbox
+
+    def __len__(self):
+        return len(self.tiles)
     
+    def __getitem__(self, idx):
+        return self._calc_item(idx)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        # Terminate if range over, otherwise return current, calculate next.
+        if self.__curr > self.__term:
+            self.__curr = 0
+            raise StopIteration()
+        (cur, self.__curr) = (self.__curr, self.__curr + 1)
+        return self._calc_item(cur)
+
+
 class Summary(Enum):
     NONE = 0
     AVERAGE = 1

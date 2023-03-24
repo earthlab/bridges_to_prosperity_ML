@@ -1,16 +1,17 @@
 from src.ml.util import *
 
 ARGS = Namespace(
-    gpu = None,
-    batch_size = 100,
-    num_workers = 12, 
-    tile_csv = os.path.join(BASE_DIR, "data", "final_tiles", "cote_divore.csv"),
-    model_file = os.path.join(BASE_DIR, "data", "torch", "resnet18.best.tar"),
+    gpu=None,
+    batch_size=100,
+    num_workers=12,
+    tile_csv=os.path.join(BASE_DIR, "data", "final_tiles", "cote_divore.csv"),
+    model_file=os.path.join(BASE_DIR, "data", "torch", "resnet18.best.tar"),
     res_csv=os.path.join(BASE_DIR, "data", "cote_divore_inference.csv"),
     print_freq=100
 )
 
-def inference_torch(model_file:str=None, tile_csv:str=None,res_csv:str=None):
+
+def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str = None):
     args = ARGS
     if model_file is not None:
         args.model_file = model_file
@@ -18,7 +19,7 @@ def inference_torch(model_file:str=None, tile_csv:str=None,res_csv:str=None):
         args.tile_csv = tile_csv
     if res_csv is not None:
         args.res_csv = res_csv
-    root,_ = os.path.split(res_csv)
+    root, _ = os.path.split(res_csv)
     os.makedirs(root, exist_ok=True)
     arch = os.path.basename(args.model_file).split('.')[0]
     print("Using pre-trained model '{}'".format(arch))
@@ -46,15 +47,15 @@ def inference_torch(model_file:str=None, tile_csv:str=None,res_csv:str=None):
         # Map model to be loaded to specified single gpu.
         loc = 'cuda:{}'.format(args.gpu)
         checkpoint = torch.load(args.model_file, map_location=loc)
-    else: 
+    else:
         assert False, "Shouldn't happen"
 
     model.load_state_dict(checkpoint['state_dict'])
     dset = B2PDataset(args.tile_csv)
     dloader = torch.utils.data.DataLoader(
-        dset, 
+        dset,
         batch_size=args.batch_size,
-        shuffle=False, 
+        shuffle=False,
         num_workers=args.num_workers
     )
     n = dset.__len__()
@@ -72,27 +73,27 @@ def inference_torch(model_file:str=None, tile_csv:str=None,res_csv:str=None):
             len(dloader),
             [batch_time, data_time],
             prefix="Inference: "
-            )
-        
+        )
+
         end = time.time()
         for i, (data, target, tile, bbox) in enumerate(dloader):
             data_time.update(time.time() - end)
             # move data to the same device as model
             output = model(data)
             _, pred = torch.max(output, 1)
-            
+
             # store res to file
             ix = range(
-                i*args.batch_size,
+                i * args.batch_size,
                 min(
-                    (i+1)*args.batch_size,
+                    (i + 1) * args.batch_size,
                     n
                 )
             )
             res_df.loc[ix, 'tile'] = tile
             res_df.loc[ix, 'bbox'] = bbox
             res_df.loc[ix, 'pred'] = pred.numpy()
-            #update time
+            # update time
             batch_time.update(time.time() - end)
             end = time.time()
             if i % args.print_freq == 0:

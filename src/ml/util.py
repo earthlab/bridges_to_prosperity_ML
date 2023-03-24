@@ -82,7 +82,8 @@ class B2PDataset(torch.utils.data.Dataset):
         self.replacement = replacement
         self.ix_already_sampled = []
         if ratio is not None:
-            assert float == type(ratio), 'Ratio must be a number'
+            if not isinstance(ratio, (int, float)):
+                raise TypeError('Ratio must be a number')
             self.update()
         else:
             self.tiles = df['tile']

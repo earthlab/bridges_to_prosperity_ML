@@ -114,6 +114,11 @@ class B2PDataset(torch.utils.data.Dataset):
         self.bbox = self.df['bbox'][ix_dset]
         self.is_bridge = self.df['is_bridge'][ix_dset]
 
+        # Update the index attribute of each Series
+        self.tiles.index = [i for i in range(len(self.tiles))]
+        self.bbox.index = [i for i in range(len(self.bbox))]
+        self.is_bridge.index = [i for i in range(len(self.is_bridge))]
+
     def _calc_item(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()

@@ -63,6 +63,7 @@ if __name__ == '__main__':
             train_torch(
                 os.path.join(DATA_DIR, f'{arch}', f'ratio_{ratio}'), 
                 TILE_DIR, 
-                arch
+                arch,
+                ratio=ratio
             )
    

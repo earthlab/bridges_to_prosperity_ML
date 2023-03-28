@@ -20,7 +20,7 @@ def main():
                     datadir='data/torch'
                 )
             res_csv = os.path.join(PROJECT_DIR, 'data', 'resnet18_1.5r.csv')
-            model_file = f'data/torch/{model}/{model}_1.5.best.tar'
+            model_file = f'data/torch/{model}/{model}.best.tar'
             state_dict = torch.load(model_file)
             total_acc = state_dict['total_acc']
             bridge_acc = state_dict['bridge_acc']

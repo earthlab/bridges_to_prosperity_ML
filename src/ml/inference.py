@@ -51,7 +51,7 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
     else:
         assert False, "Shouldn't happen"
 
-    model.load_state_dict(checkpoint['state_dict'])
+    model.load_state_dict(checkpoint['state_dict'], strict=False)
     dset = B2PDataset(args.tile_csv)
     dloader = torch.utils.data.DataLoader(
         dset,

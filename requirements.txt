@@ -14,3 +14,4 @@ scikit-learn
 scikit-image
 plotly
 plotly_express
+matplotlib

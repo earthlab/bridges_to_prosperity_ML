@@ -12,4 +12,5 @@ def create_csv(indirs, outpath):
                     dfs.append(df)
 
     df = pd.concat(dfs)
+    df['index'] = [i for i in range(len(df))]
     df.to_csv(outpath)

@@ -126,7 +126,6 @@ class B2PDataset(torch.utils.data.Dataset):
 
         tile_file = self.tiles[idx]
         is_bridge = self.is_bridge[idx]
-        print(type(tile_file), idx, type(idx))
         assert isinstance(tile_file,  str), 'tile_file is a {}, = {}'.format(type(tile_file), tile_file)
         image = torch.load(tile_file)
         bbox = self.bbox[idx]

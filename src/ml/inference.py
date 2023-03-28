@@ -93,7 +93,7 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
             )
             res_df.loc[ix, 'tile'] = tile
             res_df.loc[ix, 'bbox'] = bbox
-            res_df.loc[ix, 'pred'] = pred.numpy()
+            res_df.loc[ix, 'pred'] = pred.cpu().numpy()
             # update time
             batch_time.update(time.time() - end)
             end = time.time()

@@ -77,27 +77,34 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
         )
 
         end = time.time()
+        skipped = 0
         for i, (data, target, tile, bbox) in enumerate(dloader):
-            data_time.update(time.time() - end)
-            # move data to the same device as model
-            output = model(data)
-            _, pred = torch.max(output, 1)
+            try:
+                data_time.update(time.time() - end)
+                # move data to the same device as model
+                output = model(data)
+                _, pred = torch.max(output, 1)
 
-            # store res to file
-            ix = range(
-                i * args.batch_size,
-                min(
-                    (i + 1) * args.batch_size,
-                    n
+                # store res to file
+                ix = range(
+                    i * args.batch_size,
+                    min(
+                        (i + 1) * args.batch_size,
+                        n
+                    )
                 )
-            )
-            res_df.loc[ix, 'tile'] = tile
-            res_df.loc[ix, 'bbox'] = bbox
-            res_df.loc[ix, 'pred'] = pred.cpu().numpy()
-            # update time
-            batch_time.update(time.time() - end)
-            end = time.time()
-            if i % args.print_freq == 0:
-                progress.display(i + 1)
+                res_df.loc[ix, 'tile'] = tile
+                res_df.loc[ix, 'bbox'] = bbox
+                res_df.loc[ix, 'pred'] = pred.cpu().numpy()
+                # update time
+                batch_time.update(time.time() - end)
+                end = time.time()
+                if i % args.print_freq == 0:
+                    progress.display(i + 1)
+
+            except Exception as e:
+                skipped += 1
+
+    print(skipped)
     res_df.to_csv(args.res_csv)
     return res_df

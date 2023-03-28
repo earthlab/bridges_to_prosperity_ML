@@ -23,6 +23,7 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
     os.makedirs(root, exist_ok=True)
     arch = os.path.basename(args.model_file).split('.')[0]
     print("Using pre-trained model '{}'".format(arch))
+    args.arch = arch
     model = models.__dict__[arch](pretrained=True)
 
     if not torch.cuda.is_available() and not torch.backends.mps.is_available():

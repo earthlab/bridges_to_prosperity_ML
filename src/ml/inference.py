@@ -61,7 +61,7 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
     )
     n = dset.__len__()
     res_df = pd.DataFrame(
-        columns=['tile', 'bbox', 'pred_bridge'],
+        columns=['tile', 'bbox', 'pred', 'conf'],
         index=range(n)
     )
     # switch to evaluate mode
@@ -83,8 +83,9 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
                 data_time.update(time.time() - end)
                 # move data to the same device as model
                 output = model(data)
-                _, pred = torch.max(output, 1)
-
+                probs = torch.nn.functional.softmax(output, dim=1)
+                conf, pred = torch.max(probs, 1)
+                print(conf)
                 # store res to file
                 ix = range(
                     i * args.batch_size,
@@ -96,6 +97,7 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
                 res_df.loc[ix, 'tile'] = tile
                 res_df.loc[ix, 'bbox'] = bbox
                 res_df.loc[ix, 'pred'] = pred.cpu().numpy()
+                res_df.loc[ix, 'conf'] = conf.cpu().numpy()
                 # update time
                 batch_time.update(time.time() - end)
                 end = time.time()

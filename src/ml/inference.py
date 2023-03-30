@@ -62,7 +62,7 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
     )
     n = dset.__len__()
     res_df = pd.DataFrame(
-        columns=['tile', 'bbox', 'targets', 'pred', 'conf'],
+        columns=['tile', 'bbox', 'target', 'pred', 'conf'],
         index=range(n)
     )
     # switch to evaluate mode

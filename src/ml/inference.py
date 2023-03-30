@@ -1,4 +1,8 @@
+import pandas as pd
+
 from src.ml.util import *
+import tempfile
+from multiprocessing import Pool
 
 ARGS = Namespace(
     gpu=None,
@@ -19,9 +23,54 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
         args.tile_csv = tile_csv
     if res_csv is not None:
         args.res_csv = res_csv
-    root, _ = os.path.split(res_csv)
+
+    df = pd.read_csv(
+        args.tile_csv,
+        index_col=0,
+        dtype={
+            'tile': str,
+            'bbox': object,
+            'is_bridge': bool,
+            'bridge_loc': object
+        }
+    )
+
+    parallel_dir = tempfile.mkdtemp()
+
+    parallel_batches = []
+    p = np.arange(0, len(df), len(df) // 4)  # TODO: Make this adjustable later
+    for i in range(len(p)):
+        if i == len(p) - 1:
+            ss = df.loc[p[i]:]
+        else:
+            ss = df.loc[p[i]: p[i + 1]]
+        csv_path = os.path.join(parallel_dir), f'{i}_df.csv'
+        results_path = os.path.join(parallel_dir, f'{i}_res.csv')
+        ss.to_csv(csv_path)
+        parallel_batches.append(Namespace(csv_path=csv_path, results_path=results_path, model_file=model_file))
+
+    with Pool(len(parallel_batches)) as p:
+        for result in p.map(inference_torch_task, parallel_batches):
+            print(result)
+
+    dfs = pd.DataFrame()
+    for file in os.listdir(parallel_dir):
+        if '_res' in file:
+            df = pd.read_csv(os.path.join(parallel_dir, file))
+            dfs.append(df)
+
+    dfs = pd.concat(dfs)
+    dfs.to_csv(args.res_csv)
+
+
+def inference_torch_task(parallel_args: Namespace):
+    args = ARGS
+
+    root, _ = os.path.split(parallel_args.results_path)
     os.makedirs(root, exist_ok=True)
-    arch = os.path.basename(args.model_file).split('.')[0]
+
+    # TODO: This needs to be an argument passed in, too fragile
+    arch = os.path.basename(parallel_args.model_file).split('.')[0]
     print("Using pre-trained model '{}'".format(arch))
     args.arch = arch
     model = models.__dict__[arch](pretrained=True)
@@ -43,16 +92,17 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
             model = torch.nn.DataParallel(model).cuda()
     checkpoint = None
     if args.gpu is None:
-        checkpoint = torch.load(args.model_file)
+        checkpoint = torch.load(parallel_args.model_file)
     elif torch.cuda.is_available():
         # Map model to be loaded to specified single gpu.
         loc = 'cuda:{}'.format(args.gpu)
-        checkpoint = torch.load(args.model_file, map_location=loc)
+        checkpoint = torch.load(parallel_args.model_file, map_location=loc)
     else:
         assert False, "Shouldn't happen"
 
     model.load_state_dict(checkpoint['state_dict'], strict=False)
-    dset = B2PDataset(args.tile_csv)
+
+    dset = B2PDataset(parallel_args.csv_path)
     dloader = torch.utils.data.DataLoader(
         dset,
         batch_size=args.batch_size,
@@ -85,7 +135,6 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
                 output = model(data)
                 probs = torch.nn.functional.softmax(output, dim=1)
                 conf, pred = torch.max(probs, 1)
-                print(conf)
                 # store res to file
                 ix = range(
                     i * args.batch_size,
@@ -108,5 +157,5 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
                 skipped += 1
 
     print(skipped)
-    res_df.to_csv(args.res_csv)
+    res_df.to_csv(parallel_args.results_path)
     return res_df

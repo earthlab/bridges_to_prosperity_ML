@@ -44,7 +44,7 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
             ss = df.loc[p[i]:]
         else:
             ss = df.loc[p[i]: p[i + 1]]
-        csv_path = os.path.join(parallel_dir), f'{i}_df.csv'
+        csv_path = os.path.join(parallel_dir, f'{i}_df.csv')
         results_path = os.path.join(parallel_dir, f'{i}_res.csv')
         ss.to_csv(csv_path)
         parallel_batches.append(Namespace(csv_path=csv_path, results_path=results_path, model_file=model_file))

@@ -84,8 +84,8 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
                 data_time.update(time.time() - end)
                 # move data to the same device as model
                 output = model(data)
-                probs = torch.sigmoid(output.transpose())
-                conf, pred = torch.max(probs, 1)
+                probs = torch.sigmoid(output)
+                conf, pred = torch.max(probs, 0)
 
                 # store res to file
                 ix = range(

@@ -3,7 +3,7 @@ import numpy as np
 import warnings
 import os
 import shutil
-from glob import glob 
+from glob import glob
 from tqdm.auto import tqdm
 from argparse import Namespace
 from time import sleep
@@ -13,7 +13,7 @@ import rasterio
 from rasterio import features
 from rasterio.windows import Window
 import geopandas as gpd
-import pandas as pd 
+import pandas as pd
 import torch
 from torchvision.transforms import ToTensor
 from shapely.geometry import polygon
@@ -21,17 +21,20 @@ from shapely.geometry import polygon
 from src.utilities.coords import tiff_to_bbox, bridge_in_bbox
 
 BANDS_TO_IX = {
-    'B02': 3, # Blue
-    'B03': 2, # Green
-    'B04': 1 # Red
+    'B02': 3,  # Blue
+    'B03': 2,  # Green
+    'B04': 1  # Red
 }
 MAX_PIXEL_VAL = 4000
+
+
 # the max_pixel_val was set to 2500? this probably should match with the max allowed value for clouds or it shouldnt be included...
 def scale(
-    x:Union[float, np.array], 
-    max_pixel_val:float = MAX_PIXEL_VAL
+        x: Union[float, np.array],
+        max_pixel_val: float = MAX_PIXEL_VAL
 ) -> Union[float, np.array]:
     return x / max_pixel_val
+
 
 def getImgFromFile(img_path, g_ncols, dtype, row_bound=None):
     img = rasterio.open(img_path, driver='JP2OpenJPEG')
@@ -43,17 +46,18 @@ def getImgFromFile(img_path, g_ncols, dtype, row_bound=None):
         pixels = img.read(
             1,
             window=Window.from_slices(
-                        slice(row_bound[0], row_bound[1]),
-                        slice(0, ncols)
-                    )
+                slice(row_bound[0], row_bound[1]),
+                slice(0, ncols)
+            )
         ).astype(dtype)
     return pixels
 
+
 def getCloudMaskFromFile(cloud_path, crs, transform, shape, row_bound=None):
-    warnings.filterwarnings("ignore",category=RuntimeWarning)
+    warnings.filterwarnings("ignore", category=RuntimeWarning)
     # filter out RuntimeWarnings, due to geopandas/fiona read file spam
     # https://stackoverflow.com/questions/64995369/geopandas-warning-on-read-file
-    try: 
+    try:
         cloud_file = gpd.read_file(cloud_path)
         cloud_file.crs = (str(crs))
         # convert the cloud mask data to a raster that has the same shape and transformation as the
@@ -63,28 +67,31 @@ def getCloudMaskFromFile(cloud_path, crs, transform, shape, row_bound=None):
                 (g['geometry'], 1) for v, g in cloud_file.iterrows()
             ),
             out_shape=shape,
-            transform=transform, 
+            transform=transform,
             all_touched=True
         )
         if row_bound is None:
             return np.where(cloud_img == 0, 1, 0)
-        return np.where(cloud_img[row_bound[0]:row_bound[1],:] == 0, 1, 0)
-    except: 
+        return np.where(cloud_img[row_bound[0]:row_bound[1], :] == 0, 1, 0)
+    except:
         return None
 
-def nanClouds(pixels, cloud_channels, max_pixel_val:float=MAX_PIXEL_VAL):
+
+def nanClouds(pixels, cloud_channels, max_pixel_val: float = MAX_PIXEL_VAL):
     cp = pixels * cloud_channels
-    mask = np.where(np.logical_or(cp == 0, cp > max_pixel_val ))
+    mask = np.where(np.logical_or(cp == 0, cp > max_pixel_val))
     cp[mask] = np.nan
     return cp
 
-def createComposite(s2_dir:str, composite_dir:str, coord:str, bands:list, dtype:type, num_slices:int=1, pbar:bool=True):
+
+def createComposite(s2_dir: str, composite_dir: str, coord: str, bands: list, dtype: type, num_slices: int = 1,
+                    pbar: bool = True):
     assert os.path.isdir(s2_dir)
     os.makedirs(composite_dir, exist_ok=True)
     if num_slices > 1:
         os.makedirs(os.path.join(composite_dir, coord), exist_ok=True)
     multiband_file_path = os.path.join(composite_dir, f'{coord}_multiband.tiff')
-    if os.path.isfile(multiband_file_path): 
+    if os.path.isfile(multiband_file_path):
         return multiband_file_path
     # Loop through each band, getting a median estimate for each
     crs = None
@@ -100,23 +107,25 @@ def createComposite(s2_dir:str, composite_dir:str, coord:str, bands:list, dtype:
         if num_slices > 1:
             slice_width = g_nrows / num_slices
             slice_end_pts = [int(i) for i in np.arange(0, g_nrows + slice_width, slice_width)]
-            slice_bounds = [ (slice_end_pts[i], slice_end_pts[i+1]-1)  for i in range(num_slices-1)]
+            slice_bounds = [(slice_end_pts[i], slice_end_pts[i + 1] - 1) for i in range(num_slices - 1)]
             slice_bounds.append((slice_end_pts[-2], slice_end_pts[-1]))
-        else: 
+        else:
             slice_bounds = [None]
         joined_file_path = os.path.join(composite_dir, coord, f'{band}.tiff')
-        if os.path.isfile(joined_file_path): 
+        if os.path.isfile(joined_file_path):
             continue
         ## Median across time, slicing if necessary
-        for k, row_bound in tqdm(enumerate(slice_bounds), desc=f'band={band}', total=num_slices, position=2, disable=pbar):
+        for k, row_bound in tqdm(enumerate(slice_bounds), desc=f'band={band}', total=num_slices, position=2,
+                                 disable=pbar):
             if num_slices > 1:
-                slice_file_path = os.path.join(composite_dir, coord, f'{band}_slice|{row_bound[0]}|{row_bound[1]}|.tiff')
+                slice_file_path = os.path.join(composite_dir, coord,
+                                               f'{band}_slice|{row_bound[0]}|{row_bound[1]}|.tiff')
             else:
                 slice_file_path = joined_file_path
-            if os.path.isfile(slice_file_path): 
+            if os.path.isfile(slice_file_path):
                 continue
             cloud_correct_imgs = []
-            for img_path in tqdm(band_files, desc=f'slice {k+1}',leave=False, position=3, disable=pbar):
+            for img_path in tqdm(band_files, desc=f'slice {k + 1}', leave=False, position=3, disable=pbar):
                 # Get data from files
                 pixels = getImgFromFile(img_path, g_ncols, dtype, row_bound)
                 date_dir = os.path.dirname(img_path)
@@ -126,7 +135,7 @@ def createComposite(s2_dir:str, composite_dir:str, coord:str, bands:list, dtype:
                 cloud_channels = getCloudMaskFromFile(cloud_files[0], crs, transform, (g_nrows, g_ncols), row_bound)
                 if cloud_channels is None: continue
                 # add to list to do median filte later
-                cloud_correct_imgs.append(nanClouds(pixels, cloud_channels) ) 
+                cloud_correct_imgs.append(nanClouds(pixels, cloud_channels))
                 del pixels
 
             corrected_stack = np.vstack([img.ravel() for img in cloud_correct_imgs])
@@ -134,7 +143,7 @@ def createComposite(s2_dir:str, composite_dir:str, coord:str, bands:list, dtype:
             median_corrected = median_corrected.reshape(cloud_correct_imgs[0].shape)
 
             with rasterio.open(slice_file_path, 'w', driver='Gtiff', width=g_ncols, height=g_nrows, count=1, crs=crs,
-                                       transform=transform, dtype=dtype) as wf:
+                               transform=transform, dtype=dtype) as wf:
                 wf.write(median_corrected.astype(dtype), 1)
             # release mem
             median_corrected = []
@@ -144,16 +153,16 @@ def createComposite(s2_dir:str, composite_dir:str, coord:str, bands:list, dtype:
         ## Combine slices 
         if num_slices > 1:
             with rasterio.open(joined_file_path, 'w', driver='GTiff', width=g_ncols, height=g_nrows, count=1, crs=crs,
-                                   transform=transform, dtype=dtype) as wf:
+                               transform=transform, dtype=dtype) as wf:
                 for slice_file_path in glob(os.path.join(composite_dir, coord, f'{band}_slice*.tiff')):
                     prts = slice_file_path.split('|')
                     left = int(prts[1])
                     right = int(prts[2])
-                    with rasterio.open(slice_file_path, 'r', driver='GTiff') as rf: 
+                    with rasterio.open(slice_file_path, 'r', driver='GTiff') as rf:
                         wf.write(
-                            rf.read(1), 
+                            rf.read(1),
                             window=Window.from_slices(
-                                slice(left, right), 
+                                slice(left, right),
                                 slice(0, g_ncols)
                             ),
                             indexes=1
@@ -162,31 +171,35 @@ def createComposite(s2_dir:str, composite_dir:str, coord:str, bands:list, dtype:
     ## Combine Bands
     n_bands = len(bands)
     with rasterio.open(
-        multiband_file_path, 
-        'w',
-        driver='GTiff', 
-        width=g_ncols, 
-        height=g_nrows, 
-        count=n_bands, 
-        crs=crs, 
-        transform=transform, 
-        dtype=dtype
-    ) as wf: 
+            multiband_file_path,
+            'w',
+            driver='GTiff',
+            width=g_ncols,
+            height=g_nrows,
+            count=n_bands,
+            crs=crs,
+            transform=transform,
+            dtype=dtype
+    ) as wf:
         for band in tqdm(bands, total=n_bands, desc='Combining bands...', leave=False, position=1, disable=pbar):
             j = BANDS_TO_IX[bands]
             with rasterio.open(os.path.join(composite_dir, coord, f'{band}.tiff'), 'r', driver='GTiff') as rf:
                 wf.write(rf.read(1), indexes=j)
     shutil.rmtree(os.path.join(composite_dir, coord))
     return multiband_file_path
-''' In case you flip B02 with B04'''    
-def _flipRGB(infile, outfile, dtype = np.float32): 
+
+
+''' In case you flip B02 with B04'''
+
+
+def _flipRGB(infile, outfile, dtype=np.float32):
     crs, transform, g_ncols, g_nrows, = None, None, None, None
     b02, b03, b04 = None, None, None
     with rasterio.open(
-        infile, 
-        'r',
-        driver='GTiff', 
-    ) as rf: 
+            infile,
+            'r',
+            driver='GTiff',
+    ) as rf:
         g_nrows, g_ncols = rf.meta['width'], rf.meta['height']
         crs = rf.crs
         transform = rf.transform
@@ -194,77 +207,79 @@ def _flipRGB(infile, outfile, dtype = np.float32):
         b03 = rf.read(2)
         b04 = rf.read(3)
     with rasterio.open(
-        outfile, 
-        'w',
-        driver='GTiff', 
-        width=g_ncols, 
-        height=g_nrows, 
-        count=3, 
-        crs=crs, 
-        transform=transform, 
-        dtype=dtype
-    ) as wf: 
+            outfile,
+            'w',
+            driver='GTiff',
+            width=g_ncols,
+            height=g_nrows,
+            count=3,
+            crs=crs,
+            transform=transform,
+            dtype=dtype
+    ) as wf:
         wf.write(b04, indexes=1)
         wf.write(b03, indexes=2)
         wf.write(b02, indexes=3)
     return None
 
-def scale_multiband_composite(multiband_tiff:str):
+
+def scale_multiband_composite(multiband_tiff: str):
     assert os.path.isfile(multiband_tiff)
     scaled_tiff = multiband_tiff.split('.')[0] + '_scaled.tiff'
 
     with gdal.Open(multiband_tiff, 'r') as rf:
         with rasterio.open(
-            str(scaled_tiff), 
-            'w', 
-            driver='Gtiff',
-            width=rf.width, height=rf.height,
-            count=3,
-            crs=rf.crs,
-            transform=rf.transform,
-            dtype='uint8'
+                str(scaled_tiff),
+                'w',
+                driver='Gtiff',
+                width=rf.width, height=rf.height,
+                count=3,
+                crs=rf.crs,
+                transform=rf.transform,
+                dtype='uint8'
         ) as wf:
-            wf.write((scale(rf.read(0))*255).astype('uint8'), 0)
-            wf.write((scale(rf.read(1))*255).astype('uint8'), 1)
-            wf.write((scale(rf.read(2))*255).astype('uint8'), 2)
+            wf.write((scale(rf.read(0)) * 255).astype('uint8'), 0)
+            wf.write((scale(rf.read(1)) * 255).astype('uint8'), 1)
+            wf.write((scale(rf.read(2)) * 255).astype('uint8'), 2)
     return scaled_tiff
 
+
 def tiff_to_tiles(
-    multiband_tiff,
-    tile_dir, 
-    bridge_locations,
-    tqdm_pos=None,
-    tqdm_updateRate=None,
-    div:int=300 # in meters
+        multiband_tiff,
+        tile_dir,
+        bridge_locations,
+        tqdm_pos=None,
+        tqdm_updateRate=None,
+        div: int = 300  # in meters
 ):
-    root, military_grid = os.path.split(multiband_tiff) 
+    root, military_grid = os.path.split(multiband_tiff)
     military_grid = military_grid[:5]
     root, region = os.path.split(root)
     root, country = os.path.split(root)
     this_tile_dir = os.path.join(tile_dir, country, region)
 
-    grid_geoloc_file = os.path.join(this_tile_dir, military_grid+'_geoloc.csv')
+    grid_geoloc_file = os.path.join(this_tile_dir, military_grid + '_geoloc.csv')
     if os.path.isfile(grid_geoloc_file):
         df = pd.read_csv(grid_geoloc_file)
         return df
-    
+
     grid_dir = os.path.join(this_tile_dir, military_grid)
     os.makedirs(grid_dir, exist_ok=True)
 
     rf = gdal.Open(multiband_tiff)
     _, xres, _, _, _, yres = rf.GetGeoTransform()
-    nxpix = int(div/abs(xres))
-    nypix = int(div/abs(yres))
+    nxpix = int(div / abs(xres))
+    nypix = int(div / abs(yres))
     xsteps = np.arange(0, rf.RasterXSize, nxpix).astype(np.int64).tolist()
     ysteps = np.arange(0, rf.RasterYSize, nypix).astype(np.int64).tolist()
-    
+
     bbox = tiff_to_bbox(multiband_tiff)
     this_bridge_locs = []
     p = polygon.Polygon(bbox)
     for loc in bridge_locations:
         if p.contains(loc):
             this_bridge_locs.append(loc)
-    numTiles = len(xsteps)*len(ysteps)
+    numTiles = len(xsteps) * len(ysteps)
     torchTformer = ToTensor()
     df = pd.DataFrame(
         columns=['tile', 'bbox', 'is_bridge', 'bridge_loc'],
@@ -275,18 +290,18 @@ def tiff_to_tiles(
     else:
         assert type(tqdm_updateRate) == int
     with tqdm(
-        position=tqdm_pos,
-        total=numTiles,
-        desc=military_grid,
-        miniters=tqdm_updateRate,
-        disable=(tqdm_pos is None)
+            position=tqdm_pos,
+            total=numTiles,
+            desc=military_grid,
+            miniters=tqdm_updateRate,
+            disable=(tqdm_pos is None)
     ) as pbar:
         k = 0
         for xmin in xsteps:
             for ymin in ysteps:
                 tile_basename = str(xmin) + '_' + str(ymin) + '.tif'
                 tile_tiff = os.path.join(grid_dir, tile_basename)
-                pt_file = tile_tiff.split('.')[0]+'.pt'
+                pt_file = tile_tiff.split('.')[0] + '.pt'
                 if not os.path.isfile(tile_tiff):
                     gdal.Translate(
                         tile_tiff,
@@ -294,26 +309,26 @@ def tiff_to_tiles(
                         srcWin=(xmin, ymin, nxpix, nypix),
                     )
                 bbox = tiff_to_bbox(tile_tiff)
-                df.at[k, 'tile']  = pt_file
+                df.at[k, 'tile'] = pt_file
                 df.at[k, 'bbox'] = bbox
                 df.at[k, 'is_bridge'], df.at[k, 'bridge_loc'], ix = bridge_in_bbox(bbox, this_bridge_locs)
-                if ix is not None: 
+                if ix is not None:
                     this_bridge_locs.pop(ix)
                 if not os.path.isfile(pt_file):
                     with rasterio.open(tile_tiff, 'r') as tmp:
                         scale_img = scale(tmp.read())
-                        scale_img = np.moveaxis(scale_img, 0, -1) # make dims be c, w, h
+                        scale_img = np.moveaxis(scale_img, 0, -1)  # make dims be c, w, h
                         tensor = torchTformer(scale_img)
                         torch.save(tensor, pt_file)
                 # os.remove(tile_tiff)  
-                k += 1 
+                k += 1
                 if k % tqdm_updateRate == 0:
                     pbar.update(tqdm_updateRate)
                     pbar.refresh()
-                if k % int(round(numTiles/4)) == 0 and k < numTiles-1:
-                    percent = int(round(k/int(round(numTiles))*100))
-                    pbar.set_description(f'Saving {military_grid} {percent}%')   
+                if k % int(round(numTiles / 4)) == 0 and k < numTiles - 1:
+                    percent = int(round(k / int(round(numTiles)) * 100))
+                    pbar.set_description(f'Saving {military_grid} {percent}%')
                     df.to_csv(grid_geoloc_file, index=False)
-        pbar.set_description(f'Saving to file {grid_geoloc_file}')   
+        pbar.set_description(f'Saving to file {grid_geoloc_file}')
     df.to_csv(grid_geoloc_file, index=False)
     return df

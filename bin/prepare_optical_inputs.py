@@ -16,6 +16,7 @@ TILE_DIR = os.path.join(BASE_DIR, 'data', 'tiles')
 TRUTH_DIR = os.path.join(BASE_DIR, 'data', 'ground_truth')
 CORES = mp.cpu_count() - 1
 
+
 def this_download(ksn):
     for key, sz, n in ksn: 
         s3 = boto3.resource('s3')
@@ -29,6 +30,7 @@ def this_download(ksn):
         with tqdm(total=sz, unit='B', unit_scale=True, desc=key, leave=False, position=n) as pbar:
             b.download_file(key, dst, Callback=lambda bytes_transferred: pbar.update(bytes_transferred))
     return None
+
 
 def creat_dset_csv(matched_df, ratio):
     assert ratio<1 and ratio > 0
@@ -86,6 +88,7 @@ def main():
         inputs, 
         max_workers=CORES
     )
+
     ## call composites to tiles
     print('Making tiles...')
     bridge_locations = get_bridge_locations(TRUTH_DIR)  
@@ -107,6 +110,7 @@ def main():
     
     print("Creating data set")
     creat_dset_csv(matched_df, 0.7)
+
 
 if __name__ == "__main__":
     main()

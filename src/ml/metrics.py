@@ -9,6 +9,8 @@ from typing import Union, List
 import pandas as pd
 import numba as nb
 import numpy as np
+from sklearn import metrics
+import matplotlib.pyplot as plt
 
 from numba.core.errors import NumbaDeprecationWarning, NumbaWarning
 from pandas.errors import DtypeWarning
@@ -285,3 +287,23 @@ class Metrics:
         recall = self.calculate_recall(confidence)
 
         return precision + recall
+
+    def plot_roc(self, outpath: str = None):
+        positive_confidences = [conf if not self._inference_subset[self._prediction_column].iloc[i] else conf for i, conf
+                                in enumerate(self._inference_subset[self._confidence_column])]
+
+        fpr, tpr, thresholds = metrics.roc_curve(self._validation_set[self._validation_column],
+                                                 positive_confidences)
+
+        plt.plot(fpr, tpr)
+
+        plt.title('Receiver operating characteristic (ROC) curve')
+        plt.ylabel('True positive rate')
+        plt.xlabel('False positive rate')
+
+        # Save or show the plot
+        if outpath is not None:
+            plt.savefig(outpath)
+        else:
+            plt.show()
+        plt.clf()

@@ -2,7 +2,7 @@ from src.ml.util import *
 
 ARGS = Namespace(
     gpu=None,
-    batch_size=1200,
+    batch_size=1000,
     num_workers=12,
     tile_csv=os.path.join(BASE_DIR, "data", "final_tiles", "cote_divore.csv"),
     model_file=os.path.join(BASE_DIR, "data", "torch", "resnet18.best.tar"),

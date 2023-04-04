@@ -84,8 +84,8 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
                 data_time.update(time.time() - end)
                 # move data to the same device as model
                 output = model(data)
-                #probs = torch.softmax(output)
-                conf, pred = torch.max(output, 1)
+                probs = torch.softmax(output, dim=1)
+                conf, pred = torch.max(probs, 1)
 
                 # store res to file
                 ix = range(
@@ -105,8 +105,6 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
                 end = time.time()
                 if i % args.print_freq == 0:
                     progress.display(i + 1)
-
-                res_df.to_csv(args.res_csv)
 
             except Exception as e:
                 skipped += 1

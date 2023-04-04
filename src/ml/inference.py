@@ -2,7 +2,7 @@ from src.ml.util import *
 
 ARGS = Namespace(
     gpu=None,
-    batch_size=1000,
+    batch_size=2000,
     num_workers=12,
     tile_csv=os.path.join(BASE_DIR, "data", "final_tiles", "cote_divore.csv"),
     model_file=os.path.join(BASE_DIR, "data", "torch", "resnet18.best.tar"),
@@ -84,7 +84,7 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
                 data_time.update(time.time() - end)
                 # move data to the same device as model
                 output = model(data)
-                probs = torch.nn.functional.sigmoid(output)
+                probs = torch.sigmoid(output.transpose())
                 conf, pred = torch.max(probs, 1)
 
                 # store res to file
@@ -105,6 +105,8 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
                 end = time.time()
                 if i % args.print_freq == 0:
                     progress.display(i + 1)
+
+                res_df.to_csv(args.res_csv)
 
             except Exception as e:
                 skipped += 1

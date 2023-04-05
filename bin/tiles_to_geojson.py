@@ -1,10 +1,13 @@
-from src.utilities.coords import *
-import os
-from glob import glob
+import json
 import multiprocessing as mp
+import os
 from argparse import Namespace
-import json 
+from glob import glob
+
 import tqdm
+
+from src.utilities.coords import *
+
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '..'))
 
 def task(args:Namespace):

@@ -1,17 +1,18 @@
-import geopandas as gpd
-import numpy as np
 import os
-from fastai.vision.all import *
-from glob import glob
-import pandas as pd
-from sklearn.metrics import classification_report
-from sklearn.metrics import roc_curve, auc
-from sklearn.metrics import confusion_matrix
-from IPython.display import display
-from matplotlib import pyplot as plt
-from shapely import Polygon
 import shutil
 from datetime import date
+
+import geopandas as gpd
+import numpy as np
+import pandas as pd
+from IPython.display import display
+from fastai.vision.all import *
+from matplotlib import pyplot as plt
+from shapely import Polygon
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import roc_curve, auc
+
 
 def _fastai_format_inputs(
     csv_files: dict, 

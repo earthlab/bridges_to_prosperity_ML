@@ -4,17 +4,16 @@ Contains classes and functions for calculating inference accuracy metrics
 Copyright 2023 by Erick Verleye, CU Boulder Earth Lab.
 """
 
+import warnings
 from typing import Union, List
 
-import pandas as pd
+import matplotlib.pyplot as plt
 import numba as nb
 import numpy as np
-from sklearn import metrics
-import matplotlib.pyplot as plt
-
+import pandas as pd
 from numba.core.errors import NumbaDeprecationWarning, NumbaWarning
 from pandas.errors import DtypeWarning
-import warnings
+from sklearn import metrics
 
 # Not great but sub-setting column could be any type. Probably a string, which for some reason numba is having trouble
 # with.
@@ -289,11 +288,10 @@ class Metrics:
         return precision + recall
 
     def plot_roc(self, outpath: str = None):
-        positive_confidences = [conf if not self._inference_subset[self._prediction_column].iloc[i] else conf for i, conf
-                                in enumerate(self._inference_subset[self._confidence_column])]
+        positive_confidences = [1-conf if not self._inference_subset[self._prediction_column].iloc[i] else conf for
+                                i, conf in enumerate(self._inference_subset[self._confidence_column])]
 
-        fpr, tpr, thresholds = metrics.roc_curve(self._validation_set[self._validation_column],
-                                                 positive_confidences)
+        fpr, tpr, thresholds = metrics.roc_curve(self._validation_set[self._validation_column], positive_confidences)
 
         plt.plot(fpr, tpr)
 
@@ -306,4 +304,3 @@ class Metrics:
             plt.savefig(outpath)
         else:
             plt.show()
-        plt.clf()

@@ -1,16 +1,17 @@
+import multiprocessing as mp
+import os
+import random
 from glob import glob
+
+import boto3
+import numpy as np
+import pandas as pd
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
-import os 
-import pandas as pd
-import numpy as np
-import multiprocessing as mp
-import random 
-import boto3
-from src.utilities.coords import get_bridge_locations
-from bin.composites_to_tiles import create_tiles
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '..'))
+from bin.composites_to_tiles import create_tiles
+from src.utilities.coords import get_bridge_locations
+
 COMPOSITE_DIR = os.path.join(BASE_DIR, 'data', 'composites')
 TILE_DIR = os.path.join(BASE_DIR, 'data', 'tiles')
 TRUTH_DIR = os.path.join(BASE_DIR, 'data', 'ground_truth')
@@ -63,8 +64,14 @@ def creat_dset_csv(matched_df, ratio):
     val_df.to_csv(val_csv) 
     print(f'Saving to {train_csv} and {val_csv}')
 
+
 def main():
-    ## load composites from s3
+
+    # If composite paths not specified then parse through all combinations in region_info.yaml file and prepend with
+    # 'composites'. Or parse through the objects in the available bucket object. Here we may have to assume the
+    # use of conventions in s3 names
+
+    # load composites from s3
     folders = [
         'composites/Rwanda/all',
         'composites/Uganda/Ibanda',

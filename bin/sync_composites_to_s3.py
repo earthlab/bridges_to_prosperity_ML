@@ -1,8 +1,11 @@
-import boto3
 import glob
 import os
-from tqdm import tqdm
 from glob import glob
+
+import boto3
+from tqdm import tqdm
+
+
 def sync_s3():
     base_dir = os.path.abspath(
         os.path.join(

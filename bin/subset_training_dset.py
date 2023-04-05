@@ -1,7 +1,10 @@
-import pandas as pd 
-import random 
+import os
+import random
+
 import numpy as np
-import os 
+import pandas as pd
+
+
 def subset_data(match_file:str='data/tiles/tiles_with_truth.csv'):
     df = pd.read_csv(match_file)
     out_dir = 'data/tiles/'

@@ -2,32 +2,26 @@
 # composites
 import os
 from argparse import ArgumentParser
+
 from src.api.sentinel2 import SinergiseSentinelAPI
+from definitions import B2P_DIR
 
-def download_sentinel2(outdir, bounds, start_date, end_date, buffer):
+
+def download_sentinel2(output_dir, bounds, start_date, end_date, buffer):
     api = SinergiseSentinelAPI()
-    api.download(bounds, buffer, outdir, start_date, end_date)
+    api.download(bounds, buffer, output_dir, start_date, end_date)
 
-    if not outdir:
+    if not os.listdir(output_dir):
         raise FileNotFoundError('No files returned from the query parameters')
 
 
 if __name__ == '__main__':
-    base_dir = os.path.abspath(
-        os.path.join(
-            os.path.dirname(
-                os.path.realpath(__file__)
-            ), 
-            '..'
-        )
-    )
     parser = ArgumentParser()
     parser.add_argument(
         '--outdir', 
         '-o', 
         type=str, 
-        required=False, 
-        default=os.path.join(base_dir, 'data', 'sentinel2'),
+        required=False,
         help='Where to write the sentinel2 files and composites')
     parser.add_argument(
         '--bbox', 
@@ -78,9 +72,10 @@ if __name__ == '__main__':
         help='District is the sub-region (ex. Uganda->Ibanda)'
     )
     args = parser.parse_args()
-    out_dir =  os.path.join(args.outdir, args.region, args.district)
-    if not os.path.isdir(out_dir):
-        os.makedirs(out_dir)
+    out_dir = os.path.join(B2P_DIR, 'data', 'sentinel2', args.region, args.district) if args.out_dir is None else\
+        args.out_dir
+    os.makedirs(out_dir, exist_ok=True)
+
     download_sentinel2(
         out_dir, 
         args.bbox, 

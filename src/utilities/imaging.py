@@ -1,22 +1,20 @@
-from typing import Union
-import numpy as np
-import warnings
 import os
 import shutil
+import warnings
 from glob import glob
-from tqdm.auto import tqdm
-from argparse import Namespace
-from time import sleep
-from multiprocessing import Pool
-from osgeo import gdal
+from typing import Union
+
+import geopandas as gpd
+import numpy as np
+import pandas as pd
 import rasterio
+import torch
+from osgeo import gdal
 from rasterio import features
 from rasterio.windows import Window
-import geopandas as gpd
-import pandas as pd
-import torch
-from torchvision.transforms import ToTensor
 from shapely.geometry import polygon
+from torchvision.transforms import ToTensor
+from tqdm.auto import tqdm
 
 from src.utilities.coords import tiff_to_bbox, bridge_in_bbox
 
@@ -28,7 +26,8 @@ BANDS_TO_IX = {
 MAX_PIXEL_VAL = 4000
 
 
-# the max_pixel_val was set to 2500? this probably should match with the max allowed value for clouds or it shouldnt be included...
+# the max_pixel_val was set to 2500? this probably should match with the max allowed value for clouds or it shouldn't be
+# included...
 def scale(
         x: Union[float, np.array],
         max_pixel_val: float = MAX_PIXEL_VAL
@@ -36,7 +35,7 @@ def scale(
     return x / max_pixel_val
 
 
-def getImgFromFile(img_path, g_ncols, dtype, row_bound=None):
+def get_img_from_file(img_path, g_ncols, dtype, row_bound=None):
     img = rasterio.open(img_path, driver='JP2OpenJPEG')
     ncols, nrows = img.meta['width'], img.meta['height']
     assert g_ncols == ncols, f'Imgs have different size ncols: {ncols} neq {g_ncols}'
@@ -53,10 +52,10 @@ def getImgFromFile(img_path, g_ncols, dtype, row_bound=None):
     return pixels
 
 
-def getCloudMaskFromFile(cloud_path, crs, transform, shape, row_bound=None):
-    warnings.filterwarnings("ignore", category=RuntimeWarning)
+def get_cloud_mask_from_file(cloud_path, crs, transform, shape, row_bound=None):
     # filter out RuntimeWarnings, due to geopandas/fiona read file spam
     # https://stackoverflow.com/questions/64995369/geopandas-warning-on-read-file
+    warnings.filterwarnings("ignore", category=RuntimeWarning)
     try:
         cloud_file = gpd.read_file(cloud_path)
         cloud_file.crs = (str(crs))
@@ -73,19 +72,19 @@ def getCloudMaskFromFile(cloud_path, crs, transform, shape, row_bound=None):
         if row_bound is None:
             return np.where(cloud_img == 0, 1, 0)
         return np.where(cloud_img[row_bound[0]:row_bound[1], :] == 0, 1, 0)
-    except:
+    except Exception as e:
         return None
 
 
-def nanClouds(pixels, cloud_channels, max_pixel_val: float = MAX_PIXEL_VAL):
+def nan_clouds(pixels, cloud_channels, max_pixel_val: float = MAX_PIXEL_VAL):
     cp = pixels * cloud_channels
     mask = np.where(np.logical_or(cp == 0, cp > max_pixel_val))
     cp[mask] = np.nan
     return cp
 
 
-def createComposite(s2_dir: str, composite_dir: str, coord: str, bands: list, dtype: type, num_slices: int = 1,
-                    pbar: bool = True):
+def create_composite(s2_dir: str, composite_dir: str, coord: str, bands: list, dtype: type, num_slices: int = 1,
+                     pbar: bool = True):
     assert os.path.isdir(s2_dir)
     os.makedirs(composite_dir, exist_ok=True)
     if num_slices > 1:
@@ -103,7 +102,8 @@ def createComposite(s2_dir: str, composite_dir: str, coord: str, bands: list, dt
             g_nrows, g_ncols = rf.meta['width'], rf.meta['height']
             crs = rf.crs
             transform = rf.transform
-        # handel slicing if necessary, slicing along rows only
+
+        # Handle slicing if necessary, slicing along rows only
         if num_slices > 1:
             slice_width = g_nrows / num_slices
             slice_end_pts = [int(i) for i in np.arange(0, g_nrows + slice_width, slice_width)]
@@ -114,7 +114,8 @@ def createComposite(s2_dir: str, composite_dir: str, coord: str, bands: list, dt
         joined_file_path = os.path.join(composite_dir, coord, f'{band}.tiff')
         if os.path.isfile(joined_file_path):
             continue
-        ## Median across time, slicing if necessary
+
+        # Median across time, slicing if necessary
         for k, row_bound in tqdm(enumerate(slice_bounds), desc=f'band={band}', total=num_slices, position=2,
                                  disable=pbar):
             if num_slices > 1:
@@ -127,15 +128,15 @@ def createComposite(s2_dir: str, composite_dir: str, coord: str, bands: list, dt
             cloud_correct_imgs = []
             for img_path in tqdm(band_files, desc=f'slice {k + 1}', leave=False, position=3, disable=pbar):
                 # Get data from files
-                pixels = getImgFromFile(img_path, g_ncols, dtype, row_bound)
+                pixels = get_img_from_file(img_path, g_ncols, dtype, row_bound)
                 date_dir = os.path.dirname(img_path)
                 cloud_files = glob(os.path.join(date_dir, "*.gml"))
                 assert len(cloud_files) == 1, f'Cloud path does not exist for {date_dir}'
 
-                cloud_channels = getCloudMaskFromFile(cloud_files[0], crs, transform, (g_nrows, g_ncols), row_bound)
+                cloud_channels = get_cloud_mask_from_file(cloud_files[0], crs, transform, (g_nrows, g_ncols), row_bound)
                 if cloud_channels is None: continue
                 # add to list to do median filte later
-                cloud_correct_imgs.append(nanClouds(pixels, cloud_channels))
+                cloud_correct_imgs.append(nan_clouds(pixels, cloud_channels))
                 del pixels
 
             corrected_stack = np.vstack([img.ravel() for img in cloud_correct_imgs])
@@ -150,7 +151,7 @@ def createComposite(s2_dir: str, composite_dir: str, coord: str, bands: list, dt
             del median_corrected
             corrected_stack = []
             del corrected_stack
-        ## Combine slices 
+        # Combine slices
         if num_slices > 1:
             with rasterio.open(joined_file_path, 'w', driver='GTiff', width=g_ncols, height=g_nrows, count=1, crs=crs,
                                transform=transform, dtype=dtype) as wf:
@@ -168,7 +169,7 @@ def createComposite(s2_dir: str, composite_dir: str, coord: str, bands: list, dt
                             indexes=1
                         )
                     os.remove(slice_file_path)
-    ## Combine Bands
+    # Combine Bands
     n_bands = len(bands)
     with rasterio.open(
             multiband_file_path,

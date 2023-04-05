@@ -1,6 +1,7 @@
 import os
-from argparse import ArgumentParser
+
 from src.ml.train import train_torch
+
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '..'))
 TILE_DIR = os.path.join(BASE_DIR, 'data', 'tiles')
 DATA_DIR = os.path.join(BASE_DIR, 'data', 'torch')

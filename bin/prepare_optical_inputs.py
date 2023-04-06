@@ -91,7 +91,7 @@ def prepare_optical_inputs(requested_locations: List[str] = None, composites_dir
     if requested_locations is None:
         requested_locations = []
         for region in region_info:
-            for district in region['districts']:
+            for district in region_info[region]['districts']:
                 requested_locations.append(os.path.join(bucket_composite_dir, region, district))
 
     location_info = []

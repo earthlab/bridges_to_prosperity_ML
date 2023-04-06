@@ -86,38 +86,13 @@ class APIAuth:
         self._configure_session_ttl(ttl)
         try:
             if aws_account not in self.ACCOUNT_TO_ARN.keys():
-                raise ValueError(f'{aws_account} is not a valid account string. Please input one of the follwing:\n '
+                raise ValueError(f'{aws_account} is not a valid account string. Please input one of the following:\n '
                                  f'{self.ACCOUNT_TO_ARN.keys()}')
 
             sp.call([
                 'saml2aws', 'login', f'--username={self._identikey}', f'--password={self._password}',
                 f'--role={self.ACCOUNT_TO_ARN[aws_account]}', '--skip-prompt', '--force'
             ])
-
-            with open(os.path.join(pathlib.Path().home(), '.aws', 'credentials'), 'r') as f:
-                start = False
-
-                f1 = False
-                f2 = False
-                f3 = False
-                for line in f.readlines():
-                    if line == '[saml]\n':
-                        start = True
-                    if not start:
-                        continue
-
-                    if line.startswith('aws_access_key_id'):
-                        os.environ['AWS_ACCESS_KEY_ID'] = str(line.split('= ')[1].strip('\n'))
-                        f1 = True
-                    elif line.startswith('aws_secret_access_key'):
-                        os.environ['AWS_SECRET_ACCESS_KEY'] = str(line.split('= ')[1].strip('\n'))
-                        f2 = True
-                    elif line.startswith('aws_security_token'):
-                        os.environ['AWS_SESSION_TOKEN'] = str(line.split('= ')[1].strip('\n'))
-                        f3 = True
-
-                    if f1 and f2 and f3:
-                        break
 
             return boto3.client(
                 's3',
@@ -129,6 +104,33 @@ class APIAuth:
         except FileNotFoundError:
             print(self.SAML2AWS_INSTALL_ERROR_STR)
             return
+
+    @staticmethod
+    def parse_aws_credentials():
+        with open(os.path.join(pathlib.Path().home(), '.aws', 'credentials'), 'r') as f:
+            start = False
+
+            f1 = False
+            f2 = False
+            f3 = False
+            for line in f.readlines():
+                if line == '[saml]\n':
+                    start = True
+                if not start:
+                    continue
+
+                if line.startswith('aws_access_key_id'):
+                    os.environ['AWS_ACCESS_KEY_ID'] = str(line.split('= ')[1].strip('\n'))
+                    f1 = True
+                elif line.startswith('aws_secret_access_key'):
+                    os.environ['AWS_SECRET_ACCESS_KEY'] = str(line.split('= ')[1].strip('\n'))
+                    f2 = True
+                elif line.startswith('aws_security_token'):
+                    os.environ['AWS_SESSION_TOKEN'] = str(line.split('= ')[1].strip('\n'))
+                    f3 = True
+
+                if f1 and f2 and f3:
+                    break
 
     def _configure_session_ttl(self, ttl: int) -> None:
         """

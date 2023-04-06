@@ -106,7 +106,7 @@ def prepare_optical_inputs(requested_locations: List[str] = None, composites_dir
         parallel_inputs.append([])
         for info_tuple in location:
             print(info_tuple)
-            parallel_inputs[i].append((info_tuple[0], info_tuple[1], info_tuple[2], i + 1))
+            parallel_inputs[i].append((info_tuple[0], info_tuple[1], info_tuple[2], str(i + 1)))
     process_map(
         this_download,
         parallel_inputs,

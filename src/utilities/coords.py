@@ -8,6 +8,8 @@ from dateutil import parser
 from osgeo import osr, gdal
 from shapely.geometry import polygon
 
+from definitions import TRUTH_DIR
+
 
 def get_transform(tiff):
     src = gdal.Open(tiff)
@@ -66,15 +68,25 @@ def bridge_in_bbox(bbox, bridge_locations):
             break
     return is_bridge, bridge_loc, ix
 
-def get_bridge_locations(truth_dir):
-    csv_files = glob(os.path.join(truth_dir, "*csv"))
-    dates = [parser.parse(os.path.basename(csv), fuzzy=True) for csv in csv_files]
-    max_ix = dates.index(max(dates))
-    print(csv_files[max_ix])
-    tDf = pd.read_csv(csv_files[max_ix])
-    tDf = tDf.dropna(subset=['Latitude', 'Longitude'])
-    bridge_locations = gpd.points_from_xy(tDf['Latitude'], tDf['Longitude'])
+
+def get_bridge_locations(truth_file_path: str = None) -> gpd.array.GeometryArray:
+    """
+    Finds the most recent truth csv in the specified truth dir
+    """
+    # Find the most recent truth file in the default truth file directory
+    if truth_file_path is None:
+        csv_files = glob(os.path.join(TRUTH_DIR, "*csv"))
+        dates = [parser.parse(os.path.basename(csv), fuzzy=True) for csv in csv_files]
+        max_ix = dates.index(max(dates))
+        print(csv_files[max_ix])
+        truth_df = pd.read_csv(csv_files[max_ix])
+    else:
+        truth_df = pd.read_csv(truth_file_path)
+
+    truth_df = truth_df.dropna(subset=['Latitude', 'Longitude'])
+    bridge_locations = gpd.points_from_xy(truth_df['Latitude'], truth_df['Longitude'])
     return bridge_locations
+
 
 class Timer(object):
     def __init__(self, name=None):

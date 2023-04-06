@@ -255,16 +255,13 @@ def tiff_to_tiles(
 ):
     root, military_grid = os.path.split(multiband_tiff)
     military_grid = military_grid[:5]
-    root, region = os.path.split(root)
-    root, country = os.path.split(root)
-    this_tile_dir = os.path.join(tile_dir, country, region)
 
-    grid_geoloc_file = os.path.join(this_tile_dir, military_grid + '_geoloc.csv')
+    grid_geoloc_file = os.path.join(tile_dir, military_grid + '_geoloc.csv')
     if os.path.isfile(grid_geoloc_file):
         df = pd.read_csv(grid_geoloc_file)
         return df
 
-    grid_dir = os.path.join(this_tile_dir, military_grid)
+    grid_dir = os.path.join(tile_dir, military_grid)
     os.makedirs(grid_dir, exist_ok=True)
 
     rf = gdal.Open(multiband_tiff)

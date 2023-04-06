@@ -1,5 +1,7 @@
 import os
+
 import tqdm
+import boto3
 
 from config_reader import CONFIG
 
@@ -23,3 +25,10 @@ def upload_to_s3(session, filename: str, key: str, bucket: str = None):
             Key=key,
             Callback=lambda bytes_transferred: pbar.update(bytes_transferred),
         )
+
+
+def initialize_s3(bucket_name: str = CONFIG.AWS.BUCKET) -> boto3.res:
+    s3 = boto3.resource('s3')
+    bucket = s3.Bucket(bucket_name)
+
+    return bucket

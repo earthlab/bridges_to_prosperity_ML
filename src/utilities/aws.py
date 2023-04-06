@@ -52,7 +52,7 @@ def initialize_s3(bucket_name: str = CONFIG.AWS.BUCKET):
         return s3
 
     # If that doesn't work try to get credentials from ~/.aws/credentials file and start a new session
-    except botocore.exceptions.ClientError:
+    except botocore.exceptions.NoCredentialsError:
         try:
             return _no_iam_auth(bucket_name)
         except KeyError:

@@ -121,6 +121,7 @@ def prepare_optical_inputs(requested_locations: List[str] = None, composites_dir
 
         # Resolve the region and district from the composite path to create the tile directory
         composite_path_split = os.path.split(district)
+        print(tiles_dir, composite_path_split[-2], composite_path_split[-1])
         district_tile_dir = os.path.join(tiles_dir, composite_path_split[-2], composite_path_split[-1])
         print('TILE_DIR', district_tile_dir)
         inputs = [

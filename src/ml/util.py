@@ -1,9 +1,6 @@
-import os
 import warnings
 from enum import Enum
 import numpy as np
-import json
-from itertools import repeat
 from math import isnan
 import torch
 import torch.backends.cudnn as cudnn
@@ -12,39 +9,28 @@ import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
-import torchvision
 import torchvision.transforms as transforms
-from torch.optim.lr_scheduler import StepLR
-from torch.utils.data import Subset
 
 from src.utilities.coords import *
-# import yaml
 
-# yaml.safe_load(env["TORCH_PARAMS"])
 
 TFORM = transforms.Compose(
-        [
-            # transforms.ToTensor(), # take a 0, 255 image and scales it tp [0,1]
-            transforms.RandomVerticalFlip(), # flip image 1/2 the time
-            transforms.RandomHorizontalFlip(), # flip image 1/2 the time
-            # transforms.adjust_brightness(0.1) # copied from fastai leaving out now
-            # normalize,
-            # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-    #                                 std=[0.229, 0.224, 0.225])
-        ]
-    )
+    [
+        transforms.RandomVerticalFlip(),  # flip image 1/2 the time
+        transforms.RandomHorizontalFlip(),  # flip image 1/2 the time
+    ]
+)
 
-BASE_DIR = files.path.abspath(files.path.join(files.path.dirname(files.path.realpath(__file__)), '..', '..'))
 
 class B2PDataset(torch.utils.data.Dataset):
-    ## Make it so np doesn't yell about using str
+
+    # Make it so np doesn't yell about using str
     warnings.simplefilter(action='ignore', category=FutureWarning)
 
     def __init__(self, csv_file, transform=None, batch_size=1, ratio=None, replacement=False):
         """
         Args:
             csv_file (string): Path to the csv file with annotations.
-            root_dir (string): Directory with all the images.
             transform (callable, optional): Optional transform to be applied
                 on a sample.
         """
@@ -52,10 +38,10 @@ class B2PDataset(torch.utils.data.Dataset):
             csv_file,
             index_col=0,
             dtype={
-                'tile':str, 
-                'bbox':object, 
-                'is_bridge':bool, 
-                'bridge_loc':object
+                'tile': str,
+                'bbox': object,
+                'is_bridge': bool,
+                'bridge_loc': object
             }
         )
         self.df = df
@@ -70,7 +56,7 @@ class B2PDataset(torch.utils.data.Dataset):
             self.tiles = df['tile']
             self.bbox = df['bbox']
             self.is_bridge = df['is_bridge']
-            
+
         self.classes = ['bridge', 'no bridge']
         self.class_to_idx = {'bridge': 1, 'no bridge': 0}
         self.transform = transform
@@ -80,14 +66,14 @@ class B2PDataset(torch.utils.data.Dataset):
         self.__term = len(self.tiles) - 1
         self.__curr = 0
 
-    def update(self): 
-        if self.ratio is None: 
-            return 
+    def update(self):
+        if self.ratio is None:
+            return
         ix_bridge = np.where(self.df['is_bridge'].to_numpy())[0]
         ix_no_bridge = np.where(np.logical_not(self.df['is_bridge'].to_numpy()))[0]
         if not self.replacement: ix_no_bridge = np.setdiff1d(ix_no_bridge, self.ix_already_sampled)
         num_bridge = len(ix_bridge)
-        num_no_bridge = int(round(self.ratio*num_bridge)) # ratio = num_no_bridge / num_bridge
+        num_no_bridge = int(round(self.ratio * num_bridge))  # ratio = num_no_bridge / num_bridge
         ix_no_bridge = np.random.choice(ix_no_bridge, num_no_bridge)
         self.ix_already_sampled = np.concatenate((ix_no_bridge, self.ix_already_sampled), axis=0)
         ix_dset = np.concatenate((ix_no_bridge, ix_bridge), axis=0)
@@ -107,7 +93,7 @@ class B2PDataset(torch.utils.data.Dataset):
 
         tile_file = self.tiles[idx]
         is_bridge = self.is_bridge[idx]
-        assert isinstance(tile_file,  str), 'tile_file is a {}, = {}'.format(type(tile_file), tile_file)
+        assert isinstance(tile_file, str), 'tile_file is a {}, = {}'.format(type(tile_file), tile_file)
         image = torch.load(tile_file)
         bbox = self.bbox[idx]
         w, c, h = image.shape
@@ -120,7 +106,7 @@ class B2PDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.tiles)
-    
+
     def __getitem__(self, idx):
         return self._calc_item(idx)
 
@@ -145,8 +131,10 @@ class Summary(Enum):
     SUM = 2
     COUNT = 3
 
+
 class AverageMeter(object):
     """Computes and stores the average and current value"""
+
     def __init__(self, name, fmt=':f', summary_type=Summary.AVERAGE):
         self.name = name
         self.fmt = fmt
@@ -181,7 +169,7 @@ class AverageMeter(object):
     def __str__(self):
         fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
         return fmtstr.format(**self.__dict__)
-    
+
     def summary(self):
         fmtstr = ''
         if self.summary_type is Summary.NONE:
@@ -192,8 +180,9 @@ class AverageMeter(object):
             fmtstr = '{name} {sum:.3f}'
         elif self.summary_type is Summary.COUNT:
             fmtstr = '{name} {count:.3f}'
-        
+
         return fmtstr.format(**self.__dict__)
+
 
 class ProgressMeter(object):
     def __init__(self, num_batches, meters, prefix=""):
@@ -205,7 +194,7 @@ class ProgressMeter(object):
         entries = [self.prefix + self.batch_fmtstr.format(batch)]
         entries += [str(meter) for meter in self.meters]
         print('\t'.join(entries))
-        
+
     def display_summary(self):
         entries = [" *"]
         entries += [meter.summary() for meter in self.meters]
@@ -215,6 +204,7 @@ class ProgressMeter(object):
         num_digits = len(str(num_batches // 1))
         fmt = '{:' + str(num_digits) + 'd}'
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
+
 
 def accuracy(output, target):
     """Computes the accuracy over the k top predictions for the specified values of k"""
@@ -241,4 +231,3 @@ def accuracy(output, target):
             no_bridge_acc = no_bridge_acc[0]
 
         return total_acc, bridge_acc, no_bridge_acc
-

@@ -1,13 +1,29 @@
-from src.ml.util import *
+import time
+from typing import Union
+import os
+import warnings
+import shutil
+from argparse import Namespace
 
-MODEL_NAME = sorted(name for name in models.__dict__
-                    if name.islower() and not name.startswith("__")
-                    and callable(models.__dict__[name]))
+import torch
+import torch.backends.cudnn as cudnn
+import torch.distributed as dist
+import torch.multiprocessing as mp
+import torch.nn.parallel
+import torch.optim
+import torch.utils.data
+import torch.utils.data.distributed
+from torch import nn
+from torch.optim.lr_scheduler import StepLR
+from torch.utils.data import Subset
+import torchvision
+
+from src.ml.util import AverageMeter, ProgressMeter, Summary, accuracy, B2PDataset, TFORM
+
+MODEL_NAME = sorted(name for name in torchvision.models.__dict__ if name.islower() and not name.startswith("__")
+                    and callable(torchvision.models.__dict__[name]))
 
 DEFAULT_ARGS = Namespace(
-    datadir=files.path.join(BASE_DIR, "data", "torch"),
-    tile_dir=files.path.join(BASE_DIR, "data", "final_tiles"),
-    arch='resnet34',
     workers=4,
     epochs=20,
     start_epoch=0,
@@ -28,45 +44,39 @@ DEFAULT_ARGS = Namespace(
     multiprocessing_distributed=False,
     dummy=False,
     best_acc1=0,
-    distributed=False,
-    ratio=1
+    distributed=False
 )
 
 BEST_ACC1 = 0
 
 
-def train_torch(datadir: str = None, tile_dir: str = None, _arch: str = None, ratio: float = None):
-    ## Arg parsing 
-    args = DEFAULT_ARGS
-    if _arch is not None:
-        args.arch = _arch
-    if datadir is not None:
-        args.datadir = datadir
-    if tile_dir is not None:
-        args.tile_dir = tile_dir
-    if not (args.arch in args.datadir):
-        args.datadir = files.path.join(args.datadir, args.arch)
-        files.makedirs(args.datadir, exist_ok=True)
-    if ratio is not None:
-        args.ratio = ratio
+def train_torch(results_dir: str, train_csv_path: str, test_csv_path: str, architecture: str,
+                bridge_no_bridge_ratio: Union[None, float], seed: Union[None, int] = None):
+    # Configure the namespace for this run
 
-    if args.seed is not None:
-        random.seed(args.seed)
-        torch.manual_seed(args.seed)
+    args = DEFAULT_ARGS
+    args.results_dir = results_dir
+    args.train_csv_path = train_csv_path
+    args.test_csv_path = test_csv_path
+    args.architecture = architecture
+    args.bridge_no_bridge_ratio = bridge_no_bridge_ratio
+
+    os.makedirs(results_dir, exist_ok=True)
+
+    if seed is not None:
+        torch.manual_seed(seed)
         cudnn.deterministic = True
         cudnn.benchmark = False
-        warnings.warn('You have chosen to seed training. '
-                      'This will turn on the CUDNN deterministic setting, '
-                      'which can slow down your training considerably! '
-                      'You may see unexpected behavior when restarting '
-                      'from checkpoints.')
+        warnings.warn('You have chosen to seed training. This will turn on the CUDNN deterministic setting, '
+                      'which can slow down your training considerably! You may see unexpected behavior when '
+                      'restarting from checkpoints.')
 
+    # TODO: Maybe make these configurable from the CLI / signature
     if args.gpu is not None:
-        warnings.warn('You have chosen a specific GPU. This will completely '
-                      'disable data parallelism.')
+        warnings.warn('You have chosen a specific GPU. This will completely disable data parallelism.')
 
     if args.dist_url == "env://" and args.world_size == -1:
-        args.world_size = int(files.environ["WORLD_SIZE"])
+        args.world_size = int(os.environ["WORLD_SIZE"])
 
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
@@ -96,7 +106,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
     if args.distributed:
         if args.dist_url == "env://" and args.rank == -1:
-            args.rank = int(files.environ["RANK"])
+            args.rank = int(os.environ["RANK"])
         if args.multiprocessing_distributed:
             # For multiprocessing distributed training, rank needs to be the
             # global rank among all the processes
@@ -105,42 +115,46 @@ def main_worker(gpu, ngpus_per_node, args):
                                 world_size=args.world_size, rank=args.rank)
     # create model
     if args.pretrained:
-        print("=> using pre-trained model '{}'".format(args.arch))
-        model = models.__dict__[args.arch](pretrained=True)
+        print("=> using pre-trained model '{}'".format(args.architecture))
+        model = torchvision.models.__dict__[args.architecture](pretrained=True)
     else:
-        print("=> creating model '{}'".format(args.arch))
-        model = models.__dict__[args.arch]()
+        print("=> creating model '{}'".format(args.architecture))
+        model = torchvision.models.__dict__[args.architecture]()
 
     if not torch.cuda.is_available() and not torch.backends.mps.is_available():
         print('using CPU, this will be slow')
     elif args.distributed:
-        # For multiprocessing distributed, DistributedDataParallel constructor
-        # should always set the single device scope, otherwise,
-        # DistributedDataParallel will use all available devices.
+
+        # For multiprocessing distributed, DistributedDataParallel constructor should always set the single device
+        # scope, otherwise, DistributedDataParallel will use all available devices.
         if torch.cuda.is_available():
             if args.gpu is not None:
                 torch.cuda.set_device(args.gpu)
                 model.cuda(args.gpu)
-                # When using a single GPU per process and per
-                # DistributedDataParallel, we need to divide the batch size
+
+                # When using a single GPU per process and per DistributedDataParallel, we need to divide the batch size
                 # ourselves based on the total number of GPUs of the current node.
                 args.batch_size = int(args.batch_size / ngpus_per_node)
                 args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
                 model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
             else:
                 model.cuda()
-                # DistributedDataParallel will divide and allocate batch_size to all
-                # available GPUs if device_ids are not set
+
+                # DistributedDataParallel will divide and allocate batch_size to all available GPUs if device_ids are
+                # not set
                 model = torch.nn.parallel.DistributedDataParallel(model)
+
     elif args.gpu is not None and torch.cuda.is_available():
         torch.cuda.set_device(args.gpu)
         model = model.cuda(args.gpu)
+
     elif torch.backends.mps.is_available():
         device = torch.device("mps")
         model = model.to(device)
+
     else:
         # DataParallel will divide and allocate batch_size to all available GPUs
-        if args.arch.startswith('alexnet') or args.arch.startswith('vgg'):
+        if args.architecture.startswith('alexnet') or args.architecture.startswith('vgg'):
             model.features = torch.nn.DataParallel(model.features)
             model.cuda()
         else:
@@ -156,19 +170,20 @@ def main_worker(gpu, ngpus_per_node, args):
         device = torch.device("mps")
     else:
         device = torch.device("cpu")
-    # define loss function (criterion), optimizer, and learning rate scheduler
+
+    # Define loss function (criterion), optimizer, and learning rate scheduler
     criterion = nn.CrossEntropyLoss().to(device)
 
     optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
 
-    """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
+    # Sets the learning rate to the initial LR decayed by 10 every 30 epochs
     scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
 
     # optionally resume from a checkpoint
     if args.resume:
-        if files.path.isfile(args.resume):
+        if os.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
             if args.gpu is None:
                 checkpoint = torch.load(args.resume)
@@ -192,22 +207,22 @@ def main_worker(gpu, ngpus_per_node, args):
             print("=> no checkpoint found at '{}'".format(args.resume))
 
     # Data loading code
-    train_csv = files.path.join(args.tile_dir, 'train_df.csv')
-    val_csv = files.path.join(args.tile_dir, 'val_df.csv')
-    assert files.path.isfile(train_csv), f'file dne: {train_csv}'
-    assert files.path.isfile(val_csv), f'file dne: {val_csv}'
+    train_csv = args.train_csv_path
+    val_csv = args.test_csv_path
+    assert os.path.isfile(train_csv), f'file dne: {train_csv}'
+    assert os.path.isfile(val_csv), f'file dne: {val_csv}'
     train_dataset = B2PDataset(
         train_csv,
         TFORM,
         args.batch_size,
-        ratio=args.ratio
+        ratio=args.bridge_no_bridge_ratio
     )
 
     val_dataset = B2PDataset(
         val_csv,
         TFORM,
         args.batch_size,
-        ratio=args.ratio
+        ratio=args.bridge_no_bridge_ratio
     )
 
     if args.distributed:
@@ -263,7 +278,7 @@ def main_worker(gpu, ngpus_per_node, args):
                     'scheduler': scheduler.state_dict()
                 },
                 is_best,
-                files.path.join(args.datadir, f'{args.arch}.chkpt{epoch + 1}.tar')
+                os.path.join(args.results_dir, f'{args.architecture}.chkpt{epoch + 1}.tar')
             )
         train_dataset.update()
         val_dataset.update()
@@ -382,15 +397,15 @@ def validate(val_loader, model, criterion, args):
 
 
 def save_checkpoint(state, is_best, filename):
-    root, _ = files.path.split(filename)
-    if not files.path.isdir(root):
-        files.makedirs(root)
+    root, _ = os.path.split(filename)
+    if not os.path.isdir(root):
+        os.makedirs(root)
     torch.save(state, filename)
     if is_best:
-        d = files.path.dirname(filename)
-        f = files.path.basename(filename)
+        d = os.path.dirname(filename)
+        f = os.path.basename(filename)
         prts = f.split('.chkpt')
         shutil.copyfile(
             filename,
-            files.path.join(d, '.'.join([prts[0], 'best']) + ".tar")
+            os.path.join(d, '.'.join([prts[0], 'best']) + ".tar")
         )

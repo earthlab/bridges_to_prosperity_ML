@@ -1,70 +1,83 @@
 import os
+import argparse
+from typing import List, Union
 
 from src.ml.train import train_torch
+from definitions import TORCH_DIR
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '..'))
-TILE_DIR = os.path.join(BASE_DIR, 'data', 'tiles')
-DATA_DIR = os.path.join(BASE_DIR, 'data', 'torch')
-if __name__ == '__main__':
-    # parser = ArgumentParser()
-    # parser.add_argument(
-    #     '--groundtruth', 
-    #     '-g', 
-    #     type=str, 
-    #     default=None,
-    #     required=False, 
-    #     help='Path to csv files with ground truth'
-    # )
-    # parser.add_argument(
-    #     '--tiles', 
-    #     '-t', 
-    #     type=str, 
-    #     default=None,
-    #     required=False, 
-    #     help='Path to tiff files'
-    # )
-    # parser.add_argument(
-    #     '--outdir', 
-    #     '-o', 
-    #     type=str, 
-    #     required=False, 
-    #     default=None,
-    #     help='Where to write pkl files containing params'
-    # )
-    # parser.add_argument(
-    #     '--resnt', 
-    #     '-r', 
-    #     type=int, 
-    #     required=False, 
-    #     default=RESNT_DEFAULT,
-    #     help='List of resnt defaults'
-    # )
-    # parser.add_argument(
-    #     '--countries', 
-    #     '-c', 
-    #     type=str, 
-    #     required=True, 
-    #     help='List of resnt defaults',
-    #     nargs='+'
-    # )
-    # args = parser.parse_args()
+ARCHITECTURES = ('resnet18', 'resnet34', 'resnet50')
 
-    # train_models(
-    #     args.groundtruth, 
-    #     args.tiles, 
-    #     args.outdir, 
-    #     args.country,
-    #     args.resnt,
-    # )
-    if not os.path.isdir(DATA_DIR):
-        os.makedirs(DATA_DIR)
-    assert os.path.isdir(TILE_DIR), f"Please create tiles prior to training {TILE_DIR} DNE"
-    for arch in ['resnet18', 'resnet34', 'resnet50']:
-        for ratio in [.5, 1, 1.5, 2, 2.5, 3, 5]:
+
+def train_optical(training_csv_path: str, test_csv_path: str, architectures: List[str] = ARCHITECTURES,
+                  no_bridge_to_bridge_ratios: Union[None, List[float]] = None, results_dir: str = TORCH_DIR):
+    os.makedirs(results_dir, exist_ok=True)
+    no_bridge_to_bridge_ratios = [None] if no_bridge_to_bridge_ratios is None else no_bridge_to_bridge_ratios
+
+    for architecture in architectures:
+        for no_bridge_to_bridge_ratio in no_bridge_to_bridge_ratios:
             train_torch(
-                os.path.join(DATA_DIR, f'{arch}', f'ratio_{ratio}'), 
-                TILE_DIR, 
-                arch,
-                ratio=ratio
+                os.path.join(results_dir, f'{architecture}', f'ratio_{no_bridge_to_bridge_ratio}'),
+                training_csv_path,
+                test_csv_path,
+                architecture,
+                bridge_no_bridge_ratio=no_bridge_to_bridge_ratio
             )
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--train_csv',
+        '-tr',
+        type=str,
+        default=None,
+        required=False,
+        help='Path to csv file with training portion of dataset'
+    )
+    parser.add_argument(
+        '--test_csv',
+        '-te',
+        type=str,
+        default=None,
+        required=False,
+        help='Path to csv file with testing / validation portion of dataset'
+    )
+    parser.add_argument(
+        '--results_dir',
+        '-o',
+        type=str,
+        required=False,
+        default=TORCH_DIR,
+        help='Where to write pkl files containing training and validation results'
+    )
+    parser.add_argument(
+        '--architectures',
+        '-a',
+        type=str,
+        nargs='+',
+        required=False,
+        default=ARCHITECTURES,
+        help='List of or single Resnet model architecture(s) to use for training i.e. resnet18,resnet35,resnet50'
+    )
+    parser.add_argument(
+        '--ratios',
+        '-r',
+        type=float,
+        nargs='+',
+        required=False,
+        help='List of or single ratio(s) of no_bridge to bridge data to fix class balance in test / validation set. '
+             'Model will be trained for each ratio specified i.e. 0.5,1,1.5,5. If none then no class balancing will be '
+             'done '
+    )
+
+    args = parser.parse_args()
+
+    train_optical(
+        training_csv_path=args.train_csv,
+        test_csv_path=args.train_csv,
+        results_dir=args.results_dir,
+        architectures=args.architectures,
+        no_bridge_to_bridge_ratios=args.ratios
+    )
+
    

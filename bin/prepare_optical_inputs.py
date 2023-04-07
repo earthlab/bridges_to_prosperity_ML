@@ -34,9 +34,10 @@ def this_download(location_request_info: Tuple[str, int, int, str]) -> None:
             return None
         dst_root = os.path.split(destination)[0]
         os.makedirs(dst_root, exist_ok=True)
-
-        with tqdm(total=composite_size, unit='B', unit_scale=True, desc=location_path, leave=False,
+        print('Downloading')
+        with tqdm(total=int(composite_size), unit='B', unit_scale=True, desc=location_path, leave=False,
                   position=int(position)) as pbar:
+            print(destination)
             bucket.download_file(location_path, destination,
                                  Callback=lambda bytes_transferred: pbar.update(bytes_transferred))
     return None

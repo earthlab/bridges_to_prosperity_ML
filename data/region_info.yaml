@@ -71,9 +71,9 @@ Uganda:
     Kabarole: 
       spec: 'train'
       bbox: [30.0675, 0.1847, 30.6141, 1.0581]
-    Kasese: 
-      spec: 'train'
-      bbox: [29.4585, -0.7429, 30.5516, 1.0038]
+#    Kasese:
+#      spec: 'train'
+#      bbox: [29.4585, -0.7429, 30.5516, 1.0038]
     Ibanda: 
       spec: 'train'
       bbox: [30.1691, -0.4964, 30.7157, 0.3770]

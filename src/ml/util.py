@@ -1,7 +1,9 @@
 import warnings
 from enum import Enum
-import numpy as np
 from math import isnan
+
+import numpy as np
+import pandas as pd
 import torch
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
@@ -10,9 +12,6 @@ import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.transforms as transforms
-
-from src.utilities.coords import *
-
 
 TFORM = transforms.Compose(
     [

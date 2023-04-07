@@ -1,11 +1,11 @@
-import files
+import os
 
+import boto3
 import botocore.exceptions
 import tqdm
-import boto3
 
-from src.utilities.config_reader import CONFIG
 from src.api.sentinel2 import APIAuth
+from src.utilities.config_reader import CONFIG
 
 
 def upload_to_s3(session, filename: str, key: str, bucket: str = None):

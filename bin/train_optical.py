@@ -1,9 +1,9 @@
-import os
 import argparse
+import os
 from typing import List, Union
 
-from src.ml.train import train_torch
 from definitions import TORCH_DIR
+from src.ml.train import train_torch
 
 ARCHITECTURES = ('resnet18', 'resnet34', 'resnet50')
 

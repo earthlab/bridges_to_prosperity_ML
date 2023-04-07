@@ -1,9 +1,9 @@
-import time
-from typing import Union
 import os
-import warnings
 import shutil
+import time
+import warnings
 from argparse import Namespace
+from typing import Union
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -13,10 +13,10 @@ import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
+import torchvision
 from torch import nn
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Subset
-import torchvision
 
 from src.ml.util import AverageMeter, ProgressMeter, Summary, accuracy, B2PDataset, TFORM
 

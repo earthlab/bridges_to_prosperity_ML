@@ -1,11 +1,10 @@
 import argparse
-from typing import List, Tuple, Union
 import multiprocessing as mp
 import os
 import random
 from glob import glob
+from typing import List, Tuple, Union
 
-import boto3
 import numpy as np
 import pandas as pd
 import yaml
@@ -13,11 +12,10 @@ from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
 from bin.composites_to_tiles import create_tiles
-from src.utilities.coords import get_bridge_locations
 from definitions import REGION_FILE_PATH, COMPOSITE_DIR, TILE_DIR, TRUTH_DIR
-from src.utilities.config_reader import CONFIG
 from src.utilities.aws import initialize_s3
-
+from src.utilities.config_reader import CONFIG
+from src.utilities.coords import get_bridge_locations
 
 CORES = mp.cpu_count() - 1
 

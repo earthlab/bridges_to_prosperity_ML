@@ -2,7 +2,7 @@
 Parser class that encapsulates configuration settings into different namespaces. This is done so strings are used as
 little as possible when accessing configuration values.
 """
-import files
+import os
 
 import yaml
 
@@ -17,3 +17,9 @@ class CONFIG:
 
     class AWS:
         BUCKET = configurations['aws']['bucket']
+
+    class TORCH:
+        class INFERENCE:
+            _inference_dict = configurations['torch']['inference']
+            BATCH_SIZE = _inference_dict['batch_size']
+            NUM_WORKERS = _inference_dict['num_workers']

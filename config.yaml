@@ -1,2 +1,6 @@
 'aws':
     bucket: 'b2p.njr'
+'torch':
+    'inference':
+        'batch_size': 1000
+        'num_workers': 12

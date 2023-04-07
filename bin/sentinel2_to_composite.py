@@ -6,8 +6,8 @@ from argparse import Namespace
 import numpy as np
 from tqdm import tqdm
 
-from src.utilities import imaging
 from definitions import COMPOSITE_DIR, SENTINEL_2_DIR
+from src.utilities import imaging
 
 
 def _composite_task(args):

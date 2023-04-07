@@ -13,9 +13,9 @@ import pandas as pd
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
+from definitions import B2P_DIR
 from src.utilities.coords import get_bridge_locations
 from src.utilities.imaging import tiff_to_tiles
-from definitions import B2P_DIR
 
 
 def create_tiles(arg):

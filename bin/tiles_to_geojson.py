@@ -1,14 +1,14 @@
-import os
+import argparse
 import json
 import multiprocessing as mp
-import argparse
-
-import tqdm
+import os
 from glob import glob
 
+import tqdm
+
+from definitions import TILE_DIR
 from src.utilities.coords import tiff_to_bbox
 from src.utilities.files import find_directories
-from definitions import TILE_DIR
 
 
 def task(task_args: argparse.Namespace):

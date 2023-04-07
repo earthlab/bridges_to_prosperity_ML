@@ -3,8 +3,8 @@
 import os
 from argparse import ArgumentParser
 
-from src.api.sentinel2 import SinergiseSentinelAPI
 from definitions import SENTINEL_2_DIR
+from src.api.sentinel2 import SinergiseSentinelAPI
 
 
 def download_sentinel2(output_dir, bounds, start_date, end_date, buffer):

@@ -2,20 +2,20 @@
 Downloads sentinel2 data using Sinergise API and creates composites for each specified region. Composites are kept
 locally and uploaded to s3 along with the Sentinel 2 files used to create the composite.
 """
+import argparse
 import os
 import subprocess
-import argparse
 from typing import List
 
 import boto3
 import numpy as np
 import yaml
 
+from definitions import B2P_DIR, REGION_FILE_PATH
 from src.api.sentinel2 import SinergiseSentinelAPI
 from src.utilities import imaging
 from src.utilities.aws import upload_to_s3
 from src.utilities.config_reader import CONFIG
-from definitions import B2P_DIR, REGION_FILE_PATH
 
 
 # TODO: Add checks for existing data in s3 for requested regions so as to not duplicate data unnecessarily,

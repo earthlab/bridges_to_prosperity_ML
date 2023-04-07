@@ -1,64 +1,53 @@
-from src.ml.util import *
+import os
+import time
 
-ARGS = Namespace(
-    gpu=None,
-    batch_size=1000,
-    num_workers=12,
-    tile_csv=files.path.join(BASE_DIR, "data", "final_tiles", "cote_divore.csv"),
-    model_file=files.path.join(BASE_DIR, "data", "torch", "resnet18.best.tar"),
-    res_csv=files.path.join(BASE_DIR, "data", "cote_divore_inference.csv"),
-    print_freq=100
-)
+import pandas as pd
+import torch
+import torchvision
+
+from src.ml.util import B2PDataset, AverageMeter, ProgressMeter
 
 
-def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str = None):
-    args = ARGS
-    if model_file is not None:
-        args.model_file = model_file
-    if tile_csv is not None:
-        args.tile_csv = tile_csv
-    if res_csv is not None:
-        args.res_csv = res_csv
-    root, _ = files.path.split(args.res_csv)
-    files.makedirs(root, exist_ok=True)
-    arch = files.path.basename(args.model_file).split('.')[0]
-    print("Using pre-trained model '{}'".format(arch))
-    args.arch = arch
-    model = models.__dict__[arch](pretrained=True)
+def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: str, batch_size: int = 1000, gpu = None,
+                    num_workers: int = 12, print_frequency: int = 100):
+    os.makedirs(os.path.basename(results_csv_path), exist_ok=True)
+    architecture = os.path.basename(model_file_path).split('.')[0]
+    print("Using pre-trained model '{}'".format(architecture))
+    model = torchvision.models.__dict__[architecture](pretrained=True)
 
     if not torch.cuda.is_available() and not torch.backends.mps.is_available():
         print('using CPU, this will be slow')
-    elif args.gpu is not None and torch.cuda.is_available():
-        torch.cuda.set_device(args.gpu)
-        model = model.cuda(args.gpu)
+    elif gpu is not None and torch.cuda.is_available():
+        torch.cuda.set_device(gpu)
+        model = model.cuda(gpu)
     elif torch.backends.mps.is_available():
         device = torch.device("mps")
         model = model.to(device)
     else:
         # DataParallel will divide and allocate batch_size to all available GPUs
-        if args.arch.startswith('alexnet') or args.arch.startswith('vgg'):
+        if architecture.startswith('alexnet') or architecture.startswith('vgg'):
             model.features = torch.nn.DataParallel(model.features)
             model.cuda()
         else:
             model = torch.nn.DataParallel(model).cuda()
-    checkpoint = None
-    if args.gpu is None:
-        checkpoint = torch.load(args.model_file)
+
+    if gpu is None:
+        checkpoint = torch.load(model_file_path)
     elif torch.cuda.is_available():
         # Map model to be loaded to specified single gpu.
-        loc = 'cuda:{}'.format(args.gpu)
-        checkpoint = torch.load(args.model_file, map_location=loc)
+        loc = 'cuda:{}'.format(gpu)
+        checkpoint = torch.load(model_file_path, map_location=loc)
     else:
         assert False, "Shouldn't happen"
 
     model.load_state_dict(checkpoint['state_dict'], strict=False)
 
-    dset = B2PDataset(args.tile_csv)
+    dset = B2PDataset(tile_csv_path)
     dloader = torch.utils.data.DataLoader(
         dset,
-        batch_size=args.batch_size,
+        batch_size=batch_size,
         shuffle=False,
-        num_workers=args.num_workers
+        num_workers=num_workers
     )
     n = dset.__len__()
     res_df = pd.DataFrame(
@@ -78,37 +67,32 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
         )
 
         end = time.time()
-        skipped = 0
+
         for i, (data, target, tile, bbox) in enumerate(dloader):
-            try:
-                data_time.update(time.time() - end)
-                # move data to the same device as model
-                output = model(data)
-                probs = torch.softmax(output, dim=1)
-                conf, pred = torch.max(probs, 1)
+            data_time.update(time.time() - end)
+            # move data to the same device as model
+            output = model(data)
+            probs = torch.softmax(output, dim=1)
+            conf, pred = torch.max(probs, 1)
 
-                # store res to file
-                ix = range(
-                    i * args.batch_size,
-                    min(
-                        (i + 1) * args.batch_size,
-                        n
-                    )
+            # store res to file
+            ix = range(
+                i * batch_size,
+                min(
+                    (i + 1) * batch_size,
+                    n
                 )
-                res_df.loc[ix, 'tile'] = tile
-                res_df.loc[ix, 'bbox'] = bbox
-                res_df.loc[ix, 'target'] = target
-                res_df.loc[ix, 'pred'] = pred.cpu().numpy()
-                res_df.loc[ix, 'conf'] = conf.cpu().numpy()
-                # update time
-                batch_time.update(time.time() - end)
-                end = time.time()
-                if i % args.print_freq == 0:
-                    progress.display(i + 1)
+            )
+            res_df.loc[ix, 'tile'] = tile
+            res_df.loc[ix, 'bbox'] = bbox
+            res_df.loc[ix, 'target'] = target
+            res_df.loc[ix, 'pred'] = pred.cpu().numpy()
+            res_df.loc[ix, 'conf'] = conf.cpu().numpy()
+            # update time
+            batch_time.update(time.time() - end)
+            end = time.time()
+            if i % print_frequency == 0:
+                progress.display(i + 1)
 
-            except Exception as e:
-                skipped += 1
-
-    print(skipped)
-    res_df.to_csv(args.res_csv)
+    res_df.to_csv(results_csv_path)
     return res_df

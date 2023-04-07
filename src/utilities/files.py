@@ -1,5 +1,5 @@
-from typing import List
 import os
+from typing import List
 
 
 def find_directories(root_dir: str, file_extension: str) -> List[str]:

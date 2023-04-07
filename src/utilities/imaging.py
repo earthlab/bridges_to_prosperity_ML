@@ -1,4 +1,4 @@
-import files
+import os
 import shutil
 import warnings
 from glob import glob
@@ -134,7 +134,8 @@ def create_composite(s2_dir: str, composite_dir: str, coord: str, bands: list, d
                 assert len(cloud_files) == 1, f'Cloud path does not exist for {date_dir}'
 
                 cloud_channels = get_cloud_mask_from_file(cloud_files[0], crs, transform, (g_nrows, g_ncols), row_bound)
-                if cloud_channels is None: continue
+                if cloud_channels is None:
+                    continue
                 # add to list to do median filte later
                 cloud_correct_imgs.append(nan_clouds(pixels, cloud_channels))
                 del pixels
@@ -193,7 +194,7 @@ def create_composite(s2_dir: str, composite_dir: str, coord: str, bands: list, d
 ''' In case you flip B02 with B04'''
 
 
-def _flipRGB(infile, outfile, dtype=np.float32):
+def _flip_rgb(infile, outfile, dtype=np.float32):
     crs, transform, g_ncols, g_nrows, = None, None, None, None
     b02, b03, b04 = None, None, None
     with rasterio.open(
@@ -250,7 +251,7 @@ def tiff_to_tiles(
         tile_dir,
         bridge_locations,
         tqdm_pos=None,
-        tqdm_updateRate=None,
+        tqdm_update_rate=None,
         div: int = 300  # in meters
 ):
     root, military_grid = os.path.split(multiband_tiff)
@@ -278,20 +279,20 @@ def tiff_to_tiles(
         if p.contains(loc):
             this_bridge_locs.append(loc)
     numTiles = len(xsteps) * len(ysteps)
-    torchTformer = ToTensor()
+    torch_transformer = ToTensor()
     df = pd.DataFrame(
         columns=['tile', 'bbox', 'is_bridge', 'bridge_loc'],
         index=range(numTiles)
     )
-    if tqdm_updateRate is None:
-        tqdm_updateRate = int(round(numTiles / 100))
+    if tqdm_update_rate is None:
+        tqdm_update_rate = int(round(numTiles / 100))
     else:
-        assert type(tqdm_updateRate) == int
+        assert type(tqdm_update_rate) == int
     with tqdm(
             position=tqdm_pos,
             total=numTiles,
             desc=military_grid,
-            miniters=tqdm_updateRate,
+            miniters=tqdm_update_rate,
             disable=(tqdm_pos is None)
     ) as pbar:
         k = 0
@@ -316,12 +317,12 @@ def tiff_to_tiles(
                     with rasterio.open(tile_tiff, 'r') as tmp:
                         scale_img = scale(tmp.read())
                         scale_img = np.moveaxis(scale_img, 0, -1)  # make dims be c, w, h
-                        tensor = torchTformer(scale_img)
+                        tensor = torch_transformer(scale_img)
                         torch.save(tensor, pt_file)
-                # os.remove(tile_tiff)  
+
                 k += 1
-                if k % tqdm_updateRate == 0:
-                    pbar.update(tqdm_updateRate)
+                if k % tqdm_update_rate == 0:
+                    pbar.update(tqdm_update_rate)
                     pbar.refresh()
                 if k % int(round(numTiles / 4)) == 0 and k < numTiles - 1:
                     percent = int(round(k / int(round(numTiles)) * 100))

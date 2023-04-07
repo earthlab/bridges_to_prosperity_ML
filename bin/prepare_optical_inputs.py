@@ -22,10 +22,6 @@ from src.utilities.aws import initialize_s3
 CORES = mp.cpu_count() - 1
 
 
-# TODO: Will B2P always be running the code from an ec2 instance with a correctly configured IAM profile? If not we
-#  will have to instantiate S3 sessions in a way they can provide credentials.
-
-
 def this_download(location_request_info: Tuple[str, int, int, str]) -> None:
     for location_path, composite_size, destination, position in location_request_info:
         s3 = initialize_s3(CONFIG.AWS.BUCKET)
@@ -126,6 +122,7 @@ def prepare_optical_inputs(requested_locations: List[str] = None, composites_dir
         # Resolve the region and district from the composite path to create the tile directory
         composite_path_split = os.path.split(district)
         district_tile_dir = os.path.join(tiles_dir, composite_path_split[-2], composite_path_split[-1])
+        print('TILE_DIR', district_tile_dir)
         inputs = [
             (
                 cs,

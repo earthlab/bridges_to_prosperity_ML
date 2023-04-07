@@ -16,19 +16,20 @@ def task(args: argparse.Namespace):
         json.dump(geom_lookup, f)
 
 
-def find_files(root_dir: str, file_extension: str):
+def find_directories(root_dir, file_extension):
     """
-    Recursively searches for files with the given file extension in the given root directory and its subdirectories.
+    Recursively searches for directories containing files with the given file extension in the given root directory and its subdirectories.
     :param root_dir: The root directory to start searching from.
     :param file_extension: The file extension to search for (e.g., ".txt").
-    :return: A list of absolute paths to the files with the given file extension.
+    :return: A list of absolute paths to the directories containing files with the given file extension.
     """
-    found_files = []
+    found_directories = []
     for root, dirs, files in os.walk(root_dir):
         for file in files:
             if file.endswith(file_extension):
-                found_files.append(os.path.abspath(os.path.join(root, file)))
-    return found_files
+                found_directories.append(os.path.abspath(root))
+                break
+    return found_directories
 
 
 def main(tile_dir: str, ):

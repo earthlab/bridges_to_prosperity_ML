@@ -1,16 +1,13 @@
 import json
 import multiprocessing as mp
-import os
-from argparse import Namespace
-from glob import glob
+import argparse
 
 import tqdm
 
 from src.utilities.coords import *
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '..'))
 
-def task(args:Namespace):
+def task(args: argparse.Namespace):
     geom_lookup = {}
     for tif in args.tiles:
         bbox = tiff_to_bbox(tif)
@@ -18,7 +15,23 @@ def task(args:Namespace):
     with open(args.geojson, 'w+') as f:
         json.dump(geom_lookup, f)
 
-def main():
+
+def find_files(root_dir: str, file_extension: str):
+    """
+    Recursively searches for files with the given file extension in the given root directory and its subdirectories.
+    :param root_dir: The root directory to start searching from.
+    :param file_extension: The file extension to search for (e.g., ".txt").
+    :return: A list of absolute paths to the files with the given file extension.
+    """
+    found_files = []
+    for root, dirs, files in os.walk(root_dir):
+        for file in files:
+            if file.endswith(file_extension):
+                found_files.append(os.path.abspath(os.path.join(root, file)))
+    return found_files
+
+
+def main(tile_dir: str, ):
     tile_dir = os.path.join(BASE_DIR, 'data', 'tiles')
     basedirs = glob(os.path.join(tile_dir, '**', '**', '*'))
     mp.set_start_method('spawn')
@@ -36,7 +49,7 @@ def main():
             step = int(round(m/n))
             for j, i in enumerate(range(0, m, step)):
                 args.append(
-                    Namespace(
+                    argparse.Namespace(
                         tiles=all_tiles[i:i+step], 
                         geojson = os.path.join(dir, f'geom_lookup_{j}.json')
                     )
@@ -54,5 +67,6 @@ def main():
             json.dump(geom_lookup, f)
     return None
 
+
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()

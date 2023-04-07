@@ -4,9 +4,9 @@ ARGS = Namespace(
     gpu=None,
     batch_size=1000,
     num_workers=12,
-    tile_csv=os.path.join(BASE_DIR, "data", "final_tiles", "cote_divore.csv"),
-    model_file=os.path.join(BASE_DIR, "data", "torch", "resnet18.best.tar"),
-    res_csv=os.path.join(BASE_DIR, "data", "cote_divore_inference.csv"),
+    tile_csv=files.path.join(BASE_DIR, "data", "final_tiles", "cote_divore.csv"),
+    model_file=files.path.join(BASE_DIR, "data", "torch", "resnet18.best.tar"),
+    res_csv=files.path.join(BASE_DIR, "data", "cote_divore_inference.csv"),
     print_freq=100
 )
 
@@ -19,9 +19,9 @@ def inference_torch(model_file: str = None, tile_csv: str = None, res_csv: str =
         args.tile_csv = tile_csv
     if res_csv is not None:
         args.res_csv = res_csv
-    root, _ = os.path.split(args.res_csv)
-    os.makedirs(root, exist_ok=True)
-    arch = os.path.basename(args.model_file).split('.')[0]
+    root, _ = files.path.split(args.res_csv)
+    files.makedirs(root, exist_ok=True)
+    arch = files.path.basename(args.model_file).split('.')[0]
     print("Using pre-trained model '{}'".format(arch))
     args.arch = arch
     model = models.__dict__[arch](pretrained=True)

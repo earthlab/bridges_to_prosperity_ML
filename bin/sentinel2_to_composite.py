@@ -7,26 +7,24 @@ import numpy as np
 from tqdm import tqdm
 
 from src.utilities import imaging
+from definitions import COMPOSITE_DIR, SENTINEL_2_DIR
 
 
-BANDS = ['B02', 'B03', 'B04']
-DTYPE = np.float32
 def _composite_task(args):
     imaging.create_composite(
         args.s2_dir, 
         args.composite_dir, 
         args.coord, 
-        BANDS, 
-        DTYPE,
+        ['B02', 'B03', 'B04'],
+        np.float32,
         args.slices,
-        args.n_cores>1
+        args.n_cores > 1
     )
     return None
 
-def sentinel2_to_composite(s2_dir, composite_dir, region, district, slices, n_cores):
+
+def sentinel2_to_composite(s2_dir, composite_dir, slices, n_cores):
     args = []
-    s2_dir = os.path.join(s2_dir, region, district)
-    composite_dir = os.path.join(composite_dir, region, district)
     for coord in os.listdir(s2_dir):
         args.append(
             Namespace(
@@ -49,22 +47,14 @@ def sentinel2_to_composite(s2_dir, composite_dir, region, district, slices, n_co
             for _ in tqdm(pool.imap_unordered(_composite_task, args)): 
                 pass
 
+
 if __name__ == '__main__':
-    base_dir = os.path.abspath(
-        os.path.join(
-            os.path.dirname(
-                os.path.realpath(__file__)
-            ), 
-            '..'
-        )
-    )
     parser = ArgumentParser()
     parser.add_argument(
         '--s2_dir',
         '-i',
         type=str,
         required=False,
-        default=os.path.join(base_dir, "data", "sentinel2"),
         help="Path to local sentinel2 data"
     )
     parser.add_argument(
@@ -72,21 +62,20 @@ if __name__ == '__main__':
         '-o',
         type=str,
         required=False,
-        default=os.path.join(base_dir, "data", "composite"),
-        help="Path to local sentinel2 data"
+        help="Path to where the composites will be written"
     )
     parser.add_argument(
         '--region',
         '-r',
         type=str, 
-        required=True, 
+        required=False,
         help='Name of the composite region (Ex Uganda)'
         )
     parser.add_argument(
         '--district',
         '-d',
         type=str, 
-        required=True, 
+        required=False,
         help='Name of the composite district (Ex. Uganda/Ibanda)'
         )
     parser.add_argument(
@@ -106,11 +95,17 @@ if __name__ == '__main__':
         help='number of cores to be used to paralellize these tasks)'
     )
     args = parser.parse_args()
+
+    if args.s2_dir is None or args.composite_dir is None and (args.region is None or args.district is None):
+        raise ValueError('Must specify --region and --district if --s2_dir or --composite dir is not specified')
+
+    s2_dir = os.path.join(SENTINEL_2_DIR, args.region, args.district) if args.s2_dir is None else args.s2_dir
+    composite_dir = os.path.join(COMPOSITE_DIR, args.region, args.district) if args.composite_dir is None else\
+        args.composite_dir
+
     sentinel2_to_composite(
-        args.s2_dir, 
-        args.composite_dir,
-        args.region, 
-        args.district, 
+        s2_dir,
+        composite_dir,
         args.slices,
         args.n_cores
     )

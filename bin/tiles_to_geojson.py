@@ -1,73 +1,70 @@
+import os
 import json
 import multiprocessing as mp
 import argparse
 
 import tqdm
+from glob import glob
 
-from src.utilities.coords import *
+from src.utilities.coords import tiff_to_bbox
+from src.utilities.files import find_directories
+from definitions import TILE_DIR
 
 
-def task(args: argparse.Namespace):
+def task(task_args: argparse.Namespace):
     geom_lookup = {}
-    for tif in args.tiles:
+    for tif in task_args.tiles:
         bbox = tiff_to_bbox(tif)
         geom_lookup[tif] = bbox
     with open(args.geojson, 'w+') as f:
         json.dump(geom_lookup, f)
 
 
-def find_directories(root_dir, file_extension):
-    """
-    Recursively searches for directories containing files with the given file extension in the given root directory and its subdirectories.
-    :param root_dir: The root directory to start searching from.
-    :param file_extension: The file extension to search for (e.g., ".txt").
-    :return: A list of absolute paths to the directories containing files with the given file extension.
-    """
-    found_directories = []
-    for root, dirs, files in os.walk(root_dir):
-        for file in files:
-            if file.endswith(file_extension):
-                found_directories.append(os.path.abspath(root))
-                break
-    return found_directories
-
-
-def main(tile_dir: str, ):
-    tile_dir = os.path.join(BASE_DIR, 'data', 'tiles')
-    basedirs = glob(os.path.join(tile_dir, '**', '**', '*'))
+def tiles_to_geojson(base_tile_dir: str = TILE_DIR, cores: int = mp.cpu_count() - 1):
+    tile_directories = find_directories(base_tile_dir, '.tif')
     mp.set_start_method('spawn')
 
-    pbar = tqdm.trange(len(basedirs))
-    n = mp.cpu_count() - 1
+    pbar = tqdm.trange(len(tile_directories))
     for k in pbar:
-        dir = basedirs[k]
-        pbar.set_description(f'{dir}')
+        tile_directory = tile_directories[k]
+        pbar.set_description(f'{tile_directory}')
         pbar.refresh()
-        with mp.Pool(n) as p:
-            args = []
-            all_tiles = glob(os.path.join(dir, '*.tif'))
+        with mp.Pool(cores) as p:
+            parallel_args = []
+            all_tiles = glob(os.path.join(tile_directory, '*.tif'))
             m = len(all_tiles)
-            step = int(round(m/n))
+            step = int(round(m/cores))
             for j, i in enumerate(range(0, m, step)):
-                args.append(
+                parallel_args.append(
                     argparse.Namespace(
                         tiles=all_tiles[i:i+step], 
-                        geojson = os.path.join(dir, f'geom_lookup_{j}.json')
+                        geojson=os.path.join(tile_directory, f'geom_lookup_{j}.json')
                     )
                 )
 
-            for _ in p.map(task, args):
+            for _ in p.map(task, parallel_args):
                 pass 
         geom_lookup = {}
-        for file in glob(os.path.join(dir, f'geom_lookup_*.json')):
+        for file in glob(os.path.join(tile_directory, f'geom_lookup_*.json')):
             with open(file, 'r') as f:
                 geoms = json.load(f)
                 for geom in geoms:
                     geom_lookup[geom] = geoms[geom]
-        with open(os.path.join(dir, f'geom_lookup.json'), 'w+') as f:
+        with open(os.path.join(tile_directory, f'geom_lookup.json'), 'w+') as f:
             json.dump(geom_lookup, f)
     return None
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument('--base_tile_dir', '-t', required=False, type=str, default=TILE_DIR,
+                        help='Directory that will be crawled for tif tile files. This directory will be indexed '
+                             'recursively and a geom_lookup.json file will be created for each directory that contains '
+                             'a .tif file. A single directory can be specified as well, i.e. '
+                             'data/tiles/Uganda/Ibanda/35NRA. Default is data/tiles')
+    parser.add_argument('--cores', '-c', required=False, default=mp.cpu_count() - 1, type=int,
+                        help='The amount of cores to use when making each geom_lookup file in parallel. Default is '
+                             'cpu_count - 1')
+    args = parser.parse_args()
+
+    tiles_to_geojson(base_tile_dir=args.base_tile_dir, cores=args.cores)

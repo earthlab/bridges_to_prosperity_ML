@@ -34,7 +34,7 @@ TFORM = transforms.Compose(
         ]
     )
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', '..'))
+BASE_DIR = files.path.abspath(files.path.join(files.path.dirname(files.path.realpath(__file__)), '..', '..'))
 
 class B2PDataset(torch.utils.data.Dataset):
     ## Make it so np doesn't yell about using str

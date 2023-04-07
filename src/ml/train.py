@@ -5,8 +5,8 @@ MODEL_NAME = sorted(name for name in models.__dict__
                     and callable(models.__dict__[name]))
 
 DEFAULT_ARGS = Namespace(
-    datadir=os.path.join(BASE_DIR, "data", "torch"),
-    tile_dir=os.path.join(BASE_DIR, "data", "final_tiles"),
+    datadir=files.path.join(BASE_DIR, "data", "torch"),
+    tile_dir=files.path.join(BASE_DIR, "data", "final_tiles"),
     arch='resnet34',
     workers=4,
     epochs=20,
@@ -45,8 +45,8 @@ def train_torch(datadir: str = None, tile_dir: str = None, _arch: str = None, ra
     if tile_dir is not None:
         args.tile_dir = tile_dir
     if not (args.arch in args.datadir):
-        args.datadir = os.path.join(args.datadir, args.arch)
-        os.makedirs(args.datadir, exist_ok=True)
+        args.datadir = files.path.join(args.datadir, args.arch)
+        files.makedirs(args.datadir, exist_ok=True)
     if ratio is not None:
         args.ratio = ratio
 
@@ -66,7 +66,7 @@ def train_torch(datadir: str = None, tile_dir: str = None, _arch: str = None, ra
                       'disable data parallelism.')
 
     if args.dist_url == "env://" and args.world_size == -1:
-        args.world_size = int(os.environ["WORLD_SIZE"])
+        args.world_size = int(files.environ["WORLD_SIZE"])
 
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
@@ -96,7 +96,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
     if args.distributed:
         if args.dist_url == "env://" and args.rank == -1:
-            args.rank = int(os.environ["RANK"])
+            args.rank = int(files.environ["RANK"])
         if args.multiprocessing_distributed:
             # For multiprocessing distributed training, rank needs to be the
             # global rank among all the processes
@@ -168,7 +168,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
     # optionally resume from a checkpoint
     if args.resume:
-        if os.path.isfile(args.resume):
+        if files.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
             if args.gpu is None:
                 checkpoint = torch.load(args.resume)
@@ -192,10 +192,10 @@ def main_worker(gpu, ngpus_per_node, args):
             print("=> no checkpoint found at '{}'".format(args.resume))
 
     # Data loading code
-    train_csv = os.path.join(args.tile_dir, 'train_df.csv')
-    val_csv = os.path.join(args.tile_dir, 'val_df.csv')
-    assert os.path.isfile(train_csv), f'file dne: {train_csv}'
-    assert os.path.isfile(val_csv), f'file dne: {val_csv}'
+    train_csv = files.path.join(args.tile_dir, 'train_df.csv')
+    val_csv = files.path.join(args.tile_dir, 'val_df.csv')
+    assert files.path.isfile(train_csv), f'file dne: {train_csv}'
+    assert files.path.isfile(val_csv), f'file dne: {val_csv}'
     train_dataset = B2PDataset(
         train_csv,
         TFORM,
@@ -263,7 +263,7 @@ def main_worker(gpu, ngpus_per_node, args):
                     'scheduler': scheduler.state_dict()
                 },
                 is_best,
-                os.path.join(args.datadir, f'{args.arch}.chkpt{epoch + 1}.tar')
+                files.path.join(args.datadir, f'{args.arch}.chkpt{epoch + 1}.tar')
             )
         train_dataset.update()
         val_dataset.update()
@@ -382,15 +382,15 @@ def validate(val_loader, model, criterion, args):
 
 
 def save_checkpoint(state, is_best, filename):
-    root, _ = os.path.split(filename)
-    if not os.path.isdir(root):
-        os.makedirs(root)
+    root, _ = files.path.split(filename)
+    if not files.path.isdir(root):
+        files.makedirs(root)
     torch.save(state, filename)
     if is_best:
-        d = os.path.dirname(filename)
-        f = os.path.basename(filename)
+        d = files.path.dirname(filename)
+        f = files.path.basename(filename)
         prts = f.split('.chkpt')
         shutil.copyfile(
             filename,
-            os.path.join(d, '.'.join([prts[0], 'best']) + ".tar")
+            files.path.join(d, '.'.join([prts[0], 'best']) + ".tar")
         )

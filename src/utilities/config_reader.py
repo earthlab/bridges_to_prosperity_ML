@@ -2,7 +2,7 @@
 Parser class that encapsulates configuration settings into different namespaces. This is done so strings are used as
 little as possible when accessing configuration values.
 """
-import os
+import files
 
 import yaml
 

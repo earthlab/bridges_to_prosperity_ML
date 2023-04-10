@@ -100,7 +100,7 @@ def create_composite(s2_dir: str, composite_dir: str, coord: str, bands: list, d
         assert len(band_files) > 1, f'{os.path.join(s2_dir, coord)}'
         with rasterio.open(band_files[0], 'r', driver='JP2OpenJPEG') as rf:
             g_nrows, g_ncols = rf.meta['width'], rf.meta['height']
-            crs = rf.crs
+            crs = rf.crs if rf.crs is not None else "WGS 84"
             transform = rf.transform
 
         # Handle slicing if necessary, slicing along rows only
@@ -136,7 +136,7 @@ def create_composite(s2_dir: str, composite_dir: str, coord: str, bands: list, d
                 cloud_channels = get_cloud_mask_from_file(cloud_files[0], crs, transform, (g_nrows, g_ncols), row_bound)
                 if cloud_channels is None:
                     continue
-                # add to list to do median filte later
+                # add to list to do median filter later
                 cloud_correct_imgs.append(nan_clouds(pixels, cloud_channels))
                 del pixels
             print('CCI', cloud_correct_imgs)

@@ -1,3 +1,4 @@
+import multiprocessing
 import multiprocessing as mp
 import os
 from argparse import ArgumentParser
@@ -10,15 +11,15 @@ from definitions import COMPOSITE_DIR, SENTINEL_2_DIR
 from src.utilities import imaging
 
 
-def _composite_task(args):
+def _composite_task(task_args: Namespace):
     imaging.create_composite(
-        args.s2_dir, 
-        args.composite_dir, 
-        args.coord, 
+        task_args.s2_dir,
+        task_args.composite_dir,
+        task_args.coord,
         ['B02', 'B03', 'B04'],
         np.float32,
-        args.slices,
-        args.n_cores > 1
+        task_args.slices,
+        task_args.n_cores > 1
     )
     return None
 
@@ -91,7 +92,7 @@ if __name__ == '__main__':
         '-n',
         type=int, 
         required=False, 
-        default=1,
+        default=multiprocessing.cpu_count() - 1,
         help='number of cores to be used to paralellize these tasks)'
     )
     args = parser.parse_args()

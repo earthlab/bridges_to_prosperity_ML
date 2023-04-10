@@ -14,7 +14,7 @@ import yaml
 from definitions import B2P_DIR, REGION_FILE_PATH
 from src.api.sentinel2 import SinergiseSentinelAPI
 from src.utilities import imaging
-from src.utilities.aws import upload_to_s3
+from src.utilities.aws import upload_to_s3, initialize_s3
 from src.utilities.config_reader import CONFIG
 
 
@@ -26,7 +26,7 @@ from src.utilities.config_reader import CONFIG
 
 def get_optical_data(sentinel_2_dir: str, composite_dir: str, bands: List[str], buffer: float, slices: int,
                      s3_bucket: str, requested_regions: List[str] = None, keep_s2_dir: bool = False):
-    s3_session = boto3.Session().client('s3')
+    s3_session = initialize_s3(CONFIG.AWS.BUCKET)
 
     with open(REGION_FILE_PATH, 'r') as file:
         region_info = yaml.safe_load(file)

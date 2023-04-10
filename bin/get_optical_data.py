@@ -43,7 +43,7 @@ def get_optical_data(sentinel_2_dir: str, composite_dir: str, bands: List[str], 
     print('======================================================')
     print('Starting script')
     for region, info in region_info.items():
-        if requested_regions is not None and region.lower() not in requested_regions:
+        if requested_regions is not None and region not in requested_regions:
             continue
 
         dates = info['dates']

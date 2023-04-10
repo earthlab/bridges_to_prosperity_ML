@@ -139,7 +139,7 @@ def create_composite(s2_dir: str, composite_dir: str, coord: str, bands: list, d
                 # add to list to do median filte later
                 cloud_correct_imgs.append(nan_clouds(pixels, cloud_channels))
                 del pixels
-
+            print('CCI', cloud_correct_imgs)
             corrected_stack = np.vstack([img.ravel() for img in cloud_correct_imgs])
             median_corrected = np.nanmedian(corrected_stack, axis=0, overwrite_input=True)
             median_corrected = median_corrected.reshape(cloud_correct_imgs[0].shape)

@@ -36,12 +36,27 @@ Cote d'Ivoire:
       bbox: [-5.7390, 6.8419, -4.4934, 8.5552]
 Ethiopia:
   dates: [
-    
+    [ '2017-02-01','2018-03-31' ],
+    [ '2018-02-01','2019-03-31' ],
+    [ '2019-02-01','2020-03-31' ],
   ]
   districts:
+    Somali:
+      spec: 'inference'
+      bbox: [48.59, 8.48, 44.01, 10.14]
+    Oromia:
+      spec: 'inference'
+      bbox: [38.74, 7.14, 40.78, 8.83]
     Sidama: 
       spec: 'inference'
-      bbox: [37.3370, 4.9131, 39.7018, 8.3881]
+      bbox: [37.96, 6.11, 39.2, 7.11]
+    Gurage:
+      spec: 'inference'
+      bbox: [37.54, 7.84, 38.78, 8.45]
+    Special Woreda:
+      spec: 'inference'
+      bbox: [37.391, 7.559, 37.616, 8.012]
+
 Rwanda: 
   dates: [
     ['2017-06-01','2017-07-31'],

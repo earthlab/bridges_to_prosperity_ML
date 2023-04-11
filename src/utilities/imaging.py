@@ -59,6 +59,7 @@ def get_cloud_mask_from_file(cloud_path, crs, transform, shape, row_bound=None):
     warnings.filterwarnings("ignore", category=RuntimeWarning)
     try:
         print('CLOUD PATH', cloud_path)
+        print('CRS', crs)
         cloud_file = gpd.read_file(cloud_path)
         cloud_file.crs = (str(crs))
         # convert the cloud mask data to a raster that has the same shape and transformation as the
@@ -103,7 +104,7 @@ def create_composite(s2_dir: str, composite_dir: str, coord: str, bands: list, d
         assert len(band_files) > 1, f'{os.path.join(s2_dir, coord)}'
         with rasterio.open(band_files[0], 'r', driver='JP2OpenJPEG') as rf:
             g_nrows, g_ncols = rf.meta['width'], rf.meta['height']
-            crs = rf.crs if rf.crs is not None else "epsg:4326"
+            crs = rf.crs if rf.crs is not None else "wgs84"
             transform = rf.transform
 
         # Handle slicing if necessary, slicing along rows only

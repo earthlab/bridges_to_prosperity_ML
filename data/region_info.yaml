@@ -41,9 +41,9 @@ Ethiopia:
     [ '2019-02-01', '2020-03-31' ]
   ]
   districts:
-    Somali:
+    Fafan:
       spec: 'inference'
-      bbox: [48.59, 8.48, 44.01, 10.14]
+      bbox: [42.59, 8.48, 44.01, 10.14]
     Oromia:
       spec: 'inference'
       bbox: [38.74, 7.14, 40.78, 8.83]
@@ -53,9 +53,12 @@ Ethiopia:
     Gurage:
       spec: 'inference'
       bbox: [37.54, 7.84, 38.78, 8.45]
-    Special Woreda:
+    Yem:
       spec: 'inference'
       bbox: [37.391, 7.559, 37.616, 8.012]
+    Sheka:
+      spec: ''
+      bbox: [35.15, 7.08, 35.72, 7.86]
 
 Rwanda: 
   dates: [

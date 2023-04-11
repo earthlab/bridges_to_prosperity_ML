@@ -103,7 +103,7 @@ def create_composite(s2_dir: str, composite_dir: str, coord: str, bands: list, d
         assert len(band_files) > 1, f'{os.path.join(s2_dir, coord)}'
         with rasterio.open(band_files[0], 'r', driver='JP2OpenJPEG') as rf:
             g_nrows, g_ncols = rf.meta['width'], rf.meta['height']
-            crs = rf.crs if rf.crs is not None else "wgs84"
+            crs = rf.crs if rf.crs is not None else "epsg:4326"
             transform = rf.transform
 
         # Handle slicing if necessary, slicing along rows only

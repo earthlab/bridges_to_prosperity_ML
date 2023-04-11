@@ -57,6 +57,7 @@ def get_cloud_mask_from_file(cloud_path, crs, transform, shape, row_bound=None):
     # https://stackoverflow.com/questions/64995369/geopandas-warning-on-read-file
     warnings.filterwarnings("ignore", category=RuntimeWarning)
     # try:
+    print('CLOUD PATH', cloud_path)
     cloud_file = gpd.read_file(cloud_path)
     cloud_file.crs = (str(crs))
     # convert the cloud mask data to a raster that has the same shape and transformation as the

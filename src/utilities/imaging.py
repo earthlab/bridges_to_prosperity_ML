@@ -3,6 +3,7 @@ import shutil
 import warnings
 from glob import glob
 from typing import Union
+import traceback
 
 import geopandas as gpd
 import numpy as np
@@ -56,25 +57,26 @@ def get_cloud_mask_from_file(cloud_path, crs, transform, shape, row_bound=None):
     # filter out RuntimeWarnings, due to geopandas/fiona read file spam
     # https://stackoverflow.com/questions/64995369/geopandas-warning-on-read-file
     warnings.filterwarnings("ignore", category=RuntimeWarning)
-    # try:
-    print('CLOUD PATH', cloud_path)
-    cloud_file = gpd.read_file(cloud_path)
-    cloud_file.crs = (str(crs))
-    # convert the cloud mask data to a raster that has the same shape and transformation as the
-    # img raster data
-    cloud_img = features.rasterize(
-        (
-            (g['geometry'], 1) for v, g in cloud_file.iterrows()
-        ),
-        out_shape=shape,
-        transform=transform,
-        all_touched=True
-    )
-    if row_bound is None:
-        return np.where(cloud_img == 0, 1, 0)
-    return np.where(cloud_img[row_bound[0]:row_bound[1], :] == 0, 1, 0)
-    # except Exception as e:
-    #     return None
+    try:
+        print('CLOUD PATH', cloud_path)
+        cloud_file = gpd.read_file(cloud_path)
+        cloud_file.crs = (str(crs))
+        # convert the cloud mask data to a raster that has the same shape and transformation as the
+        # img raster data
+        cloud_img = features.rasterize(
+            (
+                (g['geometry'], 1) for v, g in cloud_file.iterrows()
+            ),
+            out_shape=shape,
+            transform=transform,
+            all_touched=True
+        )
+        if row_bound is None:
+            return np.where(cloud_img == 0, 1, 0)
+        return np.where(cloud_img[row_bound[0]:row_bound[1], :] == 0, 1, 0)
+    except Exception as e:
+        print(traceback.format_exc())
+        return None
 
 
 def nan_clouds(pixels, cloud_channels, max_pixel_val: float = MAX_PIXEL_VAL):

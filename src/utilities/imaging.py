@@ -184,7 +184,7 @@ def create_composite(s2_dir: str, composite_dir: str, coord: str, bands: list, d
             dtype=dtype
     ) as wf:
         for band in tqdm(bands, total=n_bands, desc='Combining bands...', leave=False, position=1, disable=pbar):
-            j = BANDS_TO_IX[bands]
+            j = BANDS_TO_IX[band]
             with rasterio.open(os.path.join(composite_dir, coord, f'{band}.tiff'), 'r', driver='GTiff') as rf:
                 wf.write(rf.read(1), indexes=j)
     shutil.rmtree(os.path.join(composite_dir, coord))

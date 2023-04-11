@@ -293,14 +293,28 @@ class Metrics:
 
         fpr, tpr, thresholds = metrics.roc_curve(self._validation_set[self._validation_column], positive_confidences)
 
+        gmean = np.sqrt(tpr * (1 - fpr))
+
+        # Find the optimal threshold
+        index = np.argmax(gmean)
+        thresholdOpt = round(thresholds[index], ndigits=4)
+        gmeanOpt = round(gmean[index], ndigits=4)
+        fprOpt = round(fpr[index], ndigits=4)
+        tprOpt = round(tpr[index], ndigits=4)
+        print('Best Threshold: {} with G-Mean: {}'.format(thresholdOpt, gmeanOpt))
+        print('FPR: {}, TPR: {}'.format(fprOpt, tprOpt))
+
         plt.plot(fpr, tpr)
+        plt.plot([0, 1], [0, 1], linestyle='--')
 
         plt.title('Receiver operating characteristic (ROC) curve')
         plt.ylabel('True positive rate')
         plt.xlabel('False positive rate')
 
-        # Save or show the plot
+        # Save or show the plot![](../../../../../../../var/folders/94/t8rm1cdd27d7b64yjmvykh4h0000gp/T/TemporaryItems/NSIRD_screencaptureui_WZ6T3R/Screenshot 2023-04-11 at 2.36.28 PM.png)
         if outpath is not None:
             plt.savefig(outpath)
         else:
             plt.show()
+
+        return fpr, tpr, thresholds

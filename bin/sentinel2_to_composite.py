@@ -97,7 +97,7 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
-    if args.s2_dir is None or args.composite_dir is None and (args.region is None or args.district is None):
+    if (args.s2_dir is None or args.composite_dir is None) and (args.region is None or args.district is None):
         raise ValueError('Must specify --region and --district if --s2_dir or --composite dir is not specified')
 
     s2_dir = os.path.join(SENTINEL_2_DIR, args.region, args.district) if args.s2_dir is None else args.s2_dir

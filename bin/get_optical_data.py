@@ -110,7 +110,7 @@ if __name__ == "__main__":
                         help='The regions to download data and create composites for. If not specified, all regions '
                              'in the data/region_info.yaml file will be prepared. Multiple regions are separated by'
                              ' commas from the command line. Ex. zambia,cote divoire,ethiopa')
-    parser.add_argument('--districts', '-r', required=False, nargs='+', type=str,
+    parser.add_argument('--districts', '-d', required=False, nargs='+', type=str,
                         help='The districts to download data and create composites for. If not specified, '
                              'all districts for each region file will be prepared. Multiple districts are separated '\
                              'by commas from the command line. Ex. zambia,cote divoire,ethiopa')

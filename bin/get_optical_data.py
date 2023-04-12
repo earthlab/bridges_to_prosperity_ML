@@ -61,6 +61,7 @@ def get_optical_data(sentinel_2_dir: str, composite_dir: str, bands: List[str], 
             # Define src and dst dirs
             district_s2_dir = os.path.join(sentinel_2_dir, region, district)
             district_composite_dir = os.path.join(composite_dir, region, district)
+            print(district_s2_dir, district_composite_dir)
             os.makedirs(district_s2_dir, exist_ok=True)
             os.makedirs(district_composite_dir, exist_ok=True)
 
@@ -69,6 +70,7 @@ def get_optical_data(sentinel_2_dir: str, composite_dir: str, bands: List[str], 
             print('downloading sentinel2')
             for date in dates:
                 start_date, end_date = date
+                print(start_date, end_date)
                 api.download(bbox, buffer, district_s2_dir, start_date, end_date)
 
             # create composite

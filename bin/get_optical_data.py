@@ -110,11 +110,11 @@ if __name__ == "__main__":
     parser.add_argument('--regions', '-r', required=False, nargs='+', type=str,
                         help='The regions to download data and create composites for. If not specified, all regions '
                              'in the data/region_info.yaml file will be prepared. Multiple regions are separated by'
-                             ' commas from the command line. Ex. zambia,cote divoire,ethiopa')
+                             ' spaces from the command line. Ex. zambia ethiopa')
     parser.add_argument('--districts', '-d', required=False, nargs='+', type=str,
-                        help='The districts to download data and create composites for. If not specified, '
-                             'all districts for each region file will be prepared. Multiple districts are separated '\
-                             'by commas from the command line. Ex. zambia,cote divoire,ethiopa')
+                        help="The districts to download data and create composites for. If not specified, "
+                             "all districts for each region file will be prepared. Multiple districts are separated "\
+                             "by spaces from the command line. Ex. zambia 'cote divoire' ethiopa")
     parser.add_argument('--s2_dir', '-s', required=False, type=str,
                         default=os.path.join(B2P_DIR, 'data', 'sentinel2'),
                         help='Path to the base directory where sentinel 2 files will be written to. Set to '

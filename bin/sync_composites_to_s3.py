@@ -17,7 +17,6 @@ from src.utilities.config_reader import CONFIG
 def sync_s3(root_composite_dir: str, s3_bucket_name: str, s3_directory: str):
     comp_files = glob(os.path.join(root_composite_dir, '**', '*_multiband.tiff'), recursive=True)
     s3 = initialize_s3(s3_bucket_name)
-    s3 = boto3.client('s3')
 
     for filename in tqdm(comp_files, leave=True, position=0):
         file_size = os.stat(filename).st_size

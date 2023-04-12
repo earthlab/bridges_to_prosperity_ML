@@ -81,7 +81,7 @@ def get_optical_data(sentinel_2_dir: str, composite_dir: str, bands: List[str], 
                     continue
 
                 print(f'Creating composite for {region}/{district}/{coord}...')
-                multi_band_file_path = imaging.create_composite(district_s2_dir, composite_dir, coord, bands,
+                multi_band_file_path = imaging.create_composite(district_s2_dir, district_composite_dir, coord, bands,
                                                                 np.float32,
                                                                 slices, False)
                 upload_to_s3(s3_session, multi_band_file_path,

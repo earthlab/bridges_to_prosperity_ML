@@ -25,7 +25,8 @@ from src.utilities.config_reader import CONFIG
 
 
 def get_optical_data(sentinel_2_dir: str, composite_dir: str, bands: List[str], buffer: float, slices: int,
-                     s3_bucket: str, requested_regions: List[str] = None, keep_s2_dir: bool = False):
+                     s3_bucket: str, requested_regions: List[str] = None, requested_districts: List[str] = None,
+                     keep_s2_dir: bool = False):
     s3_session = initialize_s3(CONFIG.AWS.BUCKET)
 
     with open(REGION_FILE_PATH, 'r') as file:
@@ -49,8 +50,8 @@ def get_optical_data(sentinel_2_dir: str, composite_dir: str, bands: List[str], 
         dates = info['dates']
 
         for district, district_info in info['districts'].items():
-            # if district_info['spec'] != 'train':
-            #     continue
+            if requested_districts is not None and district not in requested_districts:
+                continue
             bbox = district_info['bbox']
             print(f'{region}/{district}\n'
                   f'\tdates : {dates}\n'
@@ -109,6 +110,10 @@ if __name__ == "__main__":
                         help='The regions to download data and create composites for. If not specified, all regions '
                              'in the data/region_info.yaml file will be prepared. Multiple regions are separated by'
                              ' commas from the command line. Ex. zambia,cote divoire,ethiopa')
+    parser.add_argument('--districts', '-r', required=False, nargs='+', type=str,
+                        help='The districts to download data and create composites for. If not specified, '
+                             'all districts for each region file will be prepared. Multiple districts are separated '\
+                             'by commas from the command line. Ex. zambia,cote divoire,ethiopa')
     parser.add_argument('--s2_dir', '-s', required=False, type=str,
                         default=os.path.join(B2P_DIR, 'data', 'sentinel2'),
                         help='Path to the base directory where sentinel 2 files will be written to. Set to '
@@ -132,6 +137,6 @@ if __name__ == "__main__":
                         help='Name of the s3 bucket that the composites and Sentinel2 files will be uploaded to')
     args = parser.parse_args()
 
-    get_optical_data(requested_regions=args.regions, sentinel_2_dir=args.s2_dir, bands=args.bands, buffer=args.buffer,
-                     slices=args.slices, s3_bucket=args.s3_bucket, composite_dir=args.composite_dir,
-                     keep_s2_dir=args.keep_s2)
+    get_optical_data(requested_regions=args.regions, requested_districts=args.districts, sentinel_2_dir=args.s2_dir,
+                     bands=args.bands, buffer=args.buffer, slices=args.slices, s3_bucket=args.s3_bucket,
+                     composite_dir=args.composite_dir, keep_s2_dir=args.keep_s2)

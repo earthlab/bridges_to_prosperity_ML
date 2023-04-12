@@ -21,7 +21,7 @@ def sync_s3(root_composite_dir: str, s3_bucket_name: str, s3_directory: str):
 
     for filename in tqdm(comp_files, leave=True, position=0):
         file_size = os.stat(filename).st_size
-        key = os.path.join(s3_directory, filename.strip(root_composite_dir))
+        key = os.path.join(s3_directory, filename.replace(root_composite_dir, ''))
         with tqdm(total=file_size, unit='B', unit_scale=True, desc=filename, leave=False, position=1) as pbar:
             s3.upload_file(
                 Filename=filename,

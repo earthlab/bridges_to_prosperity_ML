@@ -110,7 +110,7 @@ class B2PNoTruthDataset(BaseB2PDataset):
         image, tile_file, bbox = super()._calc_item(idx)
 
         # return none for target value
-        return image, tile_file, None, bbox
+        return image, tile_file, [], bbox
 
 
 class B2PTruthDataset(BaseB2PDataset):

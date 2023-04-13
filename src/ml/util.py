@@ -21,10 +21,97 @@ TFORM = transforms.Compose(
 )
 
 
-class B2PDataset(torch.utils.data.Dataset):
+class BaseB2PDataset(torch.utils.data.Dataset):
 
     # Make it so np doesn't yell about using str
     warnings.simplefilter(action='ignore', category=FutureWarning)
+
+    def __init__(self, transform=None, batch_size=1):
+        """
+        Args:
+            csv_file (string): Path to the csv file with annotations.
+            transform (callable, optional): Optional transform to be applied
+                on a sample.
+        """
+        self.tiles = None
+        self.bbox = None
+        self.classes = ['bridge', 'no bridge']
+        self.class_to_idx = {'bridge': 1, 'no bridge': 0}
+        self.transform = transform
+        self.batch_size = batch_size
+
+        # Set info for iteration
+        self.__term = len(self.tiles) - 1
+        self.__curr = 0
+
+    def _calc_item(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        tile_file = self.tiles[idx]
+        assert isinstance(tile_file, str), 'tile_file is a {}, = {}'.format(type(tile_file), tile_file)
+        image = torch.load(tile_file)
+        bbox = self.bbox[idx]
+        w, c, h = image.shape
+        if w == h and w != c:
+            image = torch.moveaxis(image, 1, 0)
+        if self.transform:
+            image = self.transform(image)
+
+        return image, tile_file, bbox
+
+    def __len__(self):
+        return len(self.tiles)
+
+    def __getitem__(self, idx):
+        return self._calc_item(idx)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        # Terminate if range over, otherwise return current, calculate next.
+        try:
+            if self.__curr > self.__term:
+                self.__curr = 0
+                raise StopIteration()
+            (cur, self.__curr) = (self.__curr, self.__curr + 1)
+            return self._calc_item(cur)
+        except KeyError:
+            self._curr = 0
+
+
+class B2PNoTruthDataset(BaseB2PDataset):
+
+    def __init__(self, csv_file, transform=None, batch_size=1):
+        """
+        Args:
+            csv_file (string): Path to the csv file with annotations.
+            transform (callable, optional): Optional transform to be applied
+                on a sample.
+        """
+        super().__init__(transform, batch_size)
+        df = pd.read_csv(
+            csv_file,
+            index_col=0,
+            dtype={
+                'tile': str,
+                'bbox': object
+            }
+        )
+        self.df = df
+
+        self.tiles = df['tile']
+        self.bbox = df['bbox']
+
+    def _calc_item(self, idx):
+        image, tile_file, bbox = super()._calc_item(idx)
+
+        # return none for target value
+        return image, tile_file, None, bbox
+
+
+class B2PTruthDataset(BaseB2PDataset):
 
     def __init__(self, csv_file, transform=None, batch_size=1, ratio=None, replacement=False):
         """
@@ -33,6 +120,7 @@ class B2PDataset(torch.utils.data.Dataset):
             transform (callable, optional): Optional transform to be applied
                 on a sample.
         """
+        super().__init__(transform, batch_size)
         df = pd.read_csv(
             csv_file,
             index_col=0,
@@ -56,15 +144,6 @@ class B2PDataset(torch.utils.data.Dataset):
             self.bbox = df['bbox']
             self.is_bridge = df['is_bridge']
 
-        self.classes = ['bridge', 'no bridge']
-        self.class_to_idx = {'bridge': 1, 'no bridge': 0}
-        self.transform = transform
-        self.batch_size = batch_size
-
-        # Set info for iteration
-        self.__term = len(self.tiles) - 1
-        self.__curr = 0
-
     def update(self):
         if self.ratio is None:
             return
@@ -87,41 +166,10 @@ class B2PDataset(torch.utils.data.Dataset):
         self.is_bridge.index = [i for i in range(len(self.is_bridge))]
 
     def _calc_item(self, idx):
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
-
-        tile_file = self.tiles[idx]
+        image, tile_file, bbox = super()._calc_item(idx)
         is_bridge = self.is_bridge[idx]
-        assert isinstance(tile_file, str), 'tile_file is a {}, = {}'.format(type(tile_file), tile_file)
-        image = torch.load(tile_file)
-        bbox = self.bbox[idx]
-        w, c, h = image.shape
-        if w == h and w != c:
-            image = torch.moveaxis(image, 1, 0)
-        if self.transform:
-            image = self.transform(image)
 
         return image, int(is_bridge), tile_file, bbox
-
-    def __len__(self):
-        return len(self.tiles)
-
-    def __getitem__(self, idx):
-        return self._calc_item(idx)
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        # Terminate if range over, otherwise return current, calculate next.
-        try:
-            if self.__curr > self.__term:
-                self.__curr = 0
-                raise StopIteration()
-            (cur, self.__curr) = (self.__curr, self.__curr + 1)
-            return self._calc_item(cur)
-        except KeyError:
-            self._curr = 0
 
 
 class Summary(Enum):

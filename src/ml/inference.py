@@ -5,11 +5,11 @@ import pandas as pd
 import torch
 import torchvision
 
-from src.ml.util import B2PDataset, AverageMeter, ProgressMeter
+from src.ml.util import B2PNoTruthDataset, B2PTruthDataset, AverageMeter, ProgressMeter
 
 
-def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: str, batch_size: int = 1000, gpu = None,
-                    num_workers: int = 12, print_frequency: int = 100):
+def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: str, truth_data: bool,
+                    batch_size: int = 1000, gpu=None, num_workers: int = 12, print_frequency: int = 100):
     os.makedirs(os.path.basename(results_csv_path), exist_ok=True)
     architecture = os.path.basename(model_file_path).split('.')[0]
     print("Using pre-trained model '{}'".format(architecture))
@@ -42,7 +42,7 @@ def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: 
 
     model.load_state_dict(checkpoint['state_dict'], strict=False)
 
-    dset = B2PDataset(tile_csv_path)
+    dset = B2PTruthDataset(tile_csv_path) if truth_data else B2PNoTruthDataset(tile_csv_path)
     dloader = torch.utils.data.DataLoader(
         dset,
         batch_size=batch_size,
@@ -50,8 +50,9 @@ def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: 
         num_workers=num_workers
     )
     n = dset.__len__()
+    columns = ['tile', 'bbox', 'target', 'pred', 'conf'] if truth_data else ['tile', 'bbox', 'pred', 'conf']
     res_df = pd.DataFrame(
-        columns=['tile', 'bbox', 'target', 'pred', 'conf'],
+        columns=columns,
         index=range(n)
     )
     # switch to evaluate mode
@@ -67,7 +68,6 @@ def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: 
         )
 
         end = time.time()
-
         for i, (data, target, tile, bbox) in enumerate(dloader):
             data_time.update(time.time() - end)
             # move data to the same device as model
@@ -85,7 +85,8 @@ def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: 
             )
             res_df.loc[ix, 'tile'] = tile
             res_df.loc[ix, 'bbox'] = bbox
-            res_df.loc[ix, 'target'] = target
+            if target is not None:
+                res_df.loc[ix, 'target'] = target
             res_df.loc[ix, 'pred'] = pred.cpu().numpy()
             res_df.loc[ix, 'conf'] = conf.cpu().numpy()
             # update time

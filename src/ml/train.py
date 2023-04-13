@@ -18,7 +18,7 @@ from torch import nn
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Subset
 
-from src.ml.util import AverageMeter, ProgressMeter, Summary, accuracy, B2PDataset, TFORM
+from src.ml.util import AverageMeter, ProgressMeter, Summary, accuracy, B2PTruthDataset, TFORM
 
 MODEL_NAME = sorted(name for name in torchvision.models.__dict__ if name.islower() and not name.startswith("__")
                     and callable(torchvision.models.__dict__[name]))
@@ -211,14 +211,14 @@ def main_worker(gpu, ngpus_per_node, args):
     val_csv = args.test_csv_path
     assert os.path.isfile(train_csv), f'file dne: {train_csv}'
     assert os.path.isfile(val_csv), f'file dne: {val_csv}'
-    train_dataset = B2PDataset(
+    train_dataset = B2PTruthDataset(
         train_csv,
         TFORM,
         args.batch_size,
         ratio=args.bridge_no_bridge_ratio
     )
 
-    val_dataset = B2PDataset(
+    val_dataset = B2PTruthDataset(
         val_csv,
         TFORM,
         args.batch_size,

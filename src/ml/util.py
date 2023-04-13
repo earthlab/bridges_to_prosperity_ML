@@ -41,7 +41,6 @@ class BaseB2PDataset(torch.utils.data.Dataset):
         self.batch_size = batch_size
 
         # Set info for iteration
-        self.__term = len(self.tiles) - 1
         self.__curr = 0
 
     def _calc_item(self, idx):
@@ -104,6 +103,9 @@ class B2PNoTruthDataset(BaseB2PDataset):
         self.tiles = df['tile']
         self.bbox = df['bbox']
 
+        # Set info for iteration
+        self.__term = len(self.tiles) - 1
+
     def _calc_item(self, idx):
         image, tile_file, bbox = super()._calc_item(idx)
 
@@ -143,6 +145,9 @@ class B2PTruthDataset(BaseB2PDataset):
             self.tiles = df['tile']
             self.bbox = df['bbox']
             self.is_bridge = df['is_bridge']
+
+        # Set info for iteration
+        self.__term = len(self.tiles) - 1
 
     def update(self):
         if self.ratio is None:

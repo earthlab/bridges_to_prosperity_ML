@@ -47,9 +47,9 @@ def initialize_s3(bucket_name: str = CONFIG.AWS.BUCKET):
 
     # First try to authenticate with properly configured IAM profile
     try:
-        s3 = boto3.client('s3')
+        s3 = boto3.resource('s3')
         s3.meta.client.head_bucket(Bucket=bucket_name)
-        return s3
+        return boto3.client('s3')
 
     # If that doesn't work try to get credentials from ~/.aws/credentials file and start a new session
     except botocore.exceptions.NoCredentialsError:

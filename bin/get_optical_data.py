@@ -5,7 +5,7 @@ locally and uploaded to s3 along with the Sentinel 2 files used to create the co
 import argparse
 import multiprocessing
 import os
-import tqdm
+from tqdm import tqdm
 import subprocess
 from typing import List
 

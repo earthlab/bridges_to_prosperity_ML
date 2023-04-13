@@ -54,11 +54,13 @@ def composites_to_tiles(in_dir: str, out_dir: str, truth_dir: str, cores: int):
                 n
             )
             for n, cs in enumerate(np.array_split(composites, cores))]
-        process_map(
+        matched_df = process_map(
             create_tiles,
             inputs,
             max_workers=cores
         )
+        matched_df = pd.concat(matched_df, ignore_index=True)
+        matched_df.to_csv(os.path.join(out_dir, 'matched.csv'))
 
 
 if __name__ == '__main__':

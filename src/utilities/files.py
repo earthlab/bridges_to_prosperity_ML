@@ -29,7 +29,7 @@ def list_of_vertices(in_list):
     return [[in_list[0], in_list[1]], [in_list[2], in_list[3]], [in_list[4], in_list[5]], [in_list[6], in_list[7]]]
 
 
-def results_csv_to_shapefile(csv_path: str):
+def results_csv_to_shapefile(csv_path: str, out_path: str):
     df = pd.read_csv(csv_path)
     geometry = []
     for bbox in df['bbox']:
@@ -40,4 +40,4 @@ def results_csv_to_shapefile(csv_path: str):
             print(points)
 
     gdf = GeoDataFrame(df, crs="EPSG:4326", geometry=geometry)
-    gdf.to_file('uganda_rwanda_1.5')
+    gdf.to_file(out_path)

@@ -31,10 +31,10 @@ def create_tiles(arg):
     return df
 
 
-def composites_to_tiles(in_dir: str, out_dir: str, truth_dir: str, cores: int):
+def composites_to_tiles(in_dir: str, out_dir: str, truth_dir: str, no_truth: bool, cores: int):
     os.makedirs(out_dir, exist_ok=True)
 
-    bridge_locations = get_bridge_locations(truth_dir)
+    bridge_locations = None if no_truth else get_bridge_locations(truth_dir)
     composites = glob(os.path.join(in_dir, "**/*multiband.tiff"), recursive=True)
     if args.cores == 1:
         create_tiles(
@@ -83,6 +83,12 @@ if __name__ == '__main__':
         help='Path to directory where output files will be written'
     )
     parser.add_argument(
+        '--no_truth',
+        '-nt',
+        action='store_true',
+        help='If set then no truth data will be used to create output dataframe'
+    )
+    parser.add_argument(
         '--truth_dir',
         '-t', 
         type=str, 
@@ -101,4 +107,5 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
 
-    composites_to_tiles(in_dir=args.in_dir, out_dir=args.out_dir, truth_dir=args.truth_dir, cores=args.cores)
+    composites_to_tiles(in_dir=args.in_dir, out_dir=args.out_dir, truth_dir=args.truth_dir, no_truth=args.no_truth,
+                        cores=args.cores)

@@ -276,16 +276,17 @@ def tiff_to_tiles(
     xsteps = np.arange(0, rf.RasterXSize, nxpix).astype(np.int64).tolist()
     ysteps = np.arange(0, rf.RasterYSize, nypix).astype(np.int64).tolist()
 
-    bbox = tiff_to_bbox(multiband_tiff)
-    this_bridge_locs = []
-    p = polygon.Polygon(bbox)
-    for loc in bridge_locations:
-        if p.contains(loc):
-            this_bridge_locs.append(loc)
+    if bridge_locations is not None:
+        bbox = tiff_to_bbox(multiband_tiff)
+        this_bridge_locs = []
+        p = polygon.Polygon(bbox)
+        for loc in bridge_locations:
+            if p.contains(loc):
+                this_bridge_locs.append(loc)
     numTiles = len(xsteps) * len(ysteps)
     torch_transformer = ToTensor()
     df = pd.DataFrame(
-        columns=['tile', 'bbox', 'is_bridge', 'bridge_loc'],
+        columns=['tile', 'bbox', 'is_bridge', 'bridge_loc'] if bridge_locations is not None else ['tile', 'bbox'],
         index=range(numTiles)
     )
     if tqdm_update_rate is None:
@@ -314,9 +315,10 @@ def tiff_to_tiles(
                 bbox = tiff_to_bbox(tile_tiff)
                 df.at[k, 'tile'] = pt_file
                 df.at[k, 'bbox'] = bbox
-                df.at[k, 'is_bridge'], df.at[k, 'bridge_loc'], ix = bridge_in_bbox(bbox, this_bridge_locs)
-                if ix is not None:
-                    this_bridge_locs.pop(ix)
+                if bridge_locations is not None:
+                    df.at[k, 'is_bridge'], df.at[k, 'bridge_loc'], ix = bridge_in_bbox(bbox, this_bridge_locs)
+                    if ix is not None:
+                        this_bridge_locs.pop(ix)
                 if not os.path.isfile(pt_file):
                     with rasterio.open(tile_tiff, 'r') as tmp:
                         scale_img = scale(tmp.read())

@@ -26,7 +26,7 @@ def inference_optical(model_file_path: str, tile_csv_path: str, results_csv_path
         batch_size=batch_size,
         num_workers=num_workers,
         print_frequency=print_frequency,
-        truth_data=truth
+        truth_data=truth_data
     )
 
 

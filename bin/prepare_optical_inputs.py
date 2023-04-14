@@ -135,7 +135,6 @@ def prepare_optical_inputs(requested_locations: List[str] = None, composites_dir
             inputs,
             max_workers=cores
         )
-        matched_df = pd.concat(matched_df, ignore_index=True)
 
         print(f"Creating data set at {district_tile_dir}")
         create_dset_csv(matched_df, train_to_test_ratio, os.path.join(district_tile_dir))

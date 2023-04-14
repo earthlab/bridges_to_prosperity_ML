@@ -59,7 +59,6 @@ def composites_to_tiles(in_dir: str, out_dir: str, truth_dir: str, no_truth: boo
             inputs,
             max_workers=cores
         )
-        matched_df = pd.concat(matched_df, ignore_index=True)
         matched_df.to_csv(os.path.join(out_dir, 'matched.csv'))
 
 

@@ -94,6 +94,8 @@ class APIAuth:
                 f'--role={self.ACCOUNT_TO_ARN[aws_account]}', '--skip-prompt', '--force'
             ])
 
+            self.parse_aws_credentials()
+
             return boto3.client(
                 's3',
                 aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],

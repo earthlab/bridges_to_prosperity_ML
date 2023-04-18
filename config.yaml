@@ -3,4 +3,5 @@
 'torch':
     'inference':
         'batch_size': 1000
-        'num_workers': 12
+        'num_workers': 12 # This needs to be moved and dynamic
+

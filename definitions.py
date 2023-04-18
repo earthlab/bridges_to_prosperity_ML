@@ -8,6 +8,7 @@ TILE_DIR = os.path.join(B2P_DIR, 'data', 'tiles')
 TRUTH_DIR = os.path.join(B2P_DIR, 'data', 'ground_truth')
 SENTINEL_2_DIR = os.path.join(B2P_DIR, 'data', 'sentinel2')
 TORCH_DIR = os.path.join(B2P_DIR, 'data', 'torch')
+SECRETS_FILE_PATH = os.path.join(B2P_DIR, 'secrets.yaml')
 
 # S3
 S3_COMPOSITE_DIR = 'composites'

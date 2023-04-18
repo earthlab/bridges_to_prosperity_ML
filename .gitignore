@@ -5,3 +5,4 @@
 core.*
 *.ipynb_checkpoints
 *.tar*
+secrets.yaml

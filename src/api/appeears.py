@@ -1,5 +1,6 @@
 import getpass
 import os
+import shutil
 from typing import Tuple, List
 from argparse import Namespace
 from tqdm import tqdm
@@ -11,6 +12,11 @@ import certifi
 from http.cookiejar import CookieJar
 from osgeo import gdal
 from osgeo import osr
+import zipfile
+from array import array
+import tempfile
+import rasterio
+from rasterio.merge import merge
 
 import yaml
 
@@ -18,7 +24,6 @@ from definitions import B2P_DIR, REGION_FILE_PATH
 from src.api.util import generate_secrets_file
 
 import requests
-
 
 BASE_URL = 'https://appeears.earthdatacloud.nasa.gov/api/'
 
@@ -296,7 +301,6 @@ class Elevation(BaseAPI):
 
 
 class Slope(BaseAPI):
-
     BASE_URL = 'https://e4ftl01.cr.usgs.gov/MEASURES/NASADEM_SC.001/2000.02.11/'
 
     def __init__(self):
@@ -311,7 +315,7 @@ class Slope(BaseAPI):
         if 'SSL_CERT_FILE' not in os.environ or os.environ['SSL_CERT_FILE'] != ssl_cert_path:
             os.environ['SSL_CERT_FILE'] = ssl_cert_path
 
-        if'REQUESTS_CA_BUNDLE' not in os.environ or os.environ['REQUESTS_CA_BUNDLE'] != ssl_cert_path:
+        if 'REQUESTS_CA_BUNDLE' not in os.environ or os.environ['REQUESTS_CA_BUNDLE'] != ssl_cert_path:
             os.environ['REQUESTS_CA_BUNDLE'] = ssl_cert_path
 
     def _download(self, query: Tuple[str, str]) -> None:
@@ -322,9 +326,7 @@ class Slope(BaseAPI):
             query (tuple): Contains the remote location and the local path destination, respectively
         """
         link = query[0]
-        dest = query[1]
-
-        print(link, dest)
+        out_dir = query[1]
 
         pm = urllib.request.HTTPPasswordMgrWithDefaultRealm()
         pm.add_password(None, "https://urs.earthdata.nasa.gov", self._username, self._password)
@@ -337,6 +339,9 @@ class Slope(BaseAPI):
         myrequest = urllib.request.Request(link)
         response = urllib.request.urlopen(myrequest)
         response.begin()
+
+        dest = os.path.join(out_dir, os.path.basename(link))
+
         with open(dest, 'wb') as fd:
             while True:
                 chunk = response.read()
@@ -345,7 +350,26 @@ class Slope(BaseAPI):
                 else:
                     break
 
-        self._binary_to_tiff(dest)
+        # First unzip the file and then find the .slope file
+        unzipped_dir = dest.replace('.zip', '')
+        os.makedirs(unzipped_dir, exist_ok=True)
+        with zipfile.ZipFile(dest, 'r') as zip_ref:
+            zip_ref.extractall(unzipped_dir)
+
+        slope_file = None
+        for file in os.listdir(unzipped_dir):
+            if file.endswith('.slope'):
+                slope_file = os.path.join(unzipped_dir, file)
+                break
+
+        if slope_file is not None:
+            self._binary_to_tif(slope_file, out_dir)
+        else:
+            raise FileNotFoundError(f'Could not find .slope file in {unzipped_dir}')
+
+        # Just want the .tif file at the end
+        shutil.rmtree(unzipped_dir)
+        os.remove(dest)
 
     @staticmethod
     def _create_substrings(min_deg: int, max_deg: int, min_ord: str, max_ord: str, padding: int) -> List[str]:
@@ -354,13 +378,13 @@ class Slope(BaseAPI):
         if min_ord == max_ord:
             abs_min = min(min_deg, max_deg)
             abs_max = max(min_deg, max_deg)
-            deg_range = np.arange(abs_min, abs_max + 1, 1)
+            deg_range = np.arange(abs_min, abs_max, 1)
             for deg in deg_range:
                 substrings.append(min_ord + format_str.format(deg))
         else:
             # Only other combo would be min_lon_ord is w and max_lon_ord is e
-            neg_range = np.arange(1, min_deg + 1, 1)
-            pos_range = np.arange(0, max_deg + 1, 1)
+            neg_range = np.arange(1, min_deg, 1)
+            pos_range = np.arange(0, max_deg, 1)
             for deg in neg_range:
                 substrings.append(min_ord + format_str.format(deg))
             for deg in pos_range:
@@ -371,7 +395,7 @@ class Slope(BaseAPI):
     def _resolve_filenames(self, bbox: List[float]):
         """
         Files are stored with the following naming convention: NASADEM_SC_n00e011.zip where n00 is 0 deg latitude and
-        e011 is 11 deg longitude, refering to the lower left coordinate of the data file. So create all the possible
+        e011 is 11 deg longitude, referring to the lower left coordinate of the data file. So create all the possible
         file name combination from the bounding box.
         """
         min_lon = bbox[0]
@@ -419,10 +443,25 @@ class Slope(BaseAPI):
 
         return file_names
 
-    def download_bbox(self, bbox: List[int]):
-        file_names = self._resolve_filenames(bbox)
-        self._download((os.path.join(self.BASE_URL, file_names[0]),
-                        '/Users/erick/Desktop/Work/bridges_to_prosperity_ML/data/NASADEM_SC_n06e005.zip'))
+    def download_bbox(self, bbox: List[int], output_file: str):
+        temp_dir = tempfile.mkdtemp(prefix='b2p')
+
+        try:
+            # 1) Download all overlapping files
+            # 2) Convert raw binary .slope files into geo-referenced tiff
+            file_names = self._resolve_filenames(bbox)
+            for file_name in file_names:
+                self._download((os.path.join(self.BASE_URL, file_name), temp_dir))
+
+            # 3) Create a composite of all tiffs in the temp_dir
+            self._mosaic_tiff_files(temp_dir, output_file=output_file)
+
+            # 4) Cleanup
+            shutil.rmtree(temp_dir)
+
+        except Exception as e:
+            shutil.rmtree(temp_dir)
+            raise e
 
     @staticmethod
     def _coords_from_filename(infile: str):
@@ -431,37 +470,58 @@ class Slope(BaseAPI):
         match = re.search(r"[ns](\d{2})[we](\d{3})", infile)
         if match:
             n_or_s = match.group(0)[0]
-            e_or_w = match.group(0)[-1]
+            e_or_w = match.group(0)[3]
             n_value = match.group(1)
             e_value = match.group(2)
 
         lat = float(n_value) * (1 if n_or_s == 'n' else -1)
         lon = float(e_value) * (1 if e_or_w == 'e' else -1)
 
-        return lat, lon
+        return [lon, lat]
 
-    def _binary_to_tiff(self, infile: str):
+    def _binary_to_tif(self, infile: str, out_dir: str):
         """
         SLOPE layers are non-georeferenced binary files which need to be converted to a more useful file type
-        (in this case .tiff). A discussion about this can be found
+        (in this case .tif). A discussion about this can be found
         here: https://forum.earthdata.nasa.gov/viewtopic.php?t=553
         """
         columns = 3601
         rows = 3601
 
         with open(infile, 'rb') as f:
-            data = np.fromfile(f, dtype=np.uint16).reshape((columns, rows))
+            data = np.fromfile(f, dtype='>u2')  # Big endian encoding for slope data
 
-        tiff_path = os.path.join(os.path.dirname(infile), os.path.basename(infile).replace('.slope', '.tiff'))
+        data = data.reshape(columns, rows) / 100  # Slope data has a scale factor of 100
 
-        # File name tells us bottom left coordinate, geotransform needs top left
+        tiff_path = os.path.join(out_dir, os.path.basename(infile).replace('.slope', '.tif'))
+
+        # File name tells us bottom left coordinate, geotransform needs top left so add 1 deg to lat
         upper_left_coords = self._coords_from_filename(infile)
+        upper_left_coords[1] = upper_left_coords[1] + 1
 
         numpy_array_to_raster(output_path=tiff_path, numpy_array=data, upper_left_tuple=upper_left_coords)
 
+    @staticmethod
+    def _mosaic_tiff_files(input_dir: str, output_file: str):
+        # Specify the input directory containing the TIFF files
+        tiff_files = [os.path.join(input_dir, f) for f in os.listdir(input_dir) if
+                      f.endswith('.tif')]  # Open all the TIFF files using rasterio
+        src_files_to_mosaic = []
+        for file in tiff_files:
+            src = rasterio.open(file)
+            src_files_to_mosaic.append(src)  # Merge the TIFF files using rasterio.merge
+        mosaic, out_trans = merge(src_files_to_mosaic)  # Specify the output file path and name
+        out_meta = src.meta.copy()
+        out_meta.update({"driver": "GTiff",
+                         "height": mosaic.shape[1],
+                         "width": mosaic.shape[2],
+                         "transform": out_trans})  # Write the merged TIFF file to disk using rasterio
+        with rasterio.open(output_file, "w", **out_meta) as dest:
+            dest.write(mosaic)
+
 
 """
-Code for converting numpy array into a tiff file, credit
+Code for converting numpy array into a tiff file, credit:
 https://gis.stackexchange.com/questions/290776/how-to-create-a-tiff-file-using-gdal-from-a-numpy-array-and-specifying-nodata-va
 """
 
@@ -470,7 +530,7 @@ def create_raster(output_path,
                   columns,
                   rows,
                   nband=1,
-                  gdal_data_type=gdal.GDT_Int32,
+                  gdal_data_type=gdal.GDT_UInt16,
                   driver=r'GTiff'):
     # create driver
     driver = gdal.GetDriverByName(driver)
@@ -489,7 +549,7 @@ def numpy_array_to_raster(output_path,
                           cell_resolution=0.000277777777777778,
                           nband=1,
                           no_data=15,
-                          gdal_data_type=gdal.GDT_Int32,
+                          gdal_data_type=gdal.GDT_UInt16,
                           spatial_reference_system_wkid=4326,
                           driver=r'GTiff'):
     ''' returns a gdal raster data source
@@ -518,10 +578,10 @@ def numpy_array_to_raster(output_path,
 
     geotransform = (upper_left_tuple[0],
                     cell_resolution,
-                    upper_left_tuple[1] + cell_resolution,
-                    -1 * (cell_resolution),
                     0,
-                    0)
+                    upper_left_tuple[1],
+                    0,
+                    - 1 * cell_resolution)
 
     spatial_reference = osr.SpatialReference()
     spatial_reference.ImportFromEPSG(spatial_reference_system_wkid)

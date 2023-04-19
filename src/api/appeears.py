@@ -406,6 +406,7 @@ class BaseAPI(ABC):
             raise ValueError(f'No district {district} found for region {region}')
 
         bbox = region_info['districts'][district]['bbox']
+        print(out_file, bbox, buffer, download_task)
         self.download_bbox(out_file, bbox, buffer, download_task)
 
     def download_bbox(self, out_file: str, bbox: List[float], buffer: float, download_task: Any):

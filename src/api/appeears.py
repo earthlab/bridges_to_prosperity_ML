@@ -1,3 +1,8 @@
+"""
+Classes wrapping http requests to NASA EarthData servers for SRTMGL1 v003 elevation data and NASADEM_SC v001 slope and
+curvature data.
+"""
+
 import getpass
 import os
 import shutil
@@ -26,15 +31,15 @@ from definitions import B2P_DIR, REGION_FILE_PATH
 from src.api.util import generate_secrets_file
 
 
-# TODO: Write comments
-
-
 def _base_download_task(task_args: Namespace) -> None:
     """
-    Downloads data from the NASA earthdata servers. Authentication is established using the username and password
-    found in the local ~/.netrc file.
+    Downloads data from the NASA earthdata servers. Authentication is established using the username and password.
     Args:
-        query (tuple): Contains the remote location and the local path destination, respectively
+        task_args (Namespace): Contains attributes required for requesting data from EarthData servers
+            task_args.link (str): URL to datafile on servers
+            task_args.username (str): NASA EarthData username
+            task_args.password (str): NASA EarthData password
+            task_args.dest (str): Path to where the data will be written
     """
     link = task_args.link
 
@@ -63,10 +68,18 @@ def _base_download_task(task_args: Namespace) -> None:
 
 def _slope_download_task(task_args: Namespace) -> None:
     """
-    Downloads data from the NASA earthdata servers. Authentication is established using the username and password
-    found in the local ~/.netrc file.
+    Downloads NASADEM_SC v001 slope data from EarthData servers. Zip file containing .slope layer is downloaded and must
+    first be uncompressed. The .slope file is a raw binary file and must be converted to a more useful file structure
+    (.tif). A description of the binary file structure can be found here:
+    https://forum.earthdata.nasa.gov/viewtopic.php?t=553
     Args:
-
+        task_args (Namespace): Contains attributes required for requesting data from EarthData servers
+            task_args.link (str): URL to datafile on servers
+            task_args.out_dir (str): Path to directory where files will be written
+            task_args.username (str): NASA EarthData username
+            task_args.password (str): NASA EarthData password
+            task_args.top_left_coord (list): List giving coordinate of top left of image [lon, lat] so tif file can be
+            geo-referenced
     """
     dest = os.path.join(task_args.out_dir, os.path.basename(task_args.link))
     task_args.dest = dest
@@ -94,9 +107,9 @@ def _slope_download_task(task_args: Namespace) -> None:
     os.remove(dest)
 
 
-def _binary_to_tif(infile: str, out_dir: str, top_left_coord: List[float]):
+def _binary_to_tif(infile: str, out_dir: str, top_left_coord: List[float]) -> None:
     """
-    SLOPE layers are non-georeferenced binary files which need to be converted to a more useful file type
+    SLOPE layers are non-geo-referenced binary files which need to be converted to a more useful file type
     (in this case .tif). A discussion about this can be found here: https://forum.earthdata.nasa.gov/viewtopic.php?t=553
     """
     columns = 3601
@@ -113,56 +126,51 @@ def _binary_to_tif(infile: str, out_dir: str, top_left_coord: List[float]):
 
 
 # Methods for converting numpy array into a tiff file, credit:
-# https://gis.stackexchange.com/questions/290776/how-to-create-a-tiff-file-using-gdal-from-a-numpy-array-and-specifying-nodata-va
+#
 
-def _create_raster(output_path,
-                   columns,
-                   rows,
-                   nband=1,
-                   gdal_data_type=gdal.GDT_UInt16,
-                   driver=r'GTiff'):
+def _create_raster(output_path: str, columns: int, rows: int, n_band: int = 1, gdal_data_type: int = gdal.GDT_UInt16,
+                   driver: str = r'GTiff'):
+    """
+    Credit:
+    https://gis.stackexchange.com/questions/290776/how-to-create-a-tiff-file-using-gdal-from-a-numpy-array-and-
+    specifying-nodata-va
+
+    Creates a blank raster for data to be written to
+    Args:
+        output_path (str): Path where the output tif file will be written to
+        columns (int): Number of columns in raster
+        rows (int): Number of rows in raster
+        n_band (int): Number of bands in raster
+        gdal_data_type (int): Data type for data written to raster
+        driver (str): Driver for conversion
+    """
     # create driver
     driver = gdal.GetDriverByName(driver)
 
-    output_raster = driver.Create(output_path,
-                                  int(columns),
-                                  int(rows),
-                                  nband,
-                                  eType=gdal_data_type)
+    output_raster = driver.Create(output_path, columns, rows, n_band, eType=gdal_data_type)
     return output_raster
 
 
-def _numpy_array_to_raster(output_path,
-                           numpy_array,
-                           top_left_coord,
-                           cell_resolution=0.000277777777777778,
-                           nband=1,
-                           no_data=15,
-                           gdal_data_type=gdal.GDT_UInt16,
-                           spatial_reference_system_wkid=4326):
+def _numpy_array_to_raster(output_path: str, numpy_array: np.array, top_left_coord: List[float],
+                           cell_resolution: float = 0.000277777777777778, n_band: int = 1,
+                           no_data: int = 15, gdal_data_type: int = gdal.GDT_UInt16,
+                           spatial_reference_system_wkid: int = 4326):
     """
     Returns a gdal raster data source
     Args:
-        output_path -- full path to the raster to be written to disk
-        numpy_array -- numpy array containing data to write to raster
-        upper_left_tuple -- the upper left point of the numpy array (should be a tuple structured as (x, y))
-        cell_resolution -- the cell resolution of the output raster
-        nband -- the band to write to in the output raster
-        no_data -- value in numpy array that should be treated as no data
-        gdal_data_type -- gdal data type of raster (see gdal documentation for list of values)
-        spatial_reference_system_wkid -- well known id (wkid) of the spatial reference of the data
-        driver -- string value of the gdal driver to use
-
+        output_path (str): Full path to the raster to be written to disk
+        numpy_array (np.array): Numpy array containing data to write to raster
+        top_left_coord (List): The upper left point of the numpy array (should be a tuple structured as (lon, lat))
+        cell_resolution (float): The cell resolution of the output raster
+        n_band (int): The band to write to in the output raster
+        no_data (int): Value in numpy array that should be treated as no data
+        gdal_data_type (int): Gdal data type of raster (see gdal documentation for list of values)
+        spatial_reference_system_wkid (int): Well known id (wkid) of the spatial reference of the data
     """
     rows, columns = numpy_array.shape
 
     # create output raster
-    output_raster = _create_raster(output_path,
-                                   int(columns),
-                                   int(rows),
-                                   nband,
-                                   gdal_data_type)
-
+    output_raster = _create_raster(output_path, int(columns), int(rows), n_band, gdal_data_type)
     geo_transform = (
         top_left_coord[0],
         cell_resolution,
@@ -193,10 +201,16 @@ def _numpy_array_to_raster(output_path,
 
 def _elevation_download_task(task_args: Namespace) -> None:
     """
-    Downloads data from the NASA earthdata servers. Authentication is established using the username and password
-    found in the local ~/.netrc file.
+    Downloads SRTMGL1 v003 slope data from EarthData servers. Files are downloaded as netCDF files and are thus
+    converted to tif files so file structures are uniform throughout the api
     Args:
-
+        task_args (Namespace): Contains attributes required for requesting data from EarthData servers
+            task_args.link (str): URL to datafile on servers
+            task_args.out_dir (str): Path to directory where files will be written
+            task_args.username (str): NASA EarthData username
+            task_args.password (str): NASA EarthData password
+            task_args.top_left_coord (list): List giving coordinate of top left of image [lon, lat] so tif file can be
+            geo-referenced
     """
     dest = os.path.join(task_args.out_dir, os.path.basename(task_args.link))
     task_args.dest = dest
@@ -209,7 +223,13 @@ def _elevation_download_task(task_args: Namespace) -> None:
 
 
 def _nc_to_tif(nc_path: str, top_left_coord: List[float], out_dir: str,
-               cell_resolution: float = 0.000277777777777778):
+               cell_resolution: float = 0.000277777777777778) -> None:
+    """
+    Converts netCDF files to tif file. Band that will be transferred to tif file needs to be extracted and
+    geo-referencing needs to be added as well.
+    Args:
+        nc_path (
+    """
     # Open the netCDF file
     nc_file = Dataset(nc_path)
 

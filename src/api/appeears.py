@@ -252,10 +252,10 @@ class Elevation(BaseAPI):
             self._mosaic_tif_files(temp_dir, output_file=output_file)
 
             # 4) Cleanup
-            #shutil.rmtree(temp_dir)
+            shutil.rmtree(temp_dir)
 
         except Exception as e:
-            #shutil.rmtree(temp_dir)
+            shutil.rmtree(temp_dir)
             raise e
 
     def _download(self, query: Tuple[str, str]) -> None:
@@ -270,9 +270,9 @@ class Elevation(BaseAPI):
         bottom_left_coords = self._coords_from_filename(os.path.basename(dest))
         bottom_left_coords[1] = bottom_left_coords[1] + 1
         self._nc_to_tif(dest, bottom_left_coords, out_dir)
-        print(dest)
+
         # Just want the .tif file at the end
-        #os.remove(dest)
+        os.remove(dest)
 
     @staticmethod
     def _nc_to_tif(nc_path: str, upper_left_tuple: List[float], out_dir: str,

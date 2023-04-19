@@ -276,7 +276,7 @@ class Elevation(BaseAPI):
         with rasterio.open(nc_path) as src:
 
             # Reproject and resample the netCDF data to the output GeoTIFF CRS and resolution
-            dst_crs = 'EPSG:4326'
+            dst_crs = 'wgs84'
             dst_transform, dst_width, dst_height = rasterio.warp.calculate_default_transform(
                 src.crs, dst_crs, src.width, src.height, *src.bounds)
             kwargs = src.meta.copy()

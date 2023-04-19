@@ -25,6 +25,11 @@ from definitions import B2P_DIR, REGION_FILE_PATH
 from src.api.util import generate_secrets_file
 
 
+# TODO: Write comments
+# TODO: Parallelize things
+# TODO: Use regions / districts as input parameters for download
+
+
 class BaseAPI:
     """
     Defines all the attributes and methods common to the child APIs.

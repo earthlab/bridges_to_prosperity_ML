@@ -184,7 +184,7 @@ class BaseAPI:
         if 'REQUESTS_CA_BUNDLE' not in os.environ or os.environ['REQUESTS_CA_BUNDLE'] != ssl_cert_path:
             os.environ['REQUESTS_CA_BUNDLE'] = ssl_cert_path
 
-    def download_bbox(self, bbox: List[int], output_file: str, layer_extension: str):
+    def download_bbox(self, bbox: List[int], output_file: str):
         temp_dir = tempfile.mkdtemp(prefix='b2p')
 
         try:
@@ -193,7 +193,7 @@ class BaseAPI:
             file_names = self._resolve_filenames(bbox)
             for file_name in file_names:
                 print(os.path.join(self.BASE_URL, file_name))
-                self._download((os.path.join(self.BASE_URL, file_name), temp_dir), layer_extension)
+                self._download((os.path.join(self.BASE_URL, file_name), temp_dir))
 
             # 3) Create a composite of all tiffs in the temp_dir
             self._mosaic_tiff_files(temp_dir, output_file=output_file)
@@ -422,9 +422,6 @@ class Elevation(BaseAPI):
         # Just want the .tif file at the end
         os.remove(dest)
 
-    def download_bbox(self, bbox: List[int], output_file: str, layer_extension: str = '.hgt'):
-        super().download_bbox(bbox, output_file, layer_extension)
-
 
 class Slope(BaseAPI):
     BASE_URL = 'https://e4ftl01.cr.usgs.gov/MEASURES/NASADEM_SC.001/2000.02.11/'
@@ -487,6 +484,3 @@ class Slope(BaseAPI):
         # Just want the .tif file at the end
         shutil.rmtree(unzipped_dir)
         os.remove(dest)
-
-    def download_bbox(self, bbox: List[int], output_file: str, layer_extension: str = '.slope'):
-        super().download_bbox(bbox, output_file, layer_extension)

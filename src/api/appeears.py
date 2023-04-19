@@ -269,9 +269,9 @@ class Elevation(BaseAPI):
 
         bottom_left_coords = self._coords_from_filename(os.path.basename(dest))
         self._nc_to_tif(dest, bottom_left_coords, out_dir)
-
+        print(dest)
         # Just want the .tif file at the end
-        os.remove(dest)
+        #os.remove(dest)
 
     @staticmethod
     def _nc_to_tif(nc_path: str, upper_left_tuple: List[float], out_dir: str,

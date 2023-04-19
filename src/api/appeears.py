@@ -70,7 +70,7 @@ class BaseAPI:
 
         return username, password
 
-    def _download(self, query: Tuple[str, str], layer_extension: str) -> None:
+    def _download(self, query: Tuple[str, str]) -> Tuple[str, str]:
         """
         Downloads data from the NASA earthdata servers. Authentication is established using the username and password
         found in the local ~/.netrc file.
@@ -102,28 +102,7 @@ class BaseAPI:
                 else:
                     break
 
-        print(os.listdir(out_dir))
-
-        # First unzip the file and then find the .slope file
-        unzipped_dir = dest.replace('.zip', '')
-        os.makedirs(unzipped_dir, exist_ok=True)
-        with zipfile.ZipFile(dest, 'r') as zip_ref:
-            zip_ref.extractall(unzipped_dir)
-
-        slope_file = None
-        for file in os.listdir(unzipped_dir):
-            if file.endswith(layer_extension):
-                slope_file = os.path.join(unzipped_dir, file)
-                break
-
-        if slope_file is not None:
-            self._binary_to_tif(slope_file, out_dir)
-        else:
-            raise FileNotFoundError(f'Could not find {layer_extension} file in {unzipped_dir}')
-
-        # Just want the .tif file at the end
-        shutil.rmtree(unzipped_dir)
-        os.remove(dest)
+        return dest, out_dir
 
     @staticmethod
     def _create_substrings(min_deg: int, max_deg: int, min_ord: str, max_ord: str, padding: int) -> List[str]:
@@ -429,6 +408,20 @@ class Elevation(BaseAPI):
 
         return [lon, lat]
 
+    def _download(self, query: Tuple[str, str]) -> None:
+        """
+        Downloads data from the NASA earthdata servers. Authentication is established using the username and password
+        found in the local ~/.netrc file.
+        Args:
+            query (tuple): Contains the remote location and the local path destination, respectively
+        """
+        dest, out_dir = super()._download(query)
+
+        self._binary_to_tif(dest, out_dir)
+
+        # Just want the .tif file at the end
+        os.remove(dest)
+
     def download_bbox(self, bbox: List[int], output_file: str, layer_extension: str = '.hgt'):
         super().download_bbox(bbox, output_file, layer_extension)
 
@@ -464,6 +457,36 @@ class Slope(BaseAPI):
         lon = float(e_value) * (1 if e_or_w == 'e' else -1)
 
         return [lon, lat]
+
+    def _download(self, query: Tuple[str, str]) -> None:
+        """
+        Downloads data from the NASA earthdata servers. Authentication is established using the username and password
+        found in the local ~/.netrc file.
+        Args:
+            query (tuple): Contains the remote location and the local path destination, respectively
+        """
+        dest, out_dir = super()._download(query)
+
+        # First unzip the file and then find the .slope file
+        unzipped_dir = dest.replace('.zip', '')
+        os.makedirs(unzipped_dir, exist_ok=True)
+        with zipfile.ZipFile(dest, 'r') as zip_ref:
+            zip_ref.extractall(unzipped_dir)
+
+        slope_file = None
+        for file in os.listdir(unzipped_dir):
+            if file.endswith('.slope'):
+                slope_file = os.path.join(unzipped_dir, file)
+                break
+
+        if slope_file is not None:
+            self._binary_to_tif(slope_file, out_dir)
+        else:
+            raise FileNotFoundError(f'Could not find .slope file in {unzipped_dir}')
+
+        # Just want the .tif file at the end
+        shutil.rmtree(unzipped_dir)
+        os.remove(dest)
 
     def download_bbox(self, bbox: List[int], output_file: str, layer_extension: str = '.slope'):
         super().download_bbox(bbox, output_file, layer_extension)

@@ -267,13 +267,16 @@ class Elevation(BaseAPI):
         """
         dest, out_dir = super()._download(query)
 
-        self._nc_to_tif(dest, out_dir)
+        upper_left_coords = self._coords_from_filename(os.path.basename(dest))
+        upper_left_coords[1] = upper_left_coords[1] + 1
+        self._nc_to_tif(dest, upper_left_coords, out_dir)
 
         # Just want the .tif file at the end
         os.remove(dest)
 
     @staticmethod
-    def _nc_to_tif(nc_path: str, out_dir: str):
+    def _nc_to_tif(nc_path: str, upper_left_tuple: List[float, float], out_dir: str,
+                   cell_resolution: float = 0.000277777777777778):
         # Open the netCDF file
         nc_file = Dataset(nc_path)
 
@@ -294,7 +297,14 @@ class Elevation(BaseAPI):
         proj = osr.SpatialReference()
         proj.ImportFromWkt(str(crs))
         tif_dataset.SetProjection(proj.ExportToWkt())
-        tif_dataset.SetGeoTransform((x[0], x[1] - x[0], 0, y[-1], 0, y[-1] - y[-2]))
+        tif_dataset.SetGeoTransform(
+            (upper_left_tuple[0],
+             cell_resolution,
+             0,
+             upper_left_tuple[1],
+             0,
+             - 1 * cell_resolution)
+        )
 
         # Write the data to the GeoTIFF file
         tif_band = tif_dataset.GetRasterBand(1)

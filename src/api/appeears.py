@@ -275,7 +275,7 @@ class Elevation(BaseAPI):
         os.remove(dest)
 
     @staticmethod
-    def _nc_to_tif(nc_path: str, upper_left_tuple: List[float, float], out_dir: str,
+    def _nc_to_tif(nc_path: str, upper_left_tuple: List[float], out_dir: str,
                    cell_resolution: float = 0.000277777777777778):
         # Open the netCDF file
         nc_file = Dataset(nc_path)

@@ -1,7 +1,7 @@
 import getpass
 import os
 import shutil
-from typing import Tuple, List
+from typing import Tuple, List, Any
 from argparse import Namespace
 from tqdm import tqdm
 import re
@@ -18,6 +18,7 @@ import rasterio
 from rasterio.merge import merge
 from netCDF4 import Dataset
 import multiprocessing as mp
+from abc import ABC
 
 import yaml
 
@@ -26,8 +27,6 @@ from src.api.util import generate_secrets_file
 
 
 # TODO: Write comments
-# TODO: Parallelize things
-# TODO: Use regions / districts as input parameters for download
 
 
 def _base_download_task(task_args: Namespace) -> None:
@@ -58,6 +57,138 @@ def _base_download_task(task_args: Namespace) -> None:
                 fd.write(chunk)
             else:
                 break
+
+
+# Functions for slope parallel data processing
+
+def _slope_download_task(task_args: Namespace) -> None:
+    """
+    Downloads data from the NASA earthdata servers. Authentication is established using the username and password
+    found in the local ~/.netrc file.
+    Args:
+
+    """
+    dest = os.path.join(task_args.out_dir, os.path.basename(task_args.link))
+    task_args.dest = dest
+    _base_download_task(task_args)
+
+    # First unzip the file and then find the .slope file
+    unzipped_dir = dest.replace('.zip', '')
+    os.makedirs(unzipped_dir, exist_ok=True)
+    with zipfile.ZipFile(dest, 'r') as zip_ref:
+        zip_ref.extractall(unzipped_dir)
+
+    slope_file = None
+    for file in os.listdir(unzipped_dir):
+        if file.endswith('.slope'):
+            slope_file = os.path.join(unzipped_dir, file)
+            break
+
+    if slope_file is not None:
+        _binary_to_tif(slope_file, task_args.out_dir, task_args.top_left_coord)
+    else:
+        raise FileNotFoundError(f'Could not find .slope file in {unzipped_dir}')
+
+    # Just want the .tif file at the end
+    shutil.rmtree(unzipped_dir)
+    os.remove(dest)
+
+
+def _binary_to_tif(infile: str, out_dir: str, top_left_coord: List[float]):
+    """
+    SLOPE layers are non-georeferenced binary files which need to be converted to a more useful file type
+    (in this case .tif). A discussion about this can be found here: https://forum.earthdata.nasa.gov/viewtopic.php?t=553
+    """
+    columns = 3601
+    rows = 3601
+
+    with open(infile, 'rb') as f:
+        data = np.fromfile(f, dtype='>u2')  # Big endian encoding for slope data
+
+    data = data.reshape(columns, rows) / 100  # Slope data has a scale factor of 100
+
+    tiff_path = os.path.join(out_dir, os.path.basename(infile).replace('.slope', '.tif'))
+
+    _numpy_array_to_raster(output_path=tiff_path, numpy_array=data, top_left_coord=top_left_coord)
+
+
+# Methods for converting numpy array into a tiff file, credit:
+# https://gis.stackexchange.com/questions/290776/how-to-create-a-tiff-file-using-gdal-from-a-numpy-array-and-specifying-nodata-va
+
+def _create_raster(output_path,
+                   columns,
+                   rows,
+                   nband=1,
+                   gdal_data_type=gdal.GDT_UInt16,
+                   driver=r'GTiff'):
+    # create driver
+    driver = gdal.GetDriverByName(driver)
+
+    output_raster = driver.Create(output_path,
+                                  int(columns),
+                                  int(rows),
+                                  nband,
+                                  eType=gdal_data_type)
+    return output_raster
+
+
+def _numpy_array_to_raster(output_path,
+                           numpy_array,
+                           top_left_coord,
+                           cell_resolution=0.000277777777777778,
+                           nband=1,
+                           no_data=15,
+                           gdal_data_type=gdal.GDT_UInt16,
+                           spatial_reference_system_wkid=4326):
+    """
+    Returns a gdal raster data source
+    Args:
+        output_path -- full path to the raster to be written to disk
+        numpy_array -- numpy array containing data to write to raster
+        upper_left_tuple -- the upper left point of the numpy array (should be a tuple structured as (x, y))
+        cell_resolution -- the cell resolution of the output raster
+        nband -- the band to write to in the output raster
+        no_data -- value in numpy array that should be treated as no data
+        gdal_data_type -- gdal data type of raster (see gdal documentation for list of values)
+        spatial_reference_system_wkid -- well known id (wkid) of the spatial reference of the data
+        driver -- string value of the gdal driver to use
+
+    """
+    rows, columns = numpy_array.shape
+
+    # create output raster
+    output_raster = _create_raster(output_path,
+                                   int(columns),
+                                   int(rows),
+                                   nband,
+                                   gdal_data_type)
+
+    geo_transform = (
+        top_left_coord[0],
+        cell_resolution,
+        0,
+        top_left_coord[1],
+        0,
+        - 1 * cell_resolution
+    )
+
+    spatial_reference = osr.SpatialReference()
+    spatial_reference.ImportFromEPSG(spatial_reference_system_wkid)
+    output_raster.SetProjection(spatial_reference.ExportToWkt())
+    output_raster.SetGeoTransform(geo_transform)
+    output_band = output_raster.GetRasterBand(1)
+    output_band.SetNoDataValue(no_data)
+    output_band.WriteArray(numpy_array)
+    output_band.FlushCache()
+    output_band.ComputeStatistics(False)
+
+    if not os.path.exists(output_path):
+        raise Exception('Failed to create raster: %s' % output_path)
+
+    return output_raster
+
+
+# Functions for elevation parallel data processing
 
 
 def _elevation_download_task(task_args: Namespace) -> None:
@@ -117,7 +248,7 @@ def _nc_to_tif(nc_path: str, top_left_coord: List[float], out_dir: str,
     nc_file.close()
 
 
-class BaseAPI:
+class BaseAPI(ABC):
     """
     Defines all the attributes and methods common to the child APIs.
     """
@@ -263,39 +394,7 @@ class BaseAPI:
         with rasterio.open(output_file, "w", **out_meta) as dest:
             dest.write(mosaic)
 
-
-class Elevation(BaseAPI):
-    BASE_URL = 'https://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1_NC.003/2000.02.11/'
-
-    def __init__(self):
-        super().__init__()
-
-    def _resolve_filenames(self, bbox: List[float]):
-        lon_substrings, lat_substrings = super()._resolve_filenames(bbox)
-
-        file_names = []
-        for lon in lon_substrings:
-            for lat in lat_substrings:
-                file_names.append(f"{lat.upper()}{lon.upper()}.SRTMGL1_NC.nc")
-
-        return file_names
-
-    @staticmethod
-    def _coords_from_filename(infile: str):
-        infile = os.path.basename(infile)
-        match = re.search(r"[NS](\d{2})[WE](\d{3})", infile)
-        if match:
-            n_or_s = match.group(0)[0]
-            e_or_w = match.group(0)[3]
-            n_value = match.group(1)
-            e_value = match.group(2)
-
-        lat = float(n_value) * (1 if n_or_s == 'N' else -1) + 1  # File name gives bottom left so add 1 to get to top
-        lon = float(e_value) * (1 if e_or_w == 'E' else -1)
-
-        return [lon, lat]
-
-    def download_district(self, out_file: str, region: str, district: str, buffer: float):
+    def download_district(self, out_file: str, region: str, district: str, buffer: float, download_task: Any):
         with open(REGION_FILE_PATH, 'r') as f:
             region_file_info = yaml.load(f, Loader=yaml.FullLoader)
 
@@ -307,9 +406,9 @@ class Elevation(BaseAPI):
             raise ValueError(f'No district {district} found for region {region}')
 
         bbox = region_info['districts'][district]['bbox']
-        self.download_bbox(out_file, bbox, buffer)
+        self.download_bbox(out_file, bbox, buffer, download_task)
 
-    def download_bbox(self, out_file: str, bbox: List[float], buffer: float):
+    def download_bbox(self, out_file: str, bbox: List[float], buffer: float, download_task: Any):
 
         # Convert the buffer from meters to degrees lat/long at the equator
         buffer /= 111000
@@ -338,7 +437,7 @@ class Elevation(BaseAPI):
                 )
 
             with mp.Pool(mp.cpu_count() - 1) as pool:
-                for _ in tqdm(pool.imap_unordered(_elevation_download_task, task_args), total=len(task_args)):
+                for _ in tqdm(pool.imap_unordered(download_task, task_args), total=len(task_args)):
                     pass
 
             # 2) Create a composite of all tiffs in the temp_dir
@@ -350,6 +449,45 @@ class Elevation(BaseAPI):
         except Exception as e:
             shutil.rmtree(temp_dir)
             raise e
+
+    @staticmethod
+    def _coords_from_filename(infile: str):
+        infile = os.path.basename(infile)
+
+        match = re.search(r"[nsNS](\d{2})[weWE](\d{3})", infile)
+        if match:
+            n_or_s = match.group(0)[0]
+            e_or_w = match.group(0)[3]
+            n_value = match.group(1)
+            e_value = match.group(2)
+
+        lat = float(n_value) * (1 if n_or_s.lower() == 'n' else -1)
+        lon = float(e_value) * (1 if e_or_w.lower() == 'e' else -1)
+
+        return [lon, lat]
+
+
+class Elevation(BaseAPI):
+    BASE_URL = 'https://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1_NC.003/2000.02.11/'
+
+    def __init__(self):
+        super().__init__()
+
+    def _resolve_filenames(self, bbox: List[float]):
+        lon_substrings, lat_substrings = super()._resolve_filenames(bbox)
+
+        file_names = []
+        for lon in lon_substrings:
+            for lat in lat_substrings:
+                file_names.append(f"{lat.upper()}{lon.upper()}.SRTMGL1_NC.nc")
+
+        return file_names
+
+    def download_district(self, out_file: str, region: str, district: str, buffer: float):
+        super().download_district(out_file, region, district, buffer, _elevation_download_task)
+
+    def download_bbox(self, out_file: str, bbox: List[float], buffer: float):
+        super().download_bbox(out_file, bbox, buffer, _elevation_download_task)
 
 
 class Slope(BaseAPI):
@@ -368,167 +506,8 @@ class Slope(BaseAPI):
 
         return file_names
 
-    @staticmethod
-    def _coords_from_filename(infile: str):
-        infile = os.path.basename(infile)
+    def download_district(self, out_file: str, region: str, district: str, buffer: float):
+        super().download_district(out_file, region, district, buffer, _slope_download_task)
 
-        match = re.search(r"[ns](\d{2})[we](\d{3})", infile)
-        if match:
-            n_or_s = match.group(0)[0]
-            e_or_w = match.group(0)[3]
-            n_value = match.group(1)
-            e_value = match.group(2)
-
-        lat = float(n_value) * (1 if n_or_s == 'n' else -1)
-        lon = float(e_value) * (1 if e_or_w == 'e' else -1)
-
-        return [lon, lat]
-
-    def download_bbox(self, bbox: List[int], output_file: str):
-        temp_dir = tempfile.mkdtemp(prefix='b2p')
-
-        try:
-            # 1) Download all overlapping files
-            # 2) Convert raw binary .slope files into geo-referenced tiff
-            file_names = self._resolve_filenames(bbox)
-            for file_name in file_names:
-                print(os.path.join(self.BASE_URL, file_name))
-                self._download((os.path.join(self.BASE_URL, file_name), temp_dir))
-
-            # 3) Create a composite of all tiffs in the temp_dir
-            self._mosaic_tif_files(temp_dir, output_file=output_file)
-
-            # 4) Cleanup
-            shutil.rmtree(temp_dir)
-
-        except Exception as e:
-            shutil.rmtree(temp_dir)
-            raise e
-
-    def _download(self, query: Tuple[str, str]) -> None:
-        """
-        Downloads data from the NASA earthdata servers. Authentication is established using the username and password
-        found in the local ~/.netrc file.
-        Args:
-            query (tuple): Contains the remote location and the local path destination, respectively
-        """
-        dest, out_dir = super()._download(query)
-
-        # First unzip the file and then find the .slope file
-        unzipped_dir = dest.replace('.zip', '')
-        os.makedirs(unzipped_dir, exist_ok=True)
-        with zipfile.ZipFile(dest, 'r') as zip_ref:
-            zip_ref.extractall(unzipped_dir)
-
-        slope_file = None
-        for file in os.listdir(unzipped_dir):
-            if file.endswith('.slope'):
-                slope_file = os.path.join(unzipped_dir, file)
-                break
-
-        if slope_file is not None:
-            self._binary_to_tif(slope_file, out_dir)
-        else:
-            raise FileNotFoundError(f'Could not find .slope file in {unzipped_dir}')
-
-        # Just want the .tif file at the end
-        shutil.rmtree(unzipped_dir)
-        os.remove(dest)
-
-    def _binary_to_tif(self, infile: str, out_dir: str):
-        """
-        SLOPE layers are non-georeferenced binary files which need to be converted to a more useful file type
-        (in this case .tif). A discussion about this can be found
-        here: https://forum.earthdata.nasa.gov/viewtopic.php?t=553
-        """
-        columns = 3601
-        rows = 3601
-
-        with open(infile, 'rb') as f:
-            data = np.fromfile(f, dtype='>u2')  # Big endian encoding for slope data
-
-        data = data.reshape(columns, rows) / 100  # Slope data has a scale factor of 100
-
-        tiff_path = os.path.join(out_dir, os.path.basename(infile).replace('.slope', '.tif'))
-
-        # File name tells us bottom left coordinate, geotransform needs top left so add 1 deg to lat
-        upper_left_coords = self._coords_from_filename(infile)
-        upper_left_coords[1] = upper_left_coords[1] + 1
-
-        self._numpy_array_to_raster(output_path=tiff_path, numpy_array=data, upper_left_tuple=upper_left_coords)
-
-    # TODO: Create abstract method for coords_from_filename
-
-    # Methods for converting numpy array into a tiff file, credit:
-    # https://gis.stackexchange.com/questions/290776/how-to-create-a-tiff-file-using-gdal-from-a-numpy-array-and-specifying-nodata-va
-
-    @staticmethod
-    def _create_raster(output_path,
-                       columns,
-                       rows,
-                       nband=1,
-                       gdal_data_type=gdal.GDT_UInt16,
-                       driver=r'GTiff'):
-        # create driver
-        driver = gdal.GetDriverByName(driver)
-
-        output_raster = driver.Create(output_path,
-                                      int(columns),
-                                      int(rows),
-                                      nband,
-                                      eType=gdal_data_type)
-        return output_raster
-
-    def _numpy_array_to_raster(self,
-                               output_path,
-                               numpy_array,
-                               upper_left_tuple,
-                               cell_resolution=0.000277777777777778,
-                               nband=1,
-                               no_data=15,
-                               gdal_data_type=gdal.GDT_UInt16,
-                               spatial_reference_system_wkid=4326):
-        """
-        Returns a gdal raster data source
-        Args:
-            output_path -- full path to the raster to be written to disk
-            numpy_array -- numpy array containing data to write to raster
-            upper_left_tuple -- the upper left point of the numpy array (should be a tuple structured as (x, y))
-            cell_resolution -- the cell resolution of the output raster
-            nband -- the band to write to in the output raster
-            no_data -- value in numpy array that should be treated as no data
-            gdal_data_type -- gdal data type of raster (see gdal documentation for list of values)
-            spatial_reference_system_wkid -- well known id (wkid) of the spatial reference of the data
-            driver -- string value of the gdal driver to use
-
-        """
-        rows, columns = numpy_array.shape
-
-        # create output raster
-        output_raster = self._create_raster(output_path,
-                                            int(columns),
-                                            int(rows),
-                                            nband,
-                                            gdal_data_type)
-
-        geotransform = (upper_left_tuple[0],
-                        cell_resolution,
-                        0,
-                        upper_left_tuple[1],
-                        0,
-                        - 1 * cell_resolution)
-
-        spatial_reference = osr.SpatialReference()
-        spatial_reference.ImportFromEPSG(spatial_reference_system_wkid)
-        output_raster.SetProjection(spatial_reference.ExportToWkt())
-        output_raster.SetGeoTransform(geotransform)
-        output_band = output_raster.GetRasterBand(1)
-        output_band.SetNoDataValue(no_data)
-        output_band.WriteArray(numpy_array)
-        output_band.FlushCache()
-        output_band.ComputeStatistics(False)
-
-        if not os.path.exists(output_path):
-            raise Exception('Failed to create raster: %s' % output_path)
-
-        return output_raster
+    def download_bbox(self, out_file: str, bbox: List[float], buffer: float):
+        super().download_bbox(out_file, bbox, buffer, _slope_download_task)

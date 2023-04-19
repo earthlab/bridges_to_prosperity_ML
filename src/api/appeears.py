@@ -16,6 +16,7 @@ import zipfile
 import tempfile
 import rasterio
 from rasterio.merge import merge
+from rasterio.warp import reproject, Resampling
 
 import yaml
 
@@ -184,31 +185,8 @@ class BaseAPI:
         if 'REQUESTS_CA_BUNDLE' not in os.environ or os.environ['REQUESTS_CA_BUNDLE'] != ssl_cert_path:
             os.environ['REQUESTS_CA_BUNDLE'] = ssl_cert_path
 
-    def download_bbox(self, bbox: List[int], output_file: str):
-        temp_dir = tempfile.mkdtemp(prefix='b2p')
-
-        try:
-            # 1) Download all overlapping files
-            # 2) Convert raw binary .slope files into geo-referenced tiff
-            file_names = self._resolve_filenames(bbox)
-            for file_name in file_names:
-                print(os.path.join(self.BASE_URL, file_name))
-                self._download((os.path.join(self.BASE_URL, file_name), temp_dir))
-
-            # 3) Create a composite of all tiffs in the temp_dir
-            self._mosaic_tiff_files(temp_dir, output_file=output_file)
-
-            # 4) Cleanup
-            #shutil.rmtree(temp_dir)
-
-        except Exception as e:
-            print(temp_dir)
-            #shutil.rmtree(temp_dir)
-            raise e
-        print(temp_dir)
-
     @staticmethod
-    def _mosaic_tiff_files(input_dir: str, output_file: str):
+    def _mosaic_tif_files(input_dir: str, output_file: str):
         # Specify the input directory containing the TIFF files
         tiff_files = [os.path.join(input_dir, f) for f in os.listdir(input_dir) if
                       f.endswith('.tif')]  # Open all the TIFF files using rasterio
@@ -225,6 +203,184 @@ class BaseAPI:
                          "transform": out_trans})  # Write the merged TIFF file to disk using rasterio
         with rasterio.open(output_file, "w", **out_meta) as dest:
             dest.write(mosaic)
+
+
+class Elevation(BaseAPI):
+    BASE_URL = 'https://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1_NC.003/2000.02.11/'
+
+    def __init__(self):
+        super().__init__()
+
+    def _resolve_filenames(self, bbox: List[float]):
+        lon_substrings, lat_substrings = super()._resolve_filenames(bbox)
+
+        file_names = []
+        for lon in lon_substrings:
+            for lat in lat_substrings:
+                file_names.append(f"{lat.upper()}{lon.upper()}.SRTMGL1_NC.nc")
+
+        return file_names
+
+    @staticmethod
+    def _coords_from_filename(infile: str):
+        infile = os.path.basename(infile)
+        match = re.search(r"[NS](\d{2})[WE](\d{3})", infile)
+        if match:
+            n_or_s = match.group(0)[0]
+            e_or_w = match.group(0)[3]
+            n_value = match.group(1)
+            e_value = match.group(2)
+
+        lat = float(n_value) * (1 if n_or_s == 'N' else -1)
+        lon = float(e_value) * (1 if e_or_w == 'E' else -1)
+
+        return [lon, lat]
+
+    def download_bbox(self, bbox: List[int], output_file: str):
+        temp_dir = tempfile.mkdtemp(prefix='b2p')
+
+        try:
+            # 1) Download all overlapping files
+            # 2) Convert raw binary .slope files into geo-referenced tiff
+            file_names = self._resolve_filenames(bbox)
+            for file_name in file_names:
+                print(os.path.join(self.BASE_URL, file_name))
+                self._download((os.path.join(self.BASE_URL, file_name), temp_dir))
+
+            # 3) Create a composite of all tiffs in the temp_dir
+            self._mosaic_tif_files(temp_dir, output_file=output_file)
+
+            # 4) Cleanup
+            shutil.rmtree(temp_dir)
+
+        except Exception as e:
+            shutil.rmtree(temp_dir)
+            raise e
+
+    def _download(self, query: Tuple[str, str]) -> None:
+        """
+        Downloads data from the NASA earthdata servers. Authentication is established using the username and password
+        found in the local ~/.netrc file.
+        Args:
+            query (tuple): Contains the remote location and the local path destination, respectively
+        """
+        dest, out_dir = super()._download(query)
+
+        self._nc_to_tif(dest, out_dir)
+
+        # Just want the .tif file at the end
+        os.remove(dest)
+
+    @staticmethod
+    def _nc_to_tif(nc_path: str, out_dir: str):
+        with rasterio.open(nc_path) as src:
+
+            # Reproject and resample the netCDF data to the output GeoTIFF CRS and resolution
+            dst_crs = 'EPSG:4326'
+            dst_transform, dst_width, dst_height = rasterio.warp.calculate_default_transform(
+                src.crs, dst_crs, src.width, src.height, *src.bounds)
+            kwargs = src.meta.copy()
+            kwargs.update({
+                'crs': dst_crs,
+                'transform': dst_transform,
+                'width': dst_width,
+                'height': dst_height
+            })
+            tif_path = os.path.join(out_dir, os.path.basename(nc_path).replace('.nc', '.tif'))
+            with rasterio.open(tif_path, 'w', **kwargs) as dst:
+                for i in range(1, src.count + 1):
+                    reproject(
+                        source=rasterio.band(src, i),
+                        destination=rasterio.band(dst, i),
+                        src_transform=src.transform,
+                        src_crs=src.crs,
+                        dst_transform=dst_transform,
+                        dst_crs=dst_crs,
+                        resampling=Resampling.nearest)
+
+
+class Slope(BaseAPI):
+    BASE_URL = 'https://e4ftl01.cr.usgs.gov/MEASURES/NASADEM_SC.001/2000.02.11/'
+
+    def __init__(self):
+        super().__init__()
+
+    def _resolve_filenames(self, bbox: List[float]):
+        lon_substrings, lat_substrings = super()._resolve_filenames(bbox)
+
+        file_names = []
+        for lon in lon_substrings:
+            for lat in lat_substrings:
+                file_names.append(f"NASADEM_SC_{lat}{lon}.zip")
+
+        return file_names
+
+    @staticmethod
+    def _coords_from_filename(infile: str):
+        infile = os.path.basename(infile)
+
+        match = re.search(r"[ns](\d{2})[we](\d{3})", infile)
+        if match:
+            n_or_s = match.group(0)[0]
+            e_or_w = match.group(0)[3]
+            n_value = match.group(1)
+            e_value = match.group(2)
+
+        lat = float(n_value) * (1 if n_or_s == 'n' else -1)
+        lon = float(e_value) * (1 if e_or_w == 'e' else -1)
+
+        return [lon, lat]
+
+    def download_bbox(self, bbox: List[int], output_file: str):
+        temp_dir = tempfile.mkdtemp(prefix='b2p')
+
+        try:
+            # 1) Download all overlapping files
+            # 2) Convert raw binary .slope files into geo-referenced tiff
+            file_names = self._resolve_filenames(bbox)
+            for file_name in file_names:
+                print(os.path.join(self.BASE_URL, file_name))
+                self._download((os.path.join(self.BASE_URL, file_name), temp_dir))
+
+            # 3) Create a composite of all tiffs in the temp_dir
+            self._mosaic_tif_files(temp_dir, output_file=output_file)
+
+            # 4) Cleanup
+            shutil.rmtree(temp_dir)
+
+        except Exception as e:
+            shutil.rmtree(temp_dir)
+            raise e
+
+    def _download(self, query: Tuple[str, str]) -> None:
+        """
+        Downloads data from the NASA earthdata servers. Authentication is established using the username and password
+        found in the local ~/.netrc file.
+        Args:
+            query (tuple): Contains the remote location and the local path destination, respectively
+        """
+        dest, out_dir = super()._download(query)
+
+        # First unzip the file and then find the .slope file
+        unzipped_dir = dest.replace('.zip', '')
+        os.makedirs(unzipped_dir, exist_ok=True)
+        with zipfile.ZipFile(dest, 'r') as zip_ref:
+            zip_ref.extractall(unzipped_dir)
+
+        slope_file = None
+        for file in os.listdir(unzipped_dir):
+            if file.endswith('.slope'):
+                slope_file = os.path.join(unzipped_dir, file)
+                break
+
+        if slope_file is not None:
+            self._binary_to_tif(slope_file, out_dir)
+        else:
+            raise FileNotFoundError(f'Could not find .slope file in {unzipped_dir}')
+
+        # Just want the .tif file at the end
+        shutil.rmtree(unzipped_dir)
+        os.remove(dest)
 
     def _binary_to_tif(self, infile: str, out_dir: str):
         """
@@ -323,164 +479,3 @@ class BaseAPI:
             raise Exception('Failed to create raster: %s' % output_path)
 
         return output_raster
-
-
-class Elevation(BaseAPI):
-    BASE_URL = 'https://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/'
-
-    def __init__(self):
-        super().__init__()
-
-    def _resolve_filenames(self, bbox: List[float]):
-        lon_substrings, lat_substrings = super()._resolve_filenames(bbox)
-
-        file_names = []
-        for lon in lon_substrings:
-            for lat in lat_substrings:
-                file_names.append(f"{lat.upper()}{lon.upper()}.SRTMGL1.hgt")
-
-        # Find the page that the files are on
-        page_dict = {
-            'page_1': {
-                'from_lat': 0,
-                'to_lat': 21,
-                'from_lon': 6,
-                'to_lon': 42
-            },
-            'page_2': {
-                'from_lat': 21,
-                'to_lat': 36,
-                'from_lon': -114,
-                'to_lon': 43
-            },
-            'page_3': {
-                'from_lat': 36,
-                'to_lat': 50,
-                'from_lon': -114,
-                'to_lon': 7
-            },
-            'page_4': {
-                'from_lat': -2,
-                'to_lat': 50,
-                'from_lon': 7,
-                'to_lon': 113
-            },
-            'page_5': {
-                'from_lat': -2,
-                'to_lat': -24,
-                'from_lon': 27,
-                'to_lon': 113
-            },
-            'page_6': {
-                'from_lat': -24,
-                'to_lat': -56,
-                'from_lon': -28,
-                'to_lon': 72
-            }
-        }
-
-        file_paths = []
-        for file_name in file_names:
-            lat_multiplier = 1 if file_name[0] == 'N' else -1
-            lon_multiplier = 1 if file_name[3] == 'E' else -1
-
-            lat = int(file_name[1:3]) * lat_multiplier
-            lon = int(file_name[4:7]) * lon_multiplier
-
-            for page, to_from in page_dict.items():
-                if to_from['from_lat'] <= lat <= to_from['to_lat'] and to_from['from_lon'] <= lon <= to_from['to_lon']:
-                    file_paths.append(os.path.join(f'SRTMGL1_{page}.html', file_name))
-
-        return file_paths
-
-    @staticmethod
-    def _coords_from_filename(infile: str):
-        infile = os.path.basename(infile)
-        match = re.search(r"[NS](\d{2})[WE](\d{3})", infile)
-        if match:
-            n_or_s = match.group(0)[0]
-            e_or_w = match.group(0)[3]
-            n_value = match.group(1)
-            e_value = match.group(2)
-
-        lat = float(n_value) * (1 if n_or_s == 'N' else -1)
-        lon = float(e_value) * (1 if e_or_w == 'E' else -1)
-
-        return [lon, lat]
-
-    def _download(self, query: Tuple[str, str]) -> None:
-        """
-        Downloads data from the NASA earthdata servers. Authentication is established using the username and password
-        found in the local ~/.netrc file.
-        Args:
-            query (tuple): Contains the remote location and the local path destination, respectively
-        """
-        dest, out_dir = super()._download(query)
-
-        self._binary_to_tif(dest, out_dir)
-
-        # Just want the .tif file at the end
-        os.remove(dest)
-
-
-class Slope(BaseAPI):
-    BASE_URL = 'https://e4ftl01.cr.usgs.gov/MEASURES/NASADEM_SC.001/2000.02.11/'
-
-    def __init__(self):
-        super().__init__()
-
-    def _resolve_filenames(self, bbox: List[float]):
-        lon_substrings, lat_substrings = super()._resolve_filenames(bbox)
-
-        file_names = []
-        for lon in lon_substrings:
-            for lat in lat_substrings:
-                file_names.append(f"NASADEM_SC_{lat}{lon}.zip")
-
-        return file_names
-
-    @staticmethod
-    def _coords_from_filename(infile: str):
-        infile = os.path.basename(infile)
-
-        match = re.search(r"[ns](\d{2})[we](\d{3})", infile)
-        if match:
-            n_or_s = match.group(0)[0]
-            e_or_w = match.group(0)[3]
-            n_value = match.group(1)
-            e_value = match.group(2)
-
-        lat = float(n_value) * (1 if n_or_s == 'n' else -1)
-        lon = float(e_value) * (1 if e_or_w == 'e' else -1)
-
-        return [lon, lat]
-
-    def _download(self, query: Tuple[str, str]) -> None:
-        """
-        Downloads data from the NASA earthdata servers. Authentication is established using the username and password
-        found in the local ~/.netrc file.
-        Args:
-            query (tuple): Contains the remote location and the local path destination, respectively
-        """
-        dest, out_dir = super()._download(query)
-
-        # First unzip the file and then find the .slope file
-        unzipped_dir = dest.replace('.zip', '')
-        os.makedirs(unzipped_dir, exist_ok=True)
-        with zipfile.ZipFile(dest, 'r') as zip_ref:
-            zip_ref.extractall(unzipped_dir)
-
-        slope_file = None
-        for file in os.listdir(unzipped_dir):
-            if file.endswith('.slope'):
-                slope_file = os.path.join(unzipped_dir, file)
-                break
-
-        if slope_file is not None:
-            self._binary_to_tif(slope_file, out_dir)
-        else:
-            raise FileNotFoundError(f'Could not find .slope file in {unzipped_dir}')
-
-        # Just want the .tif file at the end
-        shutil.rmtree(unzipped_dir)
-        os.remove(dest)

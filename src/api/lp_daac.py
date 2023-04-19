@@ -1,5 +1,5 @@
 """
-Classes wrapping http requests to NASA EarthData servers for SRTMGL1 v003 elevation data and NASADEM_SC v001 slope and
+Classes wrapping http requests to LP DAAC servers for SRTMGL1 v003 elevation data and NASADEM_SC v001 slope and
 curvature data.
 """
 
@@ -68,12 +68,12 @@ def _base_download_task(task_args: Namespace) -> None:
 
 def _slope_download_task(task_args: Namespace) -> None:
     """
-    Downloads NASADEM_SC v001 slope data from EarthData servers. Zip file containing .slope layer is downloaded and must
+    Downloads NASADEM_SC v001 slope data from LP DAAC servers. Zip file containing .slope layer is downloaded and must
     first be uncompressed. The .slope file is a raw binary file and must be converted to a more useful file structure
     (.tif). A description of the binary file structure can be found here:
     https://forum.earthdata.nasa.gov/viewtopic.php?t=553
     Args:
-        task_args (Namespace): Contains attributes required for requesting data from EarthData servers
+        task_args (Namespace): Contains attributes required for requesting data from LP DAAC servers
             task_args.link (str): URL to datafile on servers
             task_args.out_dir (str): Path to directory where files will be written
             task_args.username (str): NASA EarthData username
@@ -107,7 +107,7 @@ def _slope_download_task(task_args: Namespace) -> None:
     os.remove(dest)
 
 
-def _binary_to_tif(infile: str, out_dir: str, top_left_coord: List[float]) -> None:
+def _binary_to_tif(infile: str, out_dir: str, top_left_coord: Tuple[float, float]) -> None:
     """
     SLOPE layers are non-geo-referenced binary files which need to be converted to a more useful file type
     (in this case .tif). A discussion about this can be found here: https://forum.earthdata.nasa.gov/viewtopic.php?t=553
@@ -151,7 +151,7 @@ def _create_raster(output_path: str, columns: int, rows: int, n_band: int = 1, g
     return output_raster
 
 
-def _numpy_array_to_raster(output_path: str, numpy_array: np.array, top_left_coord: List[float],
+def _numpy_array_to_raster(output_path: str, numpy_array: np.array, top_left_coord: Tuple[float, float],
                            cell_resolution: float = 0.000277777777777778, n_band: int = 1,
                            no_data: int = 15, gdal_data_type: int = gdal.GDT_UInt16,
                            spatial_reference_system_wkid: int = 4326):
@@ -160,7 +160,7 @@ def _numpy_array_to_raster(output_path: str, numpy_array: np.array, top_left_coo
     Args:
         output_path (str): Full path to the raster to be written to disk
         numpy_array (np.array): Numpy array containing data to write to raster
-        top_left_coord (List): The upper left point of the numpy array (should be a tuple structured as (lon, lat))
+        top_left_coord (tuple): The upper left point of the numpy array (should be a tuple structured as (lon, lat))
         cell_resolution (float): The cell resolution of the output raster
         n_band (int): The band to write to in the output raster
         no_data (int): Value in numpy array that should be treated as no data
@@ -222,13 +222,16 @@ def _elevation_download_task(task_args: Namespace) -> None:
     os.remove(task_args.dest)
 
 
-def _nc_to_tif(nc_path: str, top_left_coord: List[float], out_dir: str,
+def _nc_to_tif(nc_path: str, top_left_coord: Tuple[float, float], out_dir: str,
                cell_resolution: float = 0.000277777777777778) -> None:
     """
     Converts netCDF files to tif file. Band that will be transferred to tif file needs to be extracted and
     geo-referencing needs to be added as well.
     Args:
-        nc_path (
+        nc_path (str): Path to input netCDF file
+        top_left_coord (tuple): List giving coordinate of top left of image [lon, lat] so tif file can be geo-referenced
+        out_dir (str): Path to directory where tif file will be written
+        cell_resolution (float): Spatial resolution of tif file in degrees
     """
     # Open the netCDF file
     nc_file = Dataset(nc_path)
@@ -270,22 +273,23 @@ def _nc_to_tif(nc_path: str, top_left_coord: List[float], out_dir: str,
 
 class BaseAPI(ABC):
     """
-    Defines all the attributes and methods common to the child APIs.
+    Defines all the attributes and methods common to the child APIs. NASA EarthData credentials are queried for and
+    written to secrets.yaml file if it is not found
     """
 
     BASE_URL = None
 
     def __init__(self):
         """
-        Initializes the common attributes required for each data type's API
+        Initializes the NASA EarthData credentials
         """
         self._username, self._password = self._get_auth_credentials()
-        self._core_count = os.cpu_count()
 
     @staticmethod
     def _get_auth_credentials() -> Tuple[str, str]:
         """
-        Ask the user for their urs.earthdata.nasa.gov username and login
+        Ask the user for their urs.earthdata.nasa.gov username and login if secrets.yaml file is not found in project
+        root. After the first query the secrets.yaml will be created for any subsequent initializations
         Returns:
             username (str): urs.earthdata.nasa.gov username
             password (str): urs.earthdata.nasa.gov password
@@ -317,6 +321,20 @@ class BaseAPI(ABC):
 
     @staticmethod
     def _create_substrings(min_deg: int, max_deg: int, min_ord: str, max_ord: str, padding: int) -> List[str]:
+        """
+        The file conventions for the data files give information about the location of the data in each file. For
+        example, an elevation file named like N00E003.SRTMGL1_NC.nc will be a 1x1 deg North pointing area with its
+        bottom left pixel situated at N0 E003. Thus, given the min and max value and ordinal for either lat or lon
+        this function will create all ranges of substrings in the range.
+        Args:
+            min_deg (int): The minimum value of the range in degrees
+            max_deg (int): The maximum value of the range in degrees
+            min_ord (str): The ordinal direction (n,e,s,w) of the minimum degree value
+            max_ord (str): The ordinal direction (n,e,s,w) of the maximum degree value
+            padding (int): The amount of zero padding to add to substring values. For lat padding is 2, 3 for lon
+        Returns:
+            substrings (List): List of substrings that are within range of [min_deg, max_deg]
+        """
         substrings = []
         format_str = '{0:03d}' if padding == 3 else '{0:02d}'
         if min_ord == max_ord:
@@ -336,11 +354,15 @@ class BaseAPI(ABC):
 
         return substrings
 
-    def _resolve_filenames(self, bbox: List[float]):
+    def _resolve_filenames(self, bbox: List[float]) -> Tuple[List[str], List[str]]:
         """
-        Files are stored with the following naming convention: NASADEM_SC_n00e011.zip where n00 is 0 deg latitude and
-        e011 is 11 deg longitude, referring to the lower left coordinate of the data file. So create all the possible
-        file name combination from the bounding box.
+        Files are stored with the following naming convention, for example: NASADEM_SC_n00e011.zip where n00 is 0 deg
+        latitude and e011 is 11 deg longitude, referring to the lower left coordinate of the data file. So create all
+        the possible file name combinations within the range of the bounding box
+        Args:
+            bbox (list): Bounding box coordinates in [min_lon, min_lat, max_lon, max_lat]
+        Returns:
+            lon_substrings, lat_substrings (tuple): Tuple of lists containing the filename substrings for lon and late
         """
         min_lon = bbox[0]
         min_lat = bbox[1]
@@ -383,20 +405,13 @@ class BaseAPI(ABC):
         return lon_substrings, lat_substrings
 
     @staticmethod
-    def _configure() -> None:
+    def _mosaic_tif_files(input_dir: str, output_file: str) -> None:
         """
-        Queries the user for credentials and configures SSL certificates
+        Creates a mosaic from a group of tif files in the specified input_dir
+        Args:
+            input_dir (str): The path to the input dir containing the tif files to be mosaiced
+            output_file (str): Path to where the output mosaic file will be written
         """
-        # This is a macOS thing... need to find path to SSL certificates and set the following environment variables
-        ssl_cert_path = certifi.where()
-        if 'SSL_CERT_FILE' not in os.environ or os.environ['SSL_CERT_FILE'] != ssl_cert_path:
-            os.environ['SSL_CERT_FILE'] = ssl_cert_path
-
-        if 'REQUESTS_CA_BUNDLE' not in os.environ or os.environ['REQUESTS_CA_BUNDLE'] != ssl_cert_path:
-            os.environ['REQUESTS_CA_BUNDLE'] = ssl_cert_path
-
-    @staticmethod
-    def _mosaic_tif_files(input_dir: str, output_file: str):
         # Specify the input directory containing the TIFF files
         tiff_files = [os.path.join(input_dir, f) for f in os.listdir(input_dir) if
                       f.endswith('.tif')]  # Open all the TIFF files using rasterio
@@ -414,7 +429,19 @@ class BaseAPI(ABC):
         with rasterio.open(output_file, "w", **out_meta) as dest:
             dest.write(mosaic)
 
-    def download_district(self, out_file: str, region: str, district: str, buffer: float, download_task: Any):
+    def download_district(self, out_file: str, region: str, district: str, download_task: Any,
+                          buffer: float = 0) -> None:
+        """
+        Downloads data given a region and district. Bounding box will be read in from the region_info.yaml file in the
+        root data directory. If the region or district is not found an error will be raised.
+        Args:
+            out_file (str): Path to where the output mosaic tif file of requested data will be written to
+            region (str): Name of the region in the region_info.yaml file
+            district (str): Name of the district in the specified region's entry in the region_info.yaml file
+            download_task (object): Function to use to download the data. Currently, either the _slope_download_task or
+            _elevation_download_task function
+            buffer (float): Buffer to add to the bounding box in meters
+        """
         with open(REGION_FILE_PATH, 'r') as f:
             region_file_info = yaml.load(f, Loader=yaml.FullLoader)
 
@@ -426,10 +453,19 @@ class BaseAPI(ABC):
             raise ValueError(f'No district {district} found for region {region}')
 
         bbox = region_info['districts'][district]['bbox']
-        print(out_file, bbox, buffer, download_task)
-        self.download_bbox(out_file, bbox, buffer, download_task)
+        self.download_bbox(out_file, bbox, download_task, bbox)
 
-    def download_bbox(self, out_file: str, bbox: List[float], buffer: float, download_task: Any):
+    def download_bbox(self, out_file: str, bbox: List[float], download_task: Any, buffer: float = 0) -> None:
+        """
+        Downloads data given a region and district. Bounding box will be read in from the region_info.yaml file in the
+        root data directory. If the region or district is not found an error will be raised.
+        Args:
+            out_file (str): Path to where the output mosaic tif file of requested data will be written to
+            bbox (list): Bounding box defining area of data request in [min_lon, min_lat, max_lon, max_lat]
+            download_task (object): Function to use to download the data. Currently, either the _slope_download_task or
+            _elevation_download_task function
+            buffer (float): Buffer to add to the bounding box in meters
+        """
 
         # Convert the buffer from meters to degrees lat/long at the equator
         buffer /= 111000
@@ -451,7 +487,7 @@ class BaseAPI(ABC):
                     Namespace(
                         link=(os.path.join(self.BASE_URL, file_name)),
                         out_dir=temp_dir,
-                        top_left_coord=self._coords_from_filename(file_name),
+                        top_left_coord=self._get_coordinate_from_filename(file_name),
                         username=self._username,
                         password=self._password
                     )
@@ -472,7 +508,15 @@ class BaseAPI(ABC):
             raise e
 
     @staticmethod
-    def _coords_from_filename(infile: str):
+    def _get_top_left_coordinate_from_filename(infile: str) -> Tuple[float, float]:
+        """
+        Parses the specified infile name for coordinate info. File names indicate the bottom left pixel's coordinate,
+        so need to add 1 deg (files are 1x1 deg and North-up) to lat to get top left corner.
+        Args:
+            infile (str): Name of path of file to get top left coordinate for
+        Returns:
+            top_left_coord (Tuple): Top left corner as (lon, lat)
+        """
         infile = os.path.basename(infile)
 
         match = re.search(r"[nsNS](\d{2})[weWE](\d{3})", infile)
@@ -482,19 +526,39 @@ class BaseAPI(ABC):
             n_value = match.group(1)
             e_value = match.group(2)
 
-        lat = float(n_value) * (1 if n_or_s.lower() == 'n' else -1)
+        lat = float(n_value) * (1 if n_or_s.lower() == 'n' else -1) + 1
         lon = float(e_value) * (1 if e_or_w.lower() == 'e' else -1)
 
-        return [lon, lat]
+        return lon, lat
 
 
 class Elevation(BaseAPI):
+    """
+    SRTMGL1 v003 elevation data specific methods for requesting data from LP DAAC servers. Files are downloaded in
+    parallel as netCDF files and then converted to tif format. Tif files are then made into a single tif mosaic covering
+    the entire requested region.
+    Data homepage: https://lpdaac.usgs.gov/products/srtmgl1v003/
+    Ex.
+        elevation = Elevation()
+        elevation.download_district('data/elevation/ethiopia/yem.tif', 'Ethiopia', 'Yem')
+        OR
+        elevation.download_bbox('data/elevation/ethiopia/yem.tif', [37.391, 7.559, 37.616, 8.012])
+    """
     BASE_URL = 'https://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1_NC.003/2000.02.11/'
 
     def __init__(self):
         super().__init__()
 
-    def _resolve_filenames(self, bbox: List[float]):
+    def _resolve_filenames(self, bbox: List[float]) -> List[str]:
+        """
+        Files are stored with the following naming convention, for example: N00E003.SRTMGL1_NC.nc where N00 is 0 deg
+        latitude and E003 is 3 deg longitude, referring to the lower left coordinate of the data file. So create all
+        the possible file name combinations within the range of the bounding box
+        Args:
+            bbox (list): Bounding box coordinates in [min_lon, min_lat, max_lon, max_lat]
+        Returns:
+            file_names (list): List of SRTMGL1_NC formatted file names within the bbox range
+        """
         lon_substrings, lat_substrings = super()._resolve_filenames(bbox)
 
         file_names = []
@@ -504,20 +568,59 @@ class Elevation(BaseAPI):
 
         return file_names
 
-    def download_district(self, out_file: str, region: str, district: str, buffer: float):
-        super().download_district(out_file, region, district, buffer, _elevation_download_task)
+    def download_district(self, out_file: str, region: str, district: str, buffer: float = 0) -> None:
+        """
+        Downloads data given a region and district. Bounding box will be read in from the region_info.yaml file in the
+        root data directory. If the region or district is not found an error will be raised.
+        Args:
+            out_file (str): Path to where the output mosaic tif file of requested data will be written to
+            region (str): Name of the region in the region_info.yaml file
+            district (str): Name of the district in the specified region's entry in the region_info.yaml file
+            buffer (float): Buffer to add to the bounding box in meters
+        """
+        super().download_district(out_file, region, district, _elevation_download_task, buffer)
 
-    def download_bbox(self, out_file: str, bbox: List[float], buffer: float, _download_task: Any = None):
-        super().download_bbox(out_file, bbox, buffer, _elevation_download_task)
+    def download_bbox(self, out_file: str, bbox: List[float], _download_task: Any = None, buffer: float = 0):
+        """
+        Downloads data given a region and district. Bounding box will be read in from the region_info.yaml file in the
+        root data directory. If the region or district is not found an error will be raised.
+        Args:
+            out_file (str): Path to where the output mosaic tif file of requested data will be written to
+            bbox (list): Bounding box defining area of data request in [min_lon, min_lat, max_lon, max_lat]
+            _download_task (object): Function to use to download the data. This is a dummy parameter in order to match
+            the signature of te super method
+            buffer (float): Buffer to add to the bounding box in meters
+        """
+        super().download_bbox(out_file, bbox, _elevation_download_task, buffer)
 
 
 class Slope(BaseAPI):
+    """
+    NASADEM_SC v001 elevation data specific methods for requesting data from LP DAAC servers. Files are downloaded in
+    parallel as zip files from which raw binary .slope layer file is extracted. Binary file is then converted to tif
+    format. Finally, tif files are made into a single tif mosaic covering the entire requested region.
+    Data homepage: https://lpdaac.usgs.gov/products/nasadem_scv001/
+    Ex.
+        slope = Slope()
+        slope.download_district('data/slope/ethiopia/yem.tif', 'Ethiopia', 'Yem')
+        OR
+        slope.download_bbox('data/slope/ethiopia/yem.tif', [37.391, 7.559, 37.616, 8.012])
+    """
     BASE_URL = 'https://e4ftl01.cr.usgs.gov/MEASURES/NASADEM_SC.001/2000.02.11/'
 
     def __init__(self):
         super().__init__()
 
-    def _resolve_filenames(self, bbox: List[float]):
+    def _resolve_filenames(self, bbox: List[float]) -> List[str]:
+        """
+        Files are stored with the following naming convention, for example: NASADEM_SC_n00e003.zip where n00 is 0 deg
+        latitude and e003 is 3 deg longitude, referring to the lower left coordinate of the data file. So create all
+        the possible file name combinations within the range of the bounding box
+        Args:
+            bbox (list): Bounding box coordinates in [min_lon, min_lat, max_lon, max_lat]
+        Returns:
+            file_names (list): List of NASADEM_SC formatted file names within the bbox range
+        """
         lon_substrings, lat_substrings = super()._resolve_filenames(bbox)
 
         file_names = []
@@ -527,8 +630,27 @@ class Slope(BaseAPI):
 
         return file_names
 
-    def download_district(self, out_file: str, region: str, district: str, buffer: float):
-        super().download_district(out_file, region, district, buffer, _slope_download_task)
+    def download_district(self, out_file: str, region: str, district: str, buffer: float) -> None:
+        """
+       Downloads data given a region and district. Bounding box will be read in from the region_info.yaml file in the
+       root data directory. If the region or district is not found an error will be raised.
+       Args:
+           out_file (str): Path to where the output mosaic tif file of requested data will be written to
+           region (str): Name of the region in the region_info.yaml file
+           district (str): Name of the district in the specified region's entry in the region_info.yaml file
+           buffer (float): Buffer to add to the bounding box in meters
+       """
+        super().download_district(out_file, region, district, _slope_download_task,  buffer)
 
-    def download_bbox(self, out_file: str, bbox: List[float], buffer: float, _download_task: Any = None):
-        super().download_bbox(out_file, bbox, buffer, _slope_download_task)
+    def download_bbox(self, out_file: str, bbox: List[float], _download_task: Any = None, buffer: float = 0) -> None:
+        """
+        Downloads data given a region and district. Bounding box will be read in from the region_info.yaml file in the
+        root data directory. If the region or district is not found an error will be raised.
+        Args:
+            out_file (str): Path to where the output mosaic tif file of requested data will be written to
+            bbox (list): Bounding box defining area of data request in [min_lon, min_lat, max_lon, max_lat]
+            _download_task (object): Function to use to download the data. This is a dummy parameter in order to match
+            the signature of te super method
+            buffer (float): Buffer to add to the bounding box in meters
+        """
+        super().download_bbox(out_file, bbox, _slope_download_task, buffer)

@@ -13,7 +13,6 @@ from http.cookiejar import CookieJar
 from osgeo import gdal
 from osgeo import osr
 import zipfile
-from array import array
 import tempfile
 import rasterio
 from rasterio.merge import merge
@@ -23,43 +22,19 @@ import yaml
 from definitions import B2P_DIR, REGION_FILE_PATH
 from src.api.util import generate_secrets_file
 
-import requests
-
-BASE_URL = 'https://appeears.earthdatacloud.nasa.gov/api/'
-
-
-def _download_task(args: Namespace):
-    url = os.path.join(BASE_URL, 'bundle', args.task_id, args.file_id)
-
-    header = {
-        'Authorization': f'Bearer {args.auth_token}'
-    }
-
-    response = requests.get(url, headers=header, allow_redirects=True, stream=True)
-
-    os.makedirs(args.out_dir, exist_ok=True)
-
-    print(args.file_name)
-    progress_bar = tqdm(total=args.file_size, unit='iB', unit_scale=True)
-    with open(os.path.join(args.out_dir, args.file_name), 'wb') as f:
-        for data in response.iter_content(chunk_size=8192):
-            progress_bar.update(len(data))
-            f.write(data)
-
 
 class BaseAPI:
     """
     Defines all the attributes and methods common to the child APIs.
     """
 
-    BASE_URL = BASE_URL
+    BASE_URL = None
 
     def __init__(self):
         """
         Initializes the common attributes required for each data type's API
         """
         self._username, self._password = self._get_auth_credentials()
-
         self._core_count = os.cpu_count()
 
     @staticmethod
@@ -72,8 +47,9 @@ class BaseAPI:
         """
         secrets_file_path = os.path.join(B2P_DIR, 'secrets.yaml')
         if not os.path.exists(secrets_file_path):
-            print('Please input your earthdata.nasa.gov username and password. If you do not have one, you can register'
-                  ' here: https://urs.earthdata.nasa.gov/users/new')
+            print(f'Please input your earthdata.nasa.gov username and password. If you do not have one, '
+                  f'you can register here: https://urs.earthdata.nasa.gov/users/new . Credentials will be cached for '
+                  f'any subsequent initializations at {secrets_file_path}')
             username = input('Username:')
             password = getpass.getpass('Password:', stream=None)
             generate_secrets_file(nasaearthdata_u=username, nasaearthdata_p=password)
@@ -94,231 +70,7 @@ class BaseAPI:
 
         return username, password
 
-
-class Elevation(BaseAPI):
-    def __init__(self):
-        super().__init__()
-
-        self._auth_token = self._get_auth_token()
-        self._AUTH_HEADER = {
-            'Authorization': f'Bearer {self._auth_token}'
-        }
-
-        self._session_tasks = []
-
-    def download_session_task_files(self, out_dir: str):
-        super().download_session_task_files(out_dir, 'SRTMGL1_NC', '_DEM_')
-
-    def submit_task(self, region: str = None, district: str = None, bbox: List[float] = None,
-                    start_date: str = '02-11-2000', end_date: str = '02-21-2000', file_type: str = 'geotiff',
-                    projection: str = "native"):
-        super().submit_task('SRTMGL1_NC.003', 'SRTMGL1_DEM', region, district, bbox, start_date, end_date, file_type,
-                            projection)
-
-    def _authorized_get_request(self, url):
-        response = requests.get(url, headers=self._AUTH_HEADER)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            raise ValueError(response.json())
-
-    def list_task_descriptions(self):
-        url = os.path.join(self.BASE_URL, 'task')
-        return self._authorized_get_request(url)
-
-    def get_task_description(self, task_id: str):
-        url = os.path.join(self.BASE_URL, 'task', task_id)
-        return self._authorized_get_request(url)
-
-    def list_task_statuses(self):
-        url = os.path.join(self.BASE_URL, 'status')
-        return self._authorized_get_request(url)
-
-    def get_task_status(self, task_id: str):
-        url = os.path.join(self.BASE_URL, 'status', task_id)
-        return self._authorized_get_request(url)
-
-    def list_task_files(self, task_id: str):
-        url = os.path.join(self.BASE_URL, 'bundle', task_id)
-        return self._authorized_get_request(url)
-
-    def download_file(self, task_id: str, file_id: str, out_dir: str):
-        url = os.path.join(self.BASE_URL, 'bundle', task_id, file_id)
-
-        response = requests.get(url, headers=self._AUTH_HEADER, allow_redirects=True, stream=True)
-
-        file_response = self.list_task_files(task_id)
-        file_name = None
-        file_size = None
-        for file in file_response['files']:
-            if file['file_id'] == file_id:
-                file_name = os.path.basename(file['file_name'])
-                file_size = file['file_size']
-                break
-        if file_size is None or file_name is None:
-            raise LookupError('Could not find file id in manifest')
-
-        if response.status_code == 200:
-            os.makedirs(out_dir, exist_ok=True)
-
-            progress_bar = tqdm(total=file_size, unit='iB', unit_scale=True)
-            with open(os.path.join(out_dir, file_name), 'wb') as f:
-                for data in response.iter_content(chunk_size=8192):
-                    progress_bar.update(len(data))
-                    f.write(data)
-        else:
-            print(response.json())
-
-    def list_session_tasks_status(self):
-        for task in self.session_tasks:
-            print(task['task_id'])
-            print(self.get_task_status(task))
-
-    @staticmethod
-    def _bbox_to_polygon(bbox: List[float]):
-        return [[bbox[0], bbox[1]], [bbox[2], bbox[1]], [bbox[2], bbox[3]], [bbox[0], bbox[3]], [bbox[0], bbox[1]]]
-
-    def download_session_task_files(self, out_dir: str, *args):
-        task_args = []
-        for task in self.session_tasks:
-            task_id = task['task_id']
-            status_response = self.get_task_status(task_id)
-            for session_task in self._session_tasks:
-                if session_task['task_id'] == task_id:
-                    session_task['status'] = status_response['status']
-
-            if 'status' in status_response and status_response['status'] == 'done':
-                files_response = self.list_task_files(task_id)
-                for file_info in files_response['files']:
-                    file_name = os.path.basename(file_info['file_name'])
-                    file_id = file_info['file_id']
-                    file_size = file_info['file_size']
-                    print(args)
-                    match = True
-                    for match_string in args:
-                        if match_string not in file_name:
-                            match = False
-                            break
-
-                    if not match:
-                        continue
-
-                    if match and ('.tif' in file_name or '.ncdf4' in file_name):
-                        task_args.append(Namespace(task_id=task_id, file_id=file_id, file_name=file_name,
-                                                   file_size=file_size, out_dir=out_dir, auth_token=self._auth_token))
-
-        for task_arg in task_args:
-            print(vars(task_arg))
-            _download_task(task_arg)
-        print(f'Session tasks: {self.session_tasks}')
-        # with mp.Pool(mp.cpu_count() - 1) as pool:
-        #     for _ in tqdm(pool.imap_unordered(_download_task, args), total=len(args)):
-        #         pass
-
-    def submit_task(self, product: str, layer: str, region: str = None, district: str = None, bbox: List[float] = None,
-                    start_date: str = '02-11-2000', end_date: str = '02-21-2000', file_type: str = 'geotiff',
-                    projection: str = "native"):
-        if region is None and bbox is None:
-            raise ValueError('Must specify region or bbox')
-
-        if district is not None and region is None:
-            raise ValueError('Must specify a region with the district')
-
-        url = os.path.join(self.BASE_URL, 'task')
-
-        header = self._AUTH_HEADER
-        header['Content-Type'] = 'application/json'
-
-        if region is not None:
-            with open(REGION_FILE_PATH, 'r') as f:
-                region_file_info = yaml.load(f, Loader=yaml.FullLoader)
-        region_info = region_file_info[region]
-
-        polygons = []
-        if district is not None:
-            polygons.append(self._bbox_to_polygon(region_info['districts'][district]['bbox']))
-        else:
-            for district in region_info['districts']:
-                polygons.append(self._bbox_to_polygon(region_info[district]['bbox']))
-
-        body = {
-            "task_type": "area",
-            "task_name": f"elevation_{1}",
-            "params":
-                {
-                    "dates": [{
-                        "startDate": start_date,
-                        "endDate": end_date
-                    }],
-                    "layers": [{
-                        "product": product,
-                        "layer": layer
-                    }],
-                    "geo": {
-                        "type": "FeatureCollection",
-                        "features": [
-                            {
-                                "geometry": {
-                                    "type": "Polygon",
-                                    "coordinates": polygons
-                                },
-                                "type": "Feature", "properties": {}
-                            }
-                        ]
-                    },
-                    "output":
-                        {
-                            "format":
-                                {
-                                    "type": file_type
-                                },
-                            "projection": projection
-                        }
-                }
-        }
-
-        response = requests.post(url, headers=header, json=body)
-
-        if response.status_code == 202:
-            self._session_tasks.append(response.json())
-            print(response.json())
-        else:
-            raise ValueError(response.json())
-
-    def _get_auth_token(self) -> str:
-        url = os.path.join(self.BASE_URL, 'login')
-
-        response = requests.post(url, auth=(self._username, self._password))
-
-        if response.status_code == 200:
-            return response.json()['token']
-        else:
-            raise ValueError(response.json())
-
-    @property
-    def session_tasks(self):
-        return self._session_tasks
-
-
-class Slope(BaseAPI):
-    BASE_URL = 'https://e4ftl01.cr.usgs.gov/MEASURES/NASADEM_SC.001/2000.02.11/'
-
-    def __init__(self):
-        super().__init__()
-
-    def _configure(self) -> None:
-        """
-        Queries the user for credentials and configures SSL certificates
-        """
-        # This is a macOS thing... need to find path to SSL certificates and set the following environment variables
-        ssl_cert_path = certifi.where()
-        if 'SSL_CERT_FILE' not in os.environ or os.environ['SSL_CERT_FILE'] != ssl_cert_path:
-            os.environ['SSL_CERT_FILE'] = ssl_cert_path
-
-        if 'REQUESTS_CA_BUNDLE' not in os.environ or os.environ['REQUESTS_CA_BUNDLE'] != ssl_cert_path:
-            os.environ['REQUESTS_CA_BUNDLE'] = ssl_cert_path
-
-    def _download(self, query: Tuple[str, str]) -> None:
+    def _download(self, query: Tuple[str, str], layer_extension: str) -> None:
         """
         Downloads data from the NASA earthdata servers. Authentication is established using the username and password
         found in the local ~/.netrc file.
@@ -358,14 +110,14 @@ class Slope(BaseAPI):
 
         slope_file = None
         for file in os.listdir(unzipped_dir):
-            if file.endswith('.slope'):
+            if file.endswith(layer_extension):
                 slope_file = os.path.join(unzipped_dir, file)
                 break
 
         if slope_file is not None:
             self._binary_to_tif(slope_file, out_dir)
         else:
-            raise FileNotFoundError(f'Could not find .slope file in {unzipped_dir}')
+            raise FileNotFoundError(f'Could not find {layer_extension} file in {unzipped_dir}')
 
         # Just want the .tif file at the end
         shutil.rmtree(unzipped_dir)
@@ -436,14 +188,22 @@ class Slope(BaseAPI):
         lon_substrings = self._create_substrings(round_min_lon, round_max_lon, min_lon_ord, max_lon_ord, 3)
         lat_substrings = self._create_substrings(round_min_lat, round_max_lat, min_lat_ord, max_lat_ord, 2)
 
-        file_names = []
-        for lon in lon_substrings:
-            for lat in lat_substrings:
-                file_names.append(f"NASADEM_SC_{lat}{lon}.zip")
+        return lon_substrings, lat_substrings
 
-        return file_names
+    @staticmethod
+    def _configure() -> None:
+        """
+        Queries the user for credentials and configures SSL certificates
+        """
+        # This is a macOS thing... need to find path to SSL certificates and set the following environment variables
+        ssl_cert_path = certifi.where()
+        if 'SSL_CERT_FILE' not in os.environ or os.environ['SSL_CERT_FILE'] != ssl_cert_path:
+            os.environ['SSL_CERT_FILE'] = ssl_cert_path
 
-    def download_bbox(self, bbox: List[int], output_file: str):
+        if 'REQUESTS_CA_BUNDLE' not in os.environ or os.environ['REQUESTS_CA_BUNDLE'] != ssl_cert_path:
+            os.environ['REQUESTS_CA_BUNDLE'] = ssl_cert_path
+
+    def download_bbox(self, bbox: List[int], output_file: str, layer_extension: str):
         temp_dir = tempfile.mkdtemp(prefix='b2p')
 
         try:
@@ -451,33 +211,39 @@ class Slope(BaseAPI):
             # 2) Convert raw binary .slope files into geo-referenced tiff
             file_names = self._resolve_filenames(bbox)
             for file_name in file_names:
-                self._download((os.path.join(self.BASE_URL, file_name), temp_dir))
+                print(os.path.join(self.BASE_URL, file_name))
+                self._download((os.path.join(self.BASE_URL, file_name), temp_dir), layer_extension)
 
             # 3) Create a composite of all tiffs in the temp_dir
             self._mosaic_tiff_files(temp_dir, output_file=output_file)
 
             # 4) Cleanup
-            shutil.rmtree(temp_dir)
+            #shutil.rmtree(temp_dir)
 
         except Exception as e:
-            shutil.rmtree(temp_dir)
+            print(temp_dir)
+            #shutil.rmtree(temp_dir)
             raise e
+        print(temp_dir)
 
     @staticmethod
-    def _coords_from_filename(infile: str):
-        infile = os.path.basename(infile)
-
-        match = re.search(r"[ns](\d{2})[we](\d{3})", infile)
-        if match:
-            n_or_s = match.group(0)[0]
-            e_or_w = match.group(0)[3]
-            n_value = match.group(1)
-            e_value = match.group(2)
-
-        lat = float(n_value) * (1 if n_or_s == 'n' else -1)
-        lon = float(e_value) * (1 if e_or_w == 'e' else -1)
-
-        return [lon, lat]
+    def _mosaic_tiff_files(input_dir: str, output_file: str):
+        # Specify the input directory containing the TIFF files
+        tiff_files = [os.path.join(input_dir, f) for f in os.listdir(input_dir) if
+                      f.endswith('.tif')]  # Open all the TIFF files using rasterio
+        src = None
+        src_files_to_mosaic = []
+        for file in tiff_files:
+            src = rasterio.open(file)
+            src_files_to_mosaic.append(src)  # Merge the TIFF files using rasterio.merge
+        mosaic, out_trans = merge(src_files_to_mosaic)  # Specify the output file path and name
+        out_meta = src.meta.copy()
+        out_meta.update({"driver": "GTiff",
+                         "height": mosaic.shape[1],
+                         "width": mosaic.shape[2],
+                         "transform": out_trans})  # Write the merged TIFF file to disk using rasterio
+        with rasterio.open(output_file, "w", **out_meta) as dest:
+            dest.write(mosaic)
 
     def _binary_to_tif(self, infile: str, out_dir: str):
         """
@@ -499,101 +265,203 @@ class Slope(BaseAPI):
         upper_left_coords = self._coords_from_filename(infile)
         upper_left_coords[1] = upper_left_coords[1] + 1
 
-        numpy_array_to_raster(output_path=tiff_path, numpy_array=data, upper_left_tuple=upper_left_coords)
+        self._numpy_array_to_raster(output_path=tiff_path, numpy_array=data, upper_left_tuple=upper_left_coords)
+
+    # TODO: Create abstract method for coords_from_filename
+
+    # Methods for converting numpy array into a tiff file, credit:
+    # https://gis.stackexchange.com/questions/290776/how-to-create-a-tiff-file-using-gdal-from-a-numpy-array-and-specifying-nodata-va
 
     @staticmethod
-    def _mosaic_tiff_files(input_dir: str, output_file: str):
-        # Specify the input directory containing the TIFF files
-        tiff_files = [os.path.join(input_dir, f) for f in os.listdir(input_dir) if
-                      f.endswith('.tif')]  # Open all the TIFF files using rasterio
-        src_files_to_mosaic = []
-        for file in tiff_files:
-            src = rasterio.open(file)
-            src_files_to_mosaic.append(src)  # Merge the TIFF files using rasterio.merge
-        mosaic, out_trans = merge(src_files_to_mosaic)  # Specify the output file path and name
-        out_meta = src.meta.copy()
-        out_meta.update({"driver": "GTiff",
-                         "height": mosaic.shape[1],
-                         "width": mosaic.shape[2],
-                         "transform": out_trans})  # Write the merged TIFF file to disk using rasterio
-        with rasterio.open(output_file, "w", **out_meta) as dest:
-            dest.write(mosaic)
+    def _create_raster(output_path,
+                       columns,
+                       rows,
+                       nband=1,
+                       gdal_data_type=gdal.GDT_UInt16,
+                       driver=r'GTiff'):
+        # create driver
+        driver = gdal.GetDriverByName(driver)
+
+        output_raster = driver.Create(output_path,
+                                      int(columns),
+                                      int(rows),
+                                      nband,
+                                      eType=gdal_data_type)
+        return output_raster
+
+    def _numpy_array_to_raster(self,
+                               output_path,
+                               numpy_array,
+                               upper_left_tuple,
+                               cell_resolution=0.000277777777777778,
+                               nband=1,
+                               no_data=15,
+                               gdal_data_type=gdal.GDT_UInt16,
+                               spatial_reference_system_wkid=4326):
+        """
+        Returns a gdal raster data source
+        Args:
+            output_path -- full path to the raster to be written to disk
+            numpy_array -- numpy array containing data to write to raster
+            upper_left_tuple -- the upper left point of the numpy array (should be a tuple structured as (x, y))
+            cell_resolution -- the cell resolution of the output raster
+            nband -- the band to write to in the output raster
+            no_data -- value in numpy array that should be treated as no data
+            gdal_data_type -- gdal data type of raster (see gdal documentation for list of values)
+            spatial_reference_system_wkid -- well known id (wkid) of the spatial reference of the data
+            driver -- string value of the gdal driver to use
+
+        """
+        rows, columns = numpy_array.shape
+
+        # create output raster
+        output_raster = self._create_raster(output_path,
+                                            int(columns),
+                                            int(rows),
+                                            nband,
+                                            gdal_data_type)
+
+        geotransform = (upper_left_tuple[0],
+                        cell_resolution,
+                        0,
+                        upper_left_tuple[1],
+                        0,
+                        - 1 * cell_resolution)
+
+        spatial_reference = osr.SpatialReference()
+        spatial_reference.ImportFromEPSG(spatial_reference_system_wkid)
+        output_raster.SetProjection(spatial_reference.ExportToWkt())
+        output_raster.SetGeoTransform(geotransform)
+        output_band = output_raster.GetRasterBand(1)
+        output_band.SetNoDataValue(no_data)
+        output_band.WriteArray(numpy_array)
+        output_band.FlushCache()
+        output_band.ComputeStatistics(False)
+
+        if not os.path.exists(output_path):
+            raise Exception('Failed to create raster: %s' % output_path)
+
+        return output_raster
 
 
-"""
-Code for converting numpy array into a tiff file, credit:
-https://gis.stackexchange.com/questions/290776/how-to-create-a-tiff-file-using-gdal-from-a-numpy-array-and-specifying-nodata-va
-"""
+class Elevation(BaseAPI):
+    BASE_URL = 'https://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/'
+
+    def __init__(self):
+        super().__init__()
+
+    def _resolve_filenames(self, bbox: List[float]):
+        lon_substrings, lat_substrings = super()._resolve_filenames(bbox)
+
+        file_names = []
+        for lon in lon_substrings:
+            for lat in lat_substrings:
+                file_names.append(f"{lat.upper()}{lon.upper()}.SRTMGL1.hgt.zip")
+
+        # Find the page that the files are on
+        page_dict = {
+            'page_1': {
+                'from_lat': 0,
+                'to_lat': 21,
+                'from_lon': 6,
+                'to_lon': 42
+            },
+            'page_2': {
+                'from_lat': 21,
+                'to_lat': 36,
+                'from_lon': -114,
+                'to_lon': 43
+            },
+            'page_3': {
+                'from_lat': 36,
+                'to_lat': 50,
+                'from_lon': -114,
+                'to_lon': 7
+            },
+            'page_4': {
+                'from_lat': -2,
+                'to_lat': 50,
+                'from_lon': 7,
+                'to_lon': 113
+            },
+            'page_5': {
+                'from_lat': -2,
+                'to_lat': -24,
+                'from_lon': 27,
+                'to_lon': 113
+            },
+            'page_6': {
+                'from_lat': -24,
+                'to_lat': -56,
+                'from_lon': -28,
+                'to_lon': 72
+            }
+        }
+
+        file_paths = []
+        for file_name in file_names:
+            lat_multiplier = 1 if file_name[0] == 'N' else -1
+            lon_multiplier = 1 if file_name[3] == 'E' else -1
+
+            lat = int(file_name[1:3]) * lat_multiplier
+            lon = int(file_name[4:7]) * lon_multiplier
+
+            for page, to_from in page_dict.items():
+                if to_from['from_lat'] <= lat <= to_from['to_lat'] and to_from['from_lon'] <= lon <= to_from['to_lon']:
+                    file_paths.append(os.path.join(f'SRTMGL1_{page}.html', file_name))
+
+        return file_paths
+
+    @staticmethod
+    def _coords_from_filename(infile: str):
+        infile = os.path.basename(infile)
+        match = re.search(r"[NS](\d{2})[WE](\d{3})", infile)
+        if match:
+            n_or_s = match.group(0)[0]
+            e_or_w = match.group(0)[3]
+            n_value = match.group(1)
+            e_value = match.group(2)
+
+        lat = float(n_value) * (1 if n_or_s == 'N' else -1)
+        lon = float(e_value) * (1 if e_or_w == 'E' else -1)
+
+        return [lon, lat]
+
+    def download_bbox(self, bbox: List[int], output_file: str, layer_extension: str = '.hgt'):
+        super().download_bbox(bbox, output_file, layer_extension)
 
 
-def create_raster(output_path,
-                  columns,
-                  rows,
-                  nband=1,
-                  gdal_data_type=gdal.GDT_UInt16,
-                  driver=r'GTiff'):
-    # create driver
-    driver = gdal.GetDriverByName(driver)
+class Slope(BaseAPI):
+    BASE_URL = 'https://e4ftl01.cr.usgs.gov/MEASURES/NASADEM_SC.001/2000.02.11/'
 
-    output_raster = driver.Create(output_path,
-                                  int(columns),
-                                  int(rows),
-                                  nband,
-                                  eType=gdal_data_type)
-    return output_raster
+    def __init__(self):
+        super().__init__()
 
+    def _resolve_filenames(self, bbox: List[float]):
+        lon_substrings, lat_substrings = super()._resolve_filenames(bbox)
 
-def numpy_array_to_raster(output_path,
-                          numpy_array,
-                          upper_left_tuple,
-                          cell_resolution=0.000277777777777778,
-                          nband=1,
-                          no_data=15,
-                          gdal_data_type=gdal.GDT_UInt16,
-                          spatial_reference_system_wkid=4326,
-                          driver=r'GTiff'):
-    ''' returns a gdal raster data source
+        file_names = []
+        for lon in lon_substrings:
+            for lat in lat_substrings:
+                file_names.append(f"NASADEM_SC_{lat}{lon}.zip")
 
-    keyword arguments:
+        return file_names
 
-    output_path -- full path to the raster to be written to disk
-    numpy_array -- numpy array containing data to write to raster
-    upper_left_tuple -- the upper left point of the numpy array (should be a tuple structured as (x, y))
-    cell_resolution -- the cell resolution of the output raster
-    nband -- the band to write to in the output raster
-    no_data -- value in numpy array that should be treated as no data
-    gdal_data_type -- gdal data type of raster (see gdal documentation for list of values)
-    spatial_reference_system_wkid -- well known id (wkid) of the spatial reference of the data
-    driver -- string value of the gdal driver to use
+    @staticmethod
+    def _coords_from_filename(infile: str):
+        infile = os.path.basename(infile)
 
-    '''
-    rows, columns = numpy_array.shape
+        match = re.search(r"[ns](\d{2})[we](\d{3})", infile)
+        if match:
+            n_or_s = match.group(0)[0]
+            e_or_w = match.group(0)[3]
+            n_value = match.group(1)
+            e_value = match.group(2)
 
-    # create output raster
-    output_raster = create_raster(output_path,
-                                  int(columns),
-                                  int(rows),
-                                  nband,
-                                  gdal_data_type)
+        lat = float(n_value) * (1 if n_or_s == 'n' else -1)
+        lon = float(e_value) * (1 if e_or_w == 'e' else -1)
 
-    geotransform = (upper_left_tuple[0],
-                    cell_resolution,
-                    0,
-                    upper_left_tuple[1],
-                    0,
-                    - 1 * cell_resolution)
+        return [lon, lat]
 
-    spatial_reference = osr.SpatialReference()
-    spatial_reference.ImportFromEPSG(spatial_reference_system_wkid)
-    output_raster.SetProjection(spatial_reference.ExportToWkt())
-    output_raster.SetGeoTransform(geotransform)
-    output_band = output_raster.GetRasterBand(1)
-    output_band.SetNoDataValue(no_data)
-    output_band.WriteArray(numpy_array)
-    output_band.FlushCache()
-    output_band.ComputeStatistics(False)
-
-    if os.path.exists(output_path) == False:
-        raise Exception('Failed to create raster: %s' % output_path)
-
-    return output_raster
+    def download_bbox(self, bbox: List[int], output_file: str, layer_extension: str = '.slope'):
+        super().download_bbox(bbox, output_file, layer_extension)

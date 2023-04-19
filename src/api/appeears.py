@@ -268,6 +268,7 @@ class Elevation(BaseAPI):
         dest, out_dir = super()._download(query)
 
         bottom_left_coords = self._coords_from_filename(os.path.basename(dest))
+        bottom_left_coords[1] = bottom_left_coords[1] + 1
         self._nc_to_tif(dest, bottom_left_coords, out_dir)
         print(dest)
         # Just want the .tif file at the end
@@ -302,7 +303,7 @@ class Elevation(BaseAPI):
              0,
              upper_left_tuple[1],
              0,
-             cell_resolution)
+             -1 * cell_resolution)
         )
 
         # Write the data to the GeoTIFF file

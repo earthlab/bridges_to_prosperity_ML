@@ -277,10 +277,8 @@ class Elevation(BaseAPI):
         # Open the netCDF file
         nc_file = Dataset(nc_path)
 
-        print(nc_file.variables)
-
         # Read the data and metadata from the netCDF file
-        var = nc_file.variables[var_name][:].squeeze()
+        var = nc_file.variables['SRTMGL1_DEM'][:].squeeze()
         x = nc_file.variables['lon'][:]
         y = nc_file.variables['lat'][:]
         crs = nc_file.variables['crs'].spatial_ref

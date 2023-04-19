@@ -252,10 +252,10 @@ class Elevation(BaseAPI):
             self._mosaic_tif_files(temp_dir, output_file=output_file)
 
             # 4) Cleanup
-            shutil.rmtree(temp_dir)
+            #shutil.rmtree(temp_dir)
 
         except Exception as e:
-            shutil.rmtree(temp_dir)
+            #shutil.rmtree(temp_dir)
             raise e
 
     def _download(self, query: Tuple[str, str]) -> None:

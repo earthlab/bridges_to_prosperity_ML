@@ -358,7 +358,7 @@ class Elevation(BaseAPI):
         file_names = []
         for lon in lon_substrings:
             for lat in lat_substrings:
-                file_names.append(f"{lat.upper()}{lon.upper()}.SRTMGL1.hgt.zip")
+                file_names.append(f"{lat.upper()}{lon.upper()}.SRTMGL1.hgt")
 
         # Find the page that the files are on
         page_dict = {

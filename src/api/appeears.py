@@ -308,7 +308,7 @@ class Elevation(BaseAPI):
 
         # Write the data to the GeoTIFF file
         tif_band = tif_dataset.GetRasterBand(1)
-        tif_band.WriteArray(np.flipud(var))
+        tif_band.WriteArray(var)
 
         # Close the GeoTIFF file and netCDF file
         tif_dataset = None

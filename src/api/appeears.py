@@ -17,6 +17,7 @@ import tempfile
 import rasterio
 from rasterio.merge import merge
 from rasterio.warp import reproject, Resampling
+from netCDF4 import Dataset
 
 import yaml
 
@@ -273,30 +274,37 @@ class Elevation(BaseAPI):
 
     @staticmethod
     def _nc_to_tif(nc_path: str, out_dir: str):
-        with rasterio.open(nc_path) as src:
+        # Open the netCDF file
+        nc_file = Dataset(nc_path)
 
-            # Reproject and resample the netCDF data to the output GeoTIFF CRS and resolution
-            dst_crs = 'wgs84'
-            dst_transform, dst_width, dst_height = rasterio.warp.calculate_default_transform(
-                src.crs, dst_crs, src.width, src.height, *src.bounds)
-            kwargs = src.meta.copy()
-            kwargs.update({
-                'crs': dst_crs,
-                'transform': dst_transform,
-                'width': dst_width,
-                'height': dst_height
-            })
-            tif_path = os.path.join(out_dir, os.path.basename(nc_path).replace('.nc', '.tif'))
-            with rasterio.open(tif_path, 'w', **kwargs) as dst:
-                for i in range(1, src.count + 1):
-                    reproject(
-                        source=rasterio.band(src, i),
-                        destination=rasterio.band(dst, i),
-                        src_transform=src.transform,
-                        src_crs=src.crs,
-                        dst_transform=dst_transform,
-                        dst_crs=dst_crs,
-                        resampling=Resampling.nearest)
+        print(nc_file.variables)
+
+        # Read the data and metadata from the netCDF file
+        var = nc_file.variables[var_name][:].squeeze()
+        x = nc_file.variables['lon'][:]
+        y = nc_file.variables['lat'][:]
+        crs = nc_file.variables['crs'].spatial_ref
+
+        # Define the output GeoTIFF file
+        tif_path = os.path.join(out_dir, os.path.basename(nc_path).replace('.nc', '.tif'))
+
+        # Create a new GeoTIFF file
+        driver = gdal.GetDriverByName('GTiff')
+        tif_dataset = driver.Create(tif_path, len(x), len(y), 1, gdal.GDT_Float32)
+
+        # Set the projection and transform of the GeoTIFF file
+        proj = osr.SpatialReference()
+        proj.ImportFromWkt(str(crs))
+        tif_dataset.SetProjection(proj.ExportToWkt())
+        tif_dataset.SetGeoTransform((x[0], x[1] - x[0], 0, y[-1], 0, y[-1] - y[-2]))
+
+        # Write the data to the GeoTIFF file
+        tif_band = tif_dataset.GetRasterBand(1)
+        tif_band.WriteArray(np.flipud(var))
+
+        # Close the GeoTIFF file and netCDF file
+        tif_dataset = None
+        nc_file.close()
 
 
 class Slope(BaseAPI):

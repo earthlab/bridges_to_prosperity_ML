@@ -16,8 +16,8 @@ import zipfile
 import tempfile
 import rasterio
 from rasterio.merge import merge
-from rasterio.warp import reproject, Resampling
 from netCDF4 import Dataset
+import multiprocessing as mp
 
 import yaml
 
@@ -28,6 +28,93 @@ from src.api.util import generate_secrets_file
 # TODO: Write comments
 # TODO: Parallelize things
 # TODO: Use regions / districts as input parameters for download
+
+
+def _base_download_task(task_args: Namespace) -> None:
+    """
+    Downloads data from the NASA earthdata servers. Authentication is established using the username and password
+    found in the local ~/.netrc file.
+    Args:
+        query (tuple): Contains the remote location and the local path destination, respectively
+    """
+    link = task_args.link
+
+    pm = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+    pm.add_password(None, "https://urs.earthdata.nasa.gov", task_args.username, task_args.password)
+    cookie_jar = CookieJar()
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPBasicAuthHandler(pm),
+        urllib.request.HTTPCookieProcessor(cookie_jar)
+    )
+    urllib.request.install_opener(opener)
+    myrequest = urllib.request.Request(link)
+    response = urllib.request.urlopen(myrequest)
+    response.begin()
+
+    with open(task_args.dest, 'wb') as fd:
+        while True:
+            chunk = response.read()
+            if chunk:
+                fd.write(chunk)
+            else:
+                break
+
+
+def _elevation_download_task(task_args: Namespace) -> None:
+    """
+    Downloads data from the NASA earthdata servers. Authentication is established using the username and password
+    found in the local ~/.netrc file.
+    Args:
+
+    """
+    dest = os.path.join(task_args.out_dir, os.path.basename(task_args.link))
+    task_args.dest = dest
+    _base_download_task(task_args)
+
+    _nc_to_tif(task_args.dest, task_args.top_left_coord, task_args.out_dir)
+
+    # Just want the .tif file at the end
+    os.remove(task_args.dest)
+
+
+def _nc_to_tif(nc_path: str, top_left_coord: List[float], out_dir: str,
+               cell_resolution: float = 0.000277777777777778):
+    # Open the netCDF file
+    nc_file = Dataset(nc_path)
+
+    # Read the data and metadata from the netCDF file
+    var = nc_file.variables['SRTMGL1_DEM'][:].squeeze()
+    x = nc_file.variables['lon'][:]
+    y = nc_file.variables['lat'][:]
+    crs = nc_file.variables['crs'].spatial_ref
+
+    # Define the output GeoTIFF file
+    tif_path = os.path.join(out_dir, os.path.basename(nc_path).replace('.nc', '.tif'))
+
+    # Create a new GeoTIFF file
+    driver = gdal.GetDriverByName('GTiff')
+    tif_dataset = driver.Create(tif_path, len(x), len(y), 1, gdal.GDT_Float32)
+
+    # Set the projection and transform of the GeoTIFF file
+    proj = osr.SpatialReference()
+    proj.ImportFromWkt(str(crs))
+    tif_dataset.SetProjection(proj.ExportToWkt())
+    tif_dataset.SetGeoTransform(
+        (top_left_coord[0],
+         cell_resolution,
+         0,
+         top_left_coord[1],
+         0,
+         -1 * cell_resolution)
+    )
+
+    # Write the data to the GeoTIFF file
+    tif_band = tif_dataset.GetRasterBand(1)
+    tif_band.WriteArray(var)
+
+    # Close the GeoTIFF file and netCDF file
+    tif_dataset = None
+    nc_file.close()
 
 
 class BaseAPI:
@@ -76,40 +163,6 @@ class BaseAPI:
                 yaml.dump(secrets, f)
 
         return username, password
-
-    def _download(self, query: Tuple[str, str]) -> Tuple[str, str]:
-        """
-        Downloads data from the NASA earthdata servers. Authentication is established using the username and password
-        found in the local ~/.netrc file.
-        Args:
-            query (tuple): Contains the remote location and the local path destination, respectively
-        """
-        link = query[0]
-        out_dir = query[1]
-
-        pm = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-        pm.add_password(None, "https://urs.earthdata.nasa.gov", self._username, self._password)
-        cookie_jar = CookieJar()
-        opener = urllib.request.build_opener(
-            urllib.request.HTTPBasicAuthHandler(pm),
-            urllib.request.HTTPCookieProcessor(cookie_jar)
-        )
-        urllib.request.install_opener(opener)
-        myrequest = urllib.request.Request(link)
-        response = urllib.request.urlopen(myrequest)
-        response.begin()
-
-        dest = os.path.join(out_dir, os.path.basename(link))
-
-        with open(dest, 'wb') as fd:
-            while True:
-                chunk = response.read()
-                if chunk:
-                    fd.write(chunk)
-                else:
-                    break
-
-        return dest, out_dir
 
     @staticmethod
     def _create_substrings(min_deg: int, max_deg: int, min_ord: str, max_ord: str, padding: int) -> List[str]:
@@ -237,87 +290,66 @@ class Elevation(BaseAPI):
             n_value = match.group(1)
             e_value = match.group(2)
 
-        lat = float(n_value) * (1 if n_or_s == 'N' else -1)
+        lat = float(n_value) * (1 if n_or_s == 'N' else -1) + 1  # File name gives bottom left so add 1 to get to top
         lon = float(e_value) * (1 if e_or_w == 'E' else -1)
 
         return [lon, lat]
 
-    def download_bbox(self, bbox: List[int], output_file: str):
+    def download_district(self, out_file: str, region: str, district: str, buffer: float):
+        with open(REGION_FILE_PATH, 'r') as f:
+            region_file_info = yaml.load(f, Loader=yaml.FullLoader)
+
+        if region not in region_file_info:
+            raise ValueError(f'No region {region} in {REGION_FILE_PATH}')
+        region_info = region_file_info[region]
+
+        if district not in region_info['districts']:
+            raise ValueError(f'No district {district} found for region {region}')
+
+        bbox = region_info['districts']['bbox']
+        self.download_bbox(out_file, bbox, buffer)
+
+    def download_bbox(self, out_file: str, bbox: List[float], buffer: float):
+
+        # Convert the buffer from meters to degrees lat/long at the equator
+        buffer /= 111000
+
+        # Adjust the bounding box to include the buffer (subtract from min lat/long values, add to max lat/long values)
+        bbox[0] -= buffer
+        bbox[1] -= buffer
+        bbox[2] += buffer
+        bbox[3] += buffer
+
         temp_dir = tempfile.mkdtemp(prefix='b2p')
 
         try:
-            # 1) Download all overlapping files
-            # 2) Convert raw binary .slope files into geo-referenced tiff
+            # 1) Download all overlapping files and convert to tiff in parallel
             file_names = self._resolve_filenames(bbox)
+            task_args = []
             for file_name in file_names:
-                print(os.path.join(self.BASE_URL, file_name))
-                self._download((os.path.join(self.BASE_URL, file_name), temp_dir))
+                task_args.append(
+                    Namespace(
+                        link=(os.path.join(self.BASE_URL, file_name)),
+                        out_dir=temp_dir,
+                        top_left_coord=self._coords_from_filename(file_name),
+                        username=self._username,
+                        password=self._password
+                    )
+                )
 
-            # 3) Create a composite of all tiffs in the temp_dir
-            self._mosaic_tif_files(temp_dir, output_file=output_file)
+            with mp.Pool(mp.cpu_count() - 1) as pool:
+                for _ in tqdm(pool.imap_unordered(_elevation_download_task, task_args), total=len(task_args)):
+                    pass
 
-            # 4) Cleanup
+            # 2) Create a composite of all tiffs in the temp_dir
+            self._mosaic_tif_files(temp_dir, output_file=out_file)
+
+            # 3) Cleanup
             shutil.rmtree(temp_dir)
 
         except Exception as e:
             shutil.rmtree(temp_dir)
             raise e
-
-    def _download(self, query: Tuple[str, str]) -> None:
-        """
-        Downloads data from the NASA earthdata servers. Authentication is established using the username and password
-        found in the local ~/.netrc file.
-        Args:
-            query (tuple): Contains the remote location and the local path destination, respectively
-        """
-        dest, out_dir = super()._download(query)
-
-        bottom_left_coords = self._coords_from_filename(os.path.basename(dest))
-        bottom_left_coords[1] = bottom_left_coords[1] + 1
-        self._nc_to_tif(dest, bottom_left_coords, out_dir)
-
-        # Just want the .tif file at the end
-        os.remove(dest)
-
-    @staticmethod
-    def _nc_to_tif(nc_path: str, upper_left_tuple: List[float], out_dir: str,
-                   cell_resolution: float = 0.000277777777777778):
-        # Open the netCDF file
-        nc_file = Dataset(nc_path)
-
-        # Read the data and metadata from the netCDF file
-        var = nc_file.variables['SRTMGL1_DEM'][:].squeeze()
-        x = nc_file.variables['lon'][:]
-        y = nc_file.variables['lat'][:]
-        crs = nc_file.variables['crs'].spatial_ref
-
-        # Define the output GeoTIFF file
-        tif_path = os.path.join(out_dir, os.path.basename(nc_path).replace('.nc', '.tif'))
-
-        # Create a new GeoTIFF file
-        driver = gdal.GetDriverByName('GTiff')
-        tif_dataset = driver.Create(tif_path, len(x), len(y), 1, gdal.GDT_Float32)
-
-        # Set the projection and transform of the GeoTIFF file
-        proj = osr.SpatialReference()
-        proj.ImportFromWkt(str(crs))
-        tif_dataset.SetProjection(proj.ExportToWkt())
-        tif_dataset.SetGeoTransform(
-            (upper_left_tuple[0],
-             cell_resolution,
-             0,
-             upper_left_tuple[1],
-             0,
-             -1 * cell_resolution)
-        )
-
-        # Write the data to the GeoTIFF file
-        tif_band = tif_dataset.GetRasterBand(1)
-        tif_band.WriteArray(var)
-
-        # Close the GeoTIFF file and netCDF file
-        tif_dataset = None
-        nc_file.close()
 
 
 class Slope(BaseAPI):

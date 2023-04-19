@@ -487,7 +487,7 @@ class Elevation(BaseAPI):
     def download_district(self, out_file: str, region: str, district: str, buffer: float):
         super().download_district(out_file, region, district, buffer, _elevation_download_task)
 
-    def download_bbox(self, out_file: str, bbox: List[float], buffer: float):
+    def download_bbox(self, out_file: str, bbox: List[float], buffer: float, _download_task: Any):
         super().download_bbox(out_file, bbox, buffer, _elevation_download_task)
 
 
@@ -507,7 +507,7 @@ class Slope(BaseAPI):
 
         return file_names
 
-    def download_district(self, out_file: str, region: str, district: str, buffer: float):
+    def download_district(self, out_file: str, region: str, district: str, buffer: float, _download_task: Any):
         super().download_district(out_file, region, district, buffer, _slope_download_task)
 
     def download_bbox(self, out_file: str, bbox: List[float], buffer: float):

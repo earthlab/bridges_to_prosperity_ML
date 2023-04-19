@@ -306,7 +306,7 @@ class Elevation(BaseAPI):
         if district not in region_info['districts']:
             raise ValueError(f'No district {district} found for region {region}')
 
-        bbox = region_info['districts']['bbox']
+        bbox = region_info['districts'][district]['bbox']
         self.download_bbox(out_file, bbox, buffer)
 
     def download_bbox(self, out_file: str, bbox: List[float], buffer: float):

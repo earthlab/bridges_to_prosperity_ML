@@ -102,6 +102,8 @@ class BaseAPI:
                 else:
                     break
 
+        print(os.listdir(out_dir))
+
         # First unzip the file and then find the .slope file
         unzipped_dir = dest.replace('.zip', '')
         os.makedirs(unzipped_dir, exist_ok=True)

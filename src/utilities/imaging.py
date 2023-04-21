@@ -379,7 +379,7 @@ def elevation_to_slope(elevation_file: str, slope_outfile: str):
     numpy_array_to_raster(slope_outfile, slope_deg, geo_transform)
 
 
-def numpy_array_to_raster(output_path: str, numpy_array: np.array, geo_transform: gdal.GeoTransform,
+def numpy_array_to_raster(output_path: str, numpy_array: np.array, geo_transform,
                            cell_resolution: float = 0.000277777777777778, n_band: int = 1,
                            no_data: int = 15, gdal_data_type: int = gdal.GDT_UInt16,
                            spatial_reference_system_wkid: int = 4326):

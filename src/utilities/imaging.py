@@ -375,21 +375,21 @@ def elevation_to_slope(elevation_file: str, slope_outfile: str):
 
     dataset = gdal.Open(elevation_file)
     geo_transform = dataset.GetGeoTransform()
+    projection = dataset.GetProjection()
 
-    numpy_array_to_raster(slope_outfile, slope_deg, geo_transform)
+    numpy_array_to_raster(slope_outfile, slope_deg, geo_transform, projection)
 
 
 def numpy_array_to_raster(output_path: str, numpy_array: np.array, geo_transform,
-                           cell_resolution: float = 0.000277777777777778, n_band: int = 1,
-                           no_data: int = 15, gdal_data_type: int = gdal.GDT_UInt16,
-                           spatial_reference_system_wkid: int = 4326):
+                          projection, n_band: int = 1, no_data: int = 15, gdal_data_type: int = gdal.GDT_UInt16,
+                          spatial_reference_system_wkid: int = 4326):
     """
     Returns a gdal raster data source
     Args:
         output_path (str): Full path to the raster to be written to disk
         numpy_array (np.array): Numpy array containing data to write to raster
-        top_left_coord (tuple): The upper left point of the numpy array (should be a tuple structured as (lon, lat))
-        cell_resolution (float): The cell resolution of the output raster
+        geo_transform (gdal GeoTransform): tuple of six values that represent the top left corner coordinates, the
+        pixel size in x and y directions, and the rotation of the image
         n_band (int): The band to write to in the output raster
         no_data (int): Value in numpy array that should be treated as no data
         gdal_data_type (int): Gdal data type of raster (see gdal documentation for list of values)
@@ -400,9 +400,7 @@ def numpy_array_to_raster(output_path: str, numpy_array: np.array, geo_transform
     # create output raster
     output_raster = _create_raster(output_path, int(columns), int(rows), n_band, gdal_data_type)
 
-    spatial_reference = osr.SpatialReference()
-    spatial_reference.ImportFromEPSG(spatial_reference_system_wkid)
-    output_raster.SetProjection(spatial_reference.ExportToWkt())
+    output_raster.SetProjection(projection)
     output_raster.SetGeoTransform(geo_transform)
     output_band = output_raster.GetRasterBand(1)
     output_band.SetNoDataValue(no_data)

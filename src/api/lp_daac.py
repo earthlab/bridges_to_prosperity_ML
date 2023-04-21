@@ -4,28 +4,28 @@ curvature data.
 """
 
 import getpass
-import os
-import shutil
-from typing import Tuple, List, Any
-from argparse import Namespace
-from tqdm import tqdm
-import re
-import urllib
 import math
-import numpy as np
-import certifi
+import multiprocessing as mp
+import os
+import re
+import shutil
+import tempfile
+import urllib
+import zipfile
+from abc import ABC
+from argparse import Namespace
 from http.cookiejar import CookieJar
+from typing import Tuple, List, Any
+from src.utilities.imaging import numpy_array_to_raster
+
+import numpy as np
+import rasterio
+import yaml
+from netCDF4 import Dataset
 from osgeo import gdal
 from osgeo import osr
-import zipfile
-import tempfile
-import rasterio
 from rasterio.merge import merge
-from netCDF4 import Dataset
-import multiprocessing as mp
-from abc import ABC
-
-import yaml
+from tqdm import tqdm
 
 from definitions import B2P_DIR, REGION_FILE_PATH
 from src.api.util import generate_secrets_file
@@ -33,9 +33,9 @@ from src.api.util import generate_secrets_file
 
 def _base_download_task(task_args: Namespace) -> None:
     """
-    Downloads data from the NASA earthdata servers. Authentication is established using the username and password.
+    Downloads data from the LP DAAC servers. Authentication is established using NASA EarthData username and password.
     Args:
-        task_args (Namespace): Contains attributes required for requesting data from EarthData servers
+        task_args (Namespace): Contains attributes required for requesting data from LP DAAC
             task_args.link (str): URL to datafile on servers
             task_args.username (str): NASA EarthData username
             task_args.password (str): NASA EarthData password
@@ -63,145 +63,12 @@ def _base_download_task(task_args: Namespace) -> None:
             else:
                 break
 
-
-# Functions for slope parallel data processing
-
-def _slope_download_task(task_args: Namespace) -> None:
-    """
-    Downloads NASADEM_SC v001 slope data from LP DAAC servers. Zip file containing .slope layer is downloaded and must
-    first be uncompressed. The .slope file is a raw binary file and must be converted to a more useful file structure
-    (.tif). A description of the binary file structure can be found here:
-    https://forum.earthdata.nasa.gov/viewtopic.php?t=553
-    Args:
-        task_args (Namespace): Contains attributes required for requesting data from LP DAAC servers
-            task_args.link (str): URL to datafile on servers
-            task_args.out_dir (str): Path to directory where files will be written
-            task_args.username (str): NASA EarthData username
-            task_args.password (str): NASA EarthData password
-            task_args.top_left_coord (list): List giving coordinate of top left of image [lon, lat] so tif file can be
-            geo-referenced
-    """
-    dest = os.path.join(task_args.out_dir, os.path.basename(task_args.link))
-    task_args.dest = dest
-    _base_download_task(task_args)
-
-    # First unzip the file and then find the .slope file
-    unzipped_dir = dest.replace('.zip', '')
-    os.makedirs(unzipped_dir, exist_ok=True)
-    with zipfile.ZipFile(dest, 'r') as zip_ref:
-        zip_ref.extractall(unzipped_dir)
-
-    slope_file = None
-    for file in os.listdir(unzipped_dir):
-        if file.endswith('.slope'):
-            slope_file = os.path.join(unzipped_dir, file)
-            break
-
-    if slope_file is not None:
-        _binary_to_tif(slope_file, task_args.out_dir, task_args.top_left_coord)
-    else:
-        raise FileNotFoundError(f'Could not find .slope file in {unzipped_dir}')
-
-    # Just want the .tif file at the end
-    shutil.rmtree(unzipped_dir)
-    os.remove(dest)
-
-
-def _binary_to_tif(infile: str, out_dir: str, top_left_coord: Tuple[float, float]) -> None:
-    """
-    SLOPE layers are non-geo-referenced binary files which need to be converted to a more useful file type
-    (in this case .tif). A discussion about this can be found here: https://forum.earthdata.nasa.gov/viewtopic.php?t=553
-    """
-    columns = 3601
-    rows = 3601
-
-    with open(infile, 'rb') as f:
-        data = np.fromfile(f, dtype='>u2')  # Big endian encoding for slope data
-
-    data = data.reshape(columns, rows) / 100  # Slope data has a scale factor of 100
-
-    tiff_path = os.path.join(out_dir, os.path.basename(infile).replace('.slope', '.tif'))
-
-    _numpy_array_to_raster(output_path=tiff_path, numpy_array=data, top_left_coord=top_left_coord)
-
-
-# Methods for converting numpy array into a tiff file, credit:
-#
-
-def _create_raster(output_path: str, columns: int, rows: int, n_band: int = 1, gdal_data_type: int = gdal.GDT_UInt16,
-                   driver: str = r'GTiff'):
-    """
-    Credit:
-    https://gis.stackexchange.com/questions/290776/how-to-create-a-tiff-file-using-gdal-from-a-numpy-array-and-
-    specifying-nodata-va
-
-    Creates a blank raster for data to be written to
-    Args:
-        output_path (str): Path where the output tif file will be written to
-        columns (int): Number of columns in raster
-        rows (int): Number of rows in raster
-        n_band (int): Number of bands in raster
-        gdal_data_type (int): Data type for data written to raster
-        driver (str): Driver for conversion
-    """
-    # create driver
-    driver = gdal.GetDriverByName(driver)
-
-    output_raster = driver.Create(output_path, columns, rows, n_band, eType=gdal_data_type)
-    return output_raster
-
-
-def _numpy_array_to_raster(output_path: str, numpy_array: np.array, top_left_coord: Tuple[float, float],
-                           cell_resolution: float = 0.000277777777777778, n_band: int = 1,
-                           no_data: int = 15, gdal_data_type: int = gdal.GDT_UInt16,
-                           spatial_reference_system_wkid: int = 4326):
-    """
-    Returns a gdal raster data source
-    Args:
-        output_path (str): Full path to the raster to be written to disk
-        numpy_array (np.array): Numpy array containing data to write to raster
-        top_left_coord (tuple): The upper left point of the numpy array (should be a tuple structured as (lon, lat))
-        cell_resolution (float): The cell resolution of the output raster
-        n_band (int): The band to write to in the output raster
-        no_data (int): Value in numpy array that should be treated as no data
-        gdal_data_type (int): Gdal data type of raster (see gdal documentation for list of values)
-        spatial_reference_system_wkid (int): Well known id (wkid) of the spatial reference of the data
-    """
-    rows, columns = numpy_array.shape
-
-    # create output raster
-    output_raster = _create_raster(output_path, int(columns), int(rows), n_band, gdal_data_type)
-    geo_transform = (
-        top_left_coord[0],
-        cell_resolution,
-        0,
-        top_left_coord[1],
-        0,
-        - 1 * cell_resolution
-    )
-
-    spatial_reference = osr.SpatialReference()
-    spatial_reference.ImportFromEPSG(spatial_reference_system_wkid)
-    output_raster.SetProjection(spatial_reference.ExportToWkt())
-    output_raster.SetGeoTransform(geo_transform)
-    output_band = output_raster.GetRasterBand(1)
-    output_band.SetNoDataValue(no_data)
-    output_band.WriteArray(numpy_array)
-    output_band.FlushCache()
-    output_band.ComputeStatistics(False)
-
-    if not os.path.exists(output_path):
-        raise Exception('Failed to create raster: %s' % output_path)
-
-    return output_raster
-
-
 # Functions for elevation parallel data processing
 
 
 def _elevation_download_task(task_args: Namespace) -> None:
     """
-    Downloads SRTMGL1 v003 slope data from EarthData servers. Files are downloaded as netCDF files and are thus
+    Downloads SRTMGL1 v003 slope data from LP DAAC servers. Files are downloaded as netCDF files and are thus
     converted to tif files so file structures are uniform throughout the api
     Args:
         task_args (Namespace): Contains attributes required for requesting data from EarthData servers
@@ -289,7 +156,7 @@ class BaseAPI(ABC):
     def _get_auth_credentials() -> Tuple[str, str]:
         """
         Ask the user for their urs.earthdata.nasa.gov username and login if secrets.yaml file is not found in project
-        root. After the first query the secrets.yaml will be created for any subsequent initializations
+        root. After the first query, the secrets.yaml will be created for any subsequent initializations
         Returns:
             username (str): urs.earthdata.nasa.gov username
             password (str): urs.earthdata.nasa.gov password
@@ -592,65 +459,3 @@ class Elevation(BaseAPI):
             buffer (float): Buffer to add to the bounding box in meters
         """
         super().download_bbox(out_file, bbox, _elevation_download_task, buffer)
-
-
-class Slope(BaseAPI):
-    """
-    NASADEM_SC v001 elevation data specific methods for requesting data from LP DAAC servers. Files are downloaded in
-    parallel as zip files from which raw binary .slope layer file is extracted. Binary file is then converted to tif
-    format. Finally, tif files are made into a single tif mosaic covering the entire requested region.
-    Data homepage: https://lpdaac.usgs.gov/products/nasadem_scv001/
-    Ex.
-        slope = Slope()
-        slope.download_district('data/slope/ethiopia/yem.tif', 'Ethiopia', 'Yem')
-        OR
-        slope.download_bbox('data/slope/ethiopia/yem.tif', [37.391, 7.559, 37.616, 8.012])
-    """
-    BASE_URL = 'https://e4ftl01.cr.usgs.gov/MEASURES/NASADEM_SC.001/2000.02.11/'
-
-    def __init__(self):
-        super().__init__()
-
-    def _resolve_filenames(self, bbox: List[float]) -> List[str]:
-        """
-        Files are stored with the following naming convention, for example: NASADEM_SC_n00e003.zip where n00 is 0 deg
-        latitude and e003 is 3 deg longitude, referring to the lower left coordinate of the data file. So create all
-        the possible file name combinations within the range of the bounding box
-        Args:
-            bbox (list): Bounding box coordinates in [min_lon, min_lat, max_lon, max_lat]
-        Returns:
-            file_names (list): List of NASADEM_SC formatted file names within the bbox range
-        """
-        lon_substrings, lat_substrings = super()._resolve_filenames(bbox)
-
-        file_names = []
-        for lon in lon_substrings:
-            for lat in lat_substrings:
-                file_names.append(f"NASADEM_SC_{lat}{lon}.zip")
-
-        return file_names
-
-    def download_district(self, out_file: str, region: str, district: str, buffer: float) -> None:
-        """
-       Downloads data given a region and district. Bounding box will be read in from the region_info.yaml file in the
-       root data directory. If the region or district is not found an error will be raised.
-       Args:
-           out_file (str): Path to where the output mosaic tif file of requested data will be written to
-           region (str): Name of the region in the region_info.yaml file
-           district (str): Name of the district in the specified region's entry in the region_info.yaml file
-           buffer (float): Buffer to add to the bounding box in meters
-       """
-        super().download_district(out_file, region, district, _slope_download_task,  buffer)
-
-    def download_bbox(self, out_file: str, bbox: List[float], _download_task: Any = None, buffer: float = 0) -> None:
-        """
-        Downloads data given a region and district. Bounding box will be read in from the region_info.yaml file in the
-        root data directory. If the region or district is not found an error will be raised.
-        Args:
-            out_file (str): Path to where the output mosaic tif file of requested data will be written to
-            bbox (list): Bounding box defining area of data request in [min_lon, min_lat, max_lon, max_lat]
-            _download_task (object): Function to use to download the data. This is a dummy parameter in order to match
-            the signature of te super method
-            buffer (float): Buffer to add to the bounding box in meters
-        """
-        super().download_bbox(out_file, bbox, _slope_download_task, buffer)

@@ -28,7 +28,7 @@ if [ -f ~/.git-completion.bash ]; then
 fi
 
 # aliases
-alias gc="git commit -m"
+  gc="git commit -m"
 alias gcu="git add -u; git commit -m"
 alias gp="git push origin HEAD"
 alias gk="gitk &"
@@ -64,13 +64,13 @@ echo "Activating conda env"
 conda activate .
 cd $cwd 
 
-if pip -vvv freeze -r requirements.txt | grep "not installed"
-then 
-  echo "Pip install requirements..."
-  pip install -r requirements.txt > /dev/null 2>&1
-else
-  echo "All python requirements met"
-fi
+#if pip -vvv freeze -r requirements.txt | grep "not installed"
+#then 
+#  echo "Pip install requirements..."
+#  pip install -r requirements.txt > /dev/null 2>&1
+#else
+#  echo "All python requirements met"
+#fi
 
 export BASE_DIR=$DIR
 export TORCH_PARAMS="$DIR/data/torch.yaml"

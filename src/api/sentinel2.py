@@ -309,9 +309,7 @@ class SinergiseSentinelAPI:
                     RequestPayer='requester'
                 )
                 if 'Contents' in list(response.keys()):
-                    info += [(v['Key'], v['Size']) for v in response['Contents'] if
-                             'B02.jp2' in v['Key'] or 'B03.jp2' in v['Key'] or 'B04.jp2' in v['Key'] or 'B08.jp2' in v['Key'] or
-                             'MSK_CLOUDS_B00.gml' in v['Key']]
+                    info += [(v['Key'], v['Size']) for v in response['Contents'] if 'B08.jp2' in v['Key'] or 'MSK_CLOUDS_B00.gml' in v['Key']]
 
         return info
 

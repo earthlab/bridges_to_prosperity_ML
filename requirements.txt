@@ -16,3 +16,4 @@ plotly
 plotly_express
 matplotlib
 pyYAML
+osmnx

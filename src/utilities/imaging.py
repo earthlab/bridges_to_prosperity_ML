@@ -363,7 +363,13 @@ def _create_raster(output_path: str, columns: int, rows: int, n_band: int = 1, g
     return output_raster
 
 
-def elevation_to_slope(elevation_file: str, slope_outfile: str):
+def elevation_to_slope(elevation_file: str, slope_outfile: str) -> None:
+    """
+    Calculates the slope degree from the norm of the gradient of the input elevation data.
+    Args:
+        elevation_file (str): Path to the input .tif file with elevation data
+        slope_outfile (str): Path to where the output .tif slope file will be written to
+    """
     image = Image.open(elevation_file)
     elevation_data = np.array(image)  # Measured in meters
     dx, dy = 30.87, 30.87  # 1 arc second in meters
@@ -381,8 +387,7 @@ def elevation_to_slope(elevation_file: str, slope_outfile: str):
 
 
 def numpy_array_to_raster(output_path: str, numpy_array: np.array, geo_transform,
-                          projection, n_band: int = 1, no_data: int = 15, gdal_data_type: int = gdal.GDT_UInt16,
-                          spatial_reference_system_wkid: int = 4326):
+                          projection, n_band: int = 1, no_data: int = 15, gdal_data_type: int = gdal.GDT_UInt16):
     """
     Returns a gdal raster data source
     Args:
@@ -393,7 +398,6 @@ def numpy_array_to_raster(output_path: str, numpy_array: np.array, geo_transform
         n_band (int): The band to write to in the output raster
         no_data (int): Value in numpy array that should be treated as no data
         gdal_data_type (int): Gdal data type of raster (see gdal documentation for list of values)
-        spatial_reference_system_wkid (int): Well known id (wkid) of the spatial reference of the data
     """
     rows, columns = numpy_array.shape
 

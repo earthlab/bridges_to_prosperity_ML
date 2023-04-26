@@ -17,6 +17,7 @@ from shapely.geometry import polygon
 from torchvision.transforms import ToTensor
 from tqdm.auto import tqdm
 from PIL import Image
+from scipy import interpolate
 
 from src.utilities.coords import tiff_to_bbox, bridge_in_bbox
 
@@ -338,6 +339,47 @@ def tiff_to_tiles(
         pbar.set_description(f'Saving to file {grid_geoloc_file}')
     df.to_csv(grid_geoloc_file, index=False)
     return df
+
+
+def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
+    low_res = gdal.Open(low_resolution_path)
+
+    # Access the data
+    low_res_band = low_res.GetRasterBand(1)
+    low_res_data = low_res_band.ReadAsArray()
+
+    low_res_lons, low_res_lats = get_geo_locations_from_tif(low_res)
+
+    low_res_interp = interpolate.NearestNDInterpolator(list(zip(low_res_lons, low_res_lats)), low_res_data)
+
+    high_res = gdal.Open(high_resolution_path)
+
+    high_res_lons, high_res_lats = get_geo_locations_from_tif(high_res)
+    high_res_data = low_res_interp(list(zip(high_res_lons, high_res_lons)))
+
+    return high_res_data
+
+
+def get_geo_locations_from_tif(raster):
+    # Get geolocation information
+    geo_transform = raster.GetGeoTransform()
+    x_size = geo_transform[1]
+    y_size = geo_transform[5]
+    x_origin = geo_transform[0]
+    y_origin = geo_transform[3]
+
+    # Get geolocation of each data point
+    lats = []
+    for row in range(raster.RasterYSize):
+        lats.append(y_origin - (row * y_size))
+    low_res_lats = np.repeat(np.array([lats]), raster.RasterXSize, axis=0)
+
+    lons = []
+    for col in range(raster.RasterXSize):
+        lons.append(x_origin + (col * x_size))
+    low_res_lons = np.repeat(np.array([lons]), raster.RasterYSize, axis=0)
+
+    return low_res_lons, low_res_lats
 
 
 def _create_raster(output_path: str, columns: int, rows: int, n_band: int = 1, gdal_data_type: int = gdal.GDT_UInt16,

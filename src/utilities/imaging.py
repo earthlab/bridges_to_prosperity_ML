@@ -371,7 +371,7 @@ def get_geo_locations_from_tif(raster):
     # Get geolocation of each data point
     lats = []
     for row in range(raster.RasterYSize):
-        lats.append(y_origin - (row * y_size))
+        lats.append(y_origin + (row * y_size))
     low_res_lats = np.repeat(np.array([lats]), raster.RasterXSize, axis=0)
 
     lons = []
@@ -423,7 +423,7 @@ def elevation_to_slope(elevation_file: str, slope_outfile: str):
 
 
 def numpy_array_to_raster(output_path: str, numpy_array: np.array, geo_transform,
-                          projection, n_band: int = 1, no_data: int = 15, gdal_data_type: int = gdal.GDT_UInt16,
+                          projection, n_band: int = 1, no_data: int = 0, gdal_data_type: int = gdal.GDT_UInt16,
                           spatial_reference_system_wkid: int = 4326):
     """
     Returns a gdal raster data source

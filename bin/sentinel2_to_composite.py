@@ -26,7 +26,19 @@ def _composite_task(task_args: Namespace):
     return None
 
 
-def sentinel2_to_composite(slices, n_cores, bands: List[str], region: str, districts: List[str] = None):
+def split_list(lst, n):
+    # create a list of sublists of size n
+    sublists = [lst[i:i+n] for i in range(0, len(lst), n)]
+
+    # handle the remainder if the final sublist is smaller than n
+    if len(sublists[-1]) < n:
+        last = sublists.pop()
+        sublists[-1].extend(last)
+
+    return sublists
+
+
+def sentinel2_to_composite(slices, n_cores: int, bands: List[str], region: str, districts: List[str] = None):
     if districts is None:
         with open(REGION_FILE_PATH, 'r') as f:
             region_info = yaml.safe_load(f)
@@ -54,10 +66,12 @@ def sentinel2_to_composite(slices, n_cores, bands: List[str], region: str, distr
             for arg in tqdm(args, total=len(args), desc="Sequential...", leave=True):
                 _composite_task(arg)
         else:
-            print('\tUsing multiprocessing...')
-            with mp.Pool(n_cores) as pool:
-                for _ in tqdm(pool.imap_unordered(_composite_task, args)):
-                    pass
+            parallel_groups = split_list(args, n_cores)
+            for group in parallel_groups:
+                print('\tUsing multiprocessing...')
+                with mp.Pool(n_cores) as pool:
+                    for _ in tqdm(pool.imap_unordered(_composite_task, group)):
+                        pass
 
 
 if __name__ == '__main__':

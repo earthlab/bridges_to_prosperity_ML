@@ -118,8 +118,6 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
     composite_dir = os.path.join(COMPOSITE_DIR, region, district, coord)
     assert os.path.isdir(s2_dir)
     os.makedirs(composite_dir, exist_ok=True)
-    if num_slices > 1:
-        os.makedirs(composite_dir, exist_ok=True)
     optical_composite_file = OpticalComposite(region, district, coord, bands)
     if os.path.isfile(optical_composite_file.archive_path):
         return optical_composite_file.archive_path

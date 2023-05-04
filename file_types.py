@@ -27,7 +27,7 @@ class OpticalComposite(FileType):
     def name(self):
         base_string = f'optical_composite_{self.region}_{self.district}_{self.mgrs}_'
         for band in self.bands:
-            base_string += band + '_' if band != self.bands[-1] else ''
+            base_string += band + ('_' if band != self.bands[-1] else '')
         return base_string + '.tif'
 
     @property
@@ -36,15 +36,16 @@ class OpticalComposite(FileType):
 
     @staticmethod
     def find_files(in_dir: str, bands: List[str], recursive: bool = False):
+        bands = sorted(bands)
         regex = OpticalComposite.base_regex
         for band in bands:
-            regex += band + '_' if band != bands[-1] else ''
+            regex += band + ('_' if band != bands[-1] else '')
         regex += '\.tif$'
 
         files = glob.glob(in_dir + '/*', recursive=recursive)
         matching_files = [f for f in files if re.match(regex, f)]
 
-        bands = sorted(bands)
+        return matching_files
 
 
 class DataCube(FileType):

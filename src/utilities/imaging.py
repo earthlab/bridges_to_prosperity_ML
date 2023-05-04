@@ -213,7 +213,7 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
             j = BANDS_TO_IX[band] if n_bands > 1 else 1
             with rasterio.open(os.path.join(composite_dir, f'{band}.tiff'), 'r', driver='GTiff') as rf:
                 wf.write(rf.read(1), indexes=j)
-    shutil.rmtree(composite_dir)
+
     return optical_composite_file.archive_path
 
 

@@ -66,11 +66,14 @@ def sentinel2_to_composite(slices, n_cores: int, bands: List[str], region: str, 
             for arg in tqdm(args, total=len(args), desc="Sequential...", leave=True):
                 _composite_task(arg)
         else:
-            parallel_groups = split_list(args, n_cores)
-            for group in parallel_groups:
-                print('\tUsing multiprocessing...')
-                with mp.Pool(n_cores) as pool:
-                    for _ in tqdm(pool.imap_unordered(_composite_task, group)):
+            parallel_batches = split_list(args, n_cores)
+            print('\tUsing multiprocessing...')
+            with mp.Pool(n_cores) as pool:
+                results = []
+                for group in parallel_batches:
+                    results.append(pool.imap_unordered(_composite_task, group))
+                for res in tqdm(results):
+                    for _ in res:
                         pass
 
 

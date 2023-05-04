@@ -15,8 +15,8 @@ from src.utilities import imaging
 
 def _composite_task(task_args: Namespace):
     imaging.create_composite(
-        task_args.s2_dir,
-        task_args.composite_dir,
+        task_args.region,
+        task_args.district,
         task_args.coord,
         task_args.bands,
         np.float32,
@@ -99,7 +99,7 @@ if __name__ == '__main__':
         type=str,
         nargs='+',
         required=False,
-        default=[]
+        default=[]  # TODO: Make required with no default?
     )
     args = parser.parse_args()
 

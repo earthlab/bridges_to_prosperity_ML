@@ -34,6 +34,8 @@ def sentinel2_to_composite(slices, n_cores, bands: List[str], region: str, distr
 
     for district in districts:
         args = []
+        # TODO: Centralize
+        s2_dir = os.path.join(SENTINEL_2_DIR, region, district)
         for coord in os.listdir(s2_dir):
             args.append(
                 Namespace(
@@ -101,18 +103,10 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
-    if args.district is None:
-        # TODO: Get all districts for region
-        pass
-
-    s2_dir = os.path.join(SENTINEL_2_DIR, args.region, args.district) if args.s2_dir is None else args.s2_dir
-    composite_dir = os.path.join(COMPOSITE_DIR, args.region, args.district) if args.composite_dir is None else\
-        args.composite_dir
-
     sentinel2_to_composite(
-        s2_dir,
-        composite_dir,
         args.slices,
         args.n_cores,
-        args.bands
+        args.bands,
+        args.region,
+        args.districts
     )

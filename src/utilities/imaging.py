@@ -119,7 +119,7 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
     assert os.path.isdir(s2_dir)
     os.makedirs(composite_dir, exist_ok=True)
     if num_slices > 1:
-        os.makedirs(os.path.join(composite_dir, coord), exist_ok=True)
+        os.makedirs(composite_dir, exist_ok=True)
     optical_composite_file = OpticalComposite(region, district, coord, bands)
     if os.path.isfile(optical_composite_file.archive_path):
         return optical_composite_file.archive_path
@@ -142,7 +142,7 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
             slice_bounds.append((slice_end_pts[-2], slice_end_pts[-1]))
         else:
             slice_bounds = [None]
-        joined_file_path = os.path.join(composite_dir, coord, f'{band}.tiff')
+        joined_file_path = os.path.join(composite_dir, f'{band}.tiff')
         if os.path.isfile(joined_file_path):
             continue
 
@@ -150,7 +150,7 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
         for k, row_bound in tqdm(enumerate(slice_bounds), desc=f'band={band}', total=num_slices, position=2,
                                  disable=pbar):
             if num_slices > 1:
-                slice_file_path = os.path.join(composite_dir, coord,
+                slice_file_path = os.path.join(composite_dir,
                                                f'{band}_slice|{row_bound[0]}|{row_bound[1]}|.tiff')
             else:
                 slice_file_path = joined_file_path
@@ -187,7 +187,7 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
         if num_slices > 1:
             with rasterio.open(joined_file_path, 'w', driver='GTiff', width=g_ncols, height=g_nrows, count=1, crs=crs,
                                transform=transform, dtype=dtype) as wf:
-                for slice_file_path in glob(os.path.join(composite_dir, coord, f'{band}_slice*.tiff')):
+                for slice_file_path in glob(os.path.join(composite_dir, f'{band}_slice*.tiff')):
                     prts = slice_file_path.split('|')
                     left = int(prts[1])
                     right = int(prts[2])
@@ -216,9 +216,9 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
     ) as wf:
         for band in tqdm(bands, total=n_bands, desc='Combining bands...', leave=False, position=1, disable=pbar):
             j = BANDS_TO_IX[band] if n_bands > 1 else 1
-            with rasterio.open(os.path.join(composite_dir, coord, f'{band}.tiff'), 'r', driver='GTiff') as rf:
+            with rasterio.open(os.path.join(composite_dir, f'{band}.tiff'), 'r', driver='GTiff') as rf:
                 wf.write(rf.read(1), indexes=j)
-    shutil.rmtree(os.path.join(composite_dir, coord))
+    shutil.rmtree(composite_dir)
     return optical_composite_file.archive_path
 
 

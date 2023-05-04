@@ -23,6 +23,7 @@ CORES = mp.cpu_count() - 1
 def this_download(location_request_info: Tuple[str, int, int, str]) -> None:
     for location_path, composite_size, destination, position in location_request_info:
         s3 = initialize_s3(CONFIG.AWS.BUCKET)
+        print(type(s3))
         bucket = s3.Bucket(CONFIG.AWS.BUCKET)
         if os.path.isfile(destination):
             return None

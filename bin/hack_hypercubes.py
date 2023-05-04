@@ -61,7 +61,7 @@ def hack_hypercubes(requested_locations: List[str], composites_dir: str = COMPOS
     for loc in requested_locations:
         if '/' in loc:
             region, district = os.path.split(loc)
-            bbox = region_info[region][district]['bbox']
+            bbox = region_info[region]['districts'][district]['bbox']
             dates = region_info[region]['dates']
             s2_dir = os.path.join(SENTINEL_2_DIR, region, district)
             ir_composite_dir = os.path.join(SENTINEL_2_DIR, '..', 'ir', region, district)

@@ -82,8 +82,6 @@ def get_cloud_mask_from_file(cloud_path, crs, transform, shape, row_bound=None):
     # https://stackoverflow.com/questions/64995369/geopandas-warning-on-read-file
     warnings.filterwarnings("ignore", category=RuntimeWarning)
     try:
-        print('CLOUD PATH', cloud_path)
-        print('CRS', crs)
         cloud_file = gpd.read_file(cloud_path)
         cloud_file.crs = (str(crs))
         # convert the cloud mask data to a raster that has the same shape and transformation as the
@@ -168,7 +166,6 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
                 # add to list to do median filter later
                 cloud_correct_imgs.append(nan_clouds(pixels, cloud_channels))
                 del pixels
-            print('CCI', cloud_correct_imgs)
             corrected_stack = np.vstack([img.ravel() for img in cloud_correct_imgs])
             median_corrected = np.nanmedian(corrected_stack, axis=0, overwrite_input=True)
             median_corrected = median_corrected.reshape(cloud_correct_imgs[0].shape)
@@ -347,7 +344,6 @@ def tiff_to_tiles(
                 if not os.path.isfile(pt_file):
                     with rasterio.open(tile_tiff, 'r') as tmp:
                         scale_img = scale(tmp.read())
-                        # print(scale_img.shape)
                         scale_img = np.moveaxis(scale_img, 0, -1)  # make dims be c, w, h
                         tensor = torch_transformer(scale_img)
                         torch.save(tensor, pt_file)

@@ -207,7 +207,8 @@ class SinergiseSentinelAPI:
         else:
             self._s3 = boto3.client('s3')
 
-    def download(self, bounds: List[float], buffer: float, outdir: str, start_date: str, end_date: str) -> None:
+    def download(self, bounds: List[float], buffer: float, outdir: str, start_date: str, end_date: str,
+                 bands=None) -> None:
         """
         Downloads a list of .jp2 files from the Sinergise Sentinel2 LC1 bucket given a bounding box defined in lat/long,
          a buffer in meters, and a start and end date . Only Bands 2-4 are requested.
@@ -217,8 +218,12 @@ class SinergiseSentinelAPI:
              outdir (str): Directory where requested files will be written to
              start_date (str): Beginning of requested data creation date YYYY-MM-DD
              end_date (str): End of requested data creation date YYYY-MM-DD
+             bands (list): The bands to download for each file. Default is ['B02', 'B03', 'B04', 'B08'] for R, G, B, and
+              near wave IR, respectively
         """
         # Convert the buffer from meters to degrees lat/long at the equator
+        if bands is None:
+            bands = ['B02', 'B03', 'B04', 'B08']
         buffer /= 111000
 
         # Adjust the bounding box to include the buffer (subtract from min lat/long values, add to max lat/long values)
@@ -229,7 +234,7 @@ class SinergiseSentinelAPI:
 
         os.makedirs(outdir, exist_ok=True)
 
-        available_files = self._find_available_files(bounds, start_date, end_date)
+        available_files = self._find_available_files(bounds, start_date, end_date, bands)
         total_data = 0
         for file in available_files:
             total_data += file[1]
@@ -267,7 +272,8 @@ class SinergiseSentinelAPI:
             for _ in tqdm.tqdm(pool.imap_unordered(_download_task, args), total=len(args)):
                 pass
 
-    def _find_available_files(self, bounds: List[float], start_date: str, end_date: str) -> List[Tuple[str, str]]:
+    def _find_available_files(self, bounds: List[float], start_date: str, end_date: str,
+                              bands: List[str]) -> List[Tuple[str, str]]:
         """
         Given a bounding box and start / end date, finds which files are available on the bucket and meet the search
         criteria
@@ -309,7 +315,10 @@ class SinergiseSentinelAPI:
                     RequestPayer='requester'
                 )
                 if 'Contents' in list(response.keys()):
-                    info += [(v['Key'], v['Size']) for v in response['Contents'] if 'B08.jp2' in v['Key'] or 'MSK_CLOUDS_B00.gml' in v['Key']]
+                    info += [
+                        (v['Key'], v['Size']) for v in response['Contents'] if
+                        any([band+'.jp2' in v['Key'] for band in bands]) or 'MSK_CLOUDS_B00.gml' in v['Key']
+                    ]
 
         return info
 

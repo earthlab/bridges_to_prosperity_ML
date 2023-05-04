@@ -7,6 +7,8 @@ COMPOSITE_DIR = os.path.join(B2P_DIR, 'data', 'composites')
 TILE_DIR = os.path.join(B2P_DIR, 'data', 'tiles')
 TRUTH_DIR = os.path.join(B2P_DIR, 'data', 'ground_truth')
 SENTINEL_2_DIR = os.path.join(B2P_DIR, 'data', 'sentinel2')
+ELEVATION_DIR = os.path.join(B2P_DIR, 'data', 'elevation')
+SLOPE_DIR = os.path.join(B2P_DIR, 'data', 'slope')
 TORCH_DIR = os.path.join(B2P_DIR, 'data', 'torch')
 SECRETS_FILE_PATH = os.path.join(B2P_DIR, 'secrets.yaml')
 

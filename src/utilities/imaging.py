@@ -26,16 +26,34 @@ BANDS_TO_IX = {
     'B03': 2,  # Green
     'B04': 1  # Red
 }
-MAX_PIXEL_VAL = 4000
-
+MAX_RGB_VAL = 4000 # counts
+MAX_IR_VAL = 4000 # counts (double check this by looking at composites)
+MAX_ELEV = 8000 # meters
+MIN_ELEV = 0  # meters
 
 # the max_pixel_val was set to 2500? this probably should match with the max allowed value for clouds or it shouldn't be
 # included...
 def scale(
         x: Union[float, np.array],
-        max_pixel_val: float = MAX_PIXEL_VAL
+        max_rgb: float = MAX_IR_VAL,
+        min_elev: float = MIN_ELEV,
+        max_elev:float = MAX_ELEV
 ) -> Union[float, np.array]:
-    return x / max_pixel_val
+
+    if type(x) == float:
+        return x / max_rgb
+    else:
+        if np.shape[2] == 3:
+            return x / max_rgb
+        else: # multivariate case
+            assert np.shape[2] == 8 # B04, B03, B02 (RGB), B08(IR), OSM Water, OSM Boundary, Elevation, Slope
+            normalized_rgb =  np.min(1, np.max(0,x[:,:,0:2] / max_rgb))
+            normalized_ir =  np.min(1, np.max(0,x[:,:,3] / max_rgb))
+            assert np.all(x[:,:,4:5] <= 1) and np.all(x[:,:,4:5] >= 0), 'OSM water and boundary should be binary images (only 0s and 1s)'
+            normalized_elevation = np.min(1, np.max(0,(x[:,:, 6] - min_elev) / (max_elev - min_elev)))  # in meter
+            normalied_slope =  np.min(1, np.max(0, x[:,:,7] / 90))  # in deg
+        return np.cat([normalized_rgb, normalized_ir,normalized_elevation, x[:,:,4:5],normalied_slope], dims=2)
+
 
 
 def get_img_from_file(img_path, g_ncols, dtype, row_bound=None):
@@ -324,6 +342,7 @@ def tiff_to_tiles(
                 if not os.path.isfile(pt_file):
                     with rasterio.open(tile_tiff, 'r') as tmp:
                         scale_img = scale(tmp.read())
+                        # print(scale_img.shape)
                         scale_img = np.moveaxis(scale_img, 0, -1)  # make dims be c, w, h
                         tensor = torch_transformer(scale_img)
                         torch.save(tensor, pt_file)

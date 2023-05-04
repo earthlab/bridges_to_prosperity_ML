@@ -70,12 +70,9 @@ def create_dset_csv(matched_df: pd.DataFrame, ratio: float, tile_dir: str = TILE
     print(f'Saving to {train_csv} and {val_csv}')
 
 
-def prepare_optical_inputs(requested_locations: List[str] = None, composites_dir: str = COMPOSITE_DIR,
-                           tiles_dir: str = TILE_DIR, s3_bucket_name: str = CONFIG.AWS.BUCKET,
-                           bucket_composite_dir: str = 'composites', truth_file_path: Union[None, str] = None,
-                           train_to_test_ratio: float = 0.7, cores: int = mp.cpu_count() - 1):
-
-    # Load composites from s3
+def download_composites(requested_locations: List[str] = None, composites_dir: str = COMPOSITE_DIR,
+                        s3_bucket_name: str = CONFIG.AWS.BUCKET, bucket_composite_dir: str = 'composites',
+                        cores: int = mp.cpu_count() - 1):
     s3 = initialize_s3(s3_bucket_name)
     s3_bucket = s3.Bucket(s3_bucket_name)
 
@@ -108,9 +105,18 @@ def prepare_optical_inputs(requested_locations: List[str] = None, composites_dir
         max_workers=cores
     )
 
+
+def prepare_optical_inputs(requested_locations: List[str] = None, composites_dir: str = COMPOSITE_DIR,
+                           tiles_dir: str = TILE_DIR, s3_bucket_name: str = CONFIG.AWS.BUCKET,
+                           bucket_composite_dir: str = 'composites', truth_file_path: Union[None, str] = None,
+                           train_to_test_ratio: float = 0.7, cores: int = mp.cpu_count() - 1, no_truth: bool = False):
+
+    # Load composites from s3
+    download_composites(requested_locations, composites_dir, s3_bucket_name, bucket_composite_dir, cores)
+
     # call composites to tiles for each requested location
     print('Making tiles...')
-    bridge_locations = get_bridge_locations(truth_file_path)
+    bridge_locations = None if no_truth else get_bridge_locations(truth_file_path)
 
     all_composites = glob(os.path.join(composites_dir, "**/*multiband.tiff"), recursive=True)
     districts = set([os.path.dirname(composite) for composite in all_composites])
@@ -146,7 +152,7 @@ if __name__ == "__main__":
                         help="List of locations to pull composites from s3 for. If not specified, composites for all"
                              " locations in data/region_info.yaml will be processed."
                              " Specific districts can be specified d bypassing in district along with region. If "
-                             " the entire regions composites are desired thenonly pass in region. Ex. --locations "\
+                             " the entire regions composites are desired then only pass in region. Ex. --locations "\
                              " Zambia/Chibombo,Uganda will pull in just Chibombo composites and the composites for "\
                              "all districts in Uganda")
     parser.add_argument('--composites_dir', '-c', required=False, default=COMPOSITE_DIR, type=str,
@@ -165,9 +171,11 @@ if __name__ == "__main__":
                         help='Percentage of total data used for training. Default is 0.7')
     parser.add_argument('--cores', required=False, type=int, default=mp.cpu_count() - 1,
                         help='Number of cores to use when making tiles in parallel. Default is cpu_count - 1')
+    parser.add_argument('--no_truth', '-nt', action='store_true',
+                        help='If set then no truth data will be used to create output dataframe')
     args = parser.parse_args()
 
     prepare_optical_inputs(requested_locations=args.locations, composites_dir=args.composites_dir,
                            tiles_dir=args.tiles_dir, s3_bucket_name=args.s3_bucket_name,
                            bucket_composite_dir=args.bucket_composite_dir, truth_file_path=args.truth_file_path,
-                           train_to_test_ratio=args.train_to_test_ratio, cores=args.cores)
+                           train_to_test_ratio=args.train_to_test_ratio, cores=args.cores, no_truth=args.no_truth)

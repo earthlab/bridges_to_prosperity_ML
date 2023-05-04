@@ -3,6 +3,7 @@ import multiprocessing as mp
 import os
 from argparse import ArgumentParser
 from argparse import Namespace
+from typing import List
 
 import numpy as np
 from tqdm import tqdm
@@ -16,7 +17,7 @@ def _composite_task(task_args: Namespace):
         task_args.s2_dir,
         task_args.composite_dir,
         task_args.coord,
-        ['B02', 'B03', 'B04'],
+        task_args.bands,
         np.float32,
         task_args.slices,
         task_args.n_cores > 1
@@ -24,14 +25,15 @@ def _composite_task(task_args: Namespace):
     return None
 
 
-def sentinel2_to_composite(s2_dir, composite_dir, slices, n_cores):
+def sentinel2_to_composite(s2_dir, composite_dir, slices, n_cores, bands: List[str]):
     args = []
     for coord in os.listdir(s2_dir):
         args.append(
             Namespace(
                 s2_dir=s2_dir, 
                 composite_dir=composite_dir, 
-                coord=coord, 
+                coord=coord,
+                bands=bands,
                 slices=slices,
                 n_cores=n_cores
             )
@@ -95,6 +97,14 @@ if __name__ == '__main__':
         default=multiprocessing.cpu_count() - 1,
         help='number of cores to be used to paralellize these tasks)'
     )
+    parser.add_argument(
+        '--bands',
+        '-b',
+        type=str,
+        nargs='+',
+        required=False,
+        default=[]
+    )
     args = parser.parse_args()
 
     if (args.s2_dir is None or args.composite_dir is None) and (args.region is None or args.district is None):
@@ -108,5 +118,6 @@ if __name__ == '__main__':
         s2_dir,
         composite_dir,
         args.slices,
-        args.n_cores
+        args.n_cores,
+        args.bands
     )

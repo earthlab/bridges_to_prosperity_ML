@@ -1,6 +1,7 @@
 import os
 import re
 from typing import List
+from definitions import COMPOSITE_DIR, B2P_DIR
 
 
 class FileType:
@@ -30,7 +31,7 @@ class OpticalComposite(FileType):
 
     @property
     def archive_path(self):
-        return os.path.join('data', 'composites', self.region, self.district, self.mgrs, self.name)
+        return os.path.join(B2P_DIR, 'data', COMPOSITE_DIR, self.region, self.district, self.mgrs, self.name)
 
 
 class DataCube(FileType):
@@ -48,5 +49,5 @@ class DataCube(FileType):
 
     @property
     def archive_path(self):
-        return os.path.join('data', 'composites', self.region, self.district, self.mgrs, self.name)
-
+        return os.path.join(B2P_DIR, 'data', 'multivariate_composites', self.region, self.district, self.mgrs,
+                            self.name)

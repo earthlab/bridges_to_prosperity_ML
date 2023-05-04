@@ -20,6 +20,9 @@ from PIL import Image
 from scipy import interpolate
 
 from src.utilities.coords import tiff_to_bbox, bridge_in_bbox
+from definitions import SENTINEL_2_DIR, COMPOSITE_DIR
+from file_types import OpticalComposite
+
 
 BANDS_TO_IX = {
     'B02': 3,  # Blue
@@ -108,21 +111,24 @@ def nan_clouds(pixels, cloud_channels, max_pixel_val: float = MAX_RGB_VAL):
     return cp
 
 
-def create_composite(s2_dir: str, composite_dir: str, coord: str, bands: list, dtype: type, num_slices: int = 1,
+def create_composite(region: str, district: str, coord: str, bands: list, dtype: type, num_slices: int = 1,
                      pbar: bool = True):
+    # TODO: Centralize directory resolution
+    s2_dir = os.path.join(SENTINEL_2_DIR, region, district, coord)
+    composite_dir = os.path.join(COMPOSITE_DIR, region, district, coord)
     assert os.path.isdir(s2_dir)
     os.makedirs(composite_dir, exist_ok=True)
     if num_slices > 1:
         os.makedirs(os.path.join(composite_dir, coord), exist_ok=True)
-    multiband_file_path = os.path.join(composite_dir, f'{coord}_multiband.tiff')
-    if os.path.isfile(multiband_file_path):
-        return multiband_file_path
+    optical_composite_file = OpticalComposite(region, district, coord, bands)
+    if os.path.isfile(optical_composite_file.archive_path):
+        return optical_composite_file.archive_path
     # Loop through each band, getting a median estimate for each
     crs = None
     transform = None
     for band in tqdm(bands, desc=f'Processing {coord}', leave=True, position=1, total=len(bands), disable=pbar):
-        band_files = glob(os.path.join(s2_dir, coord, f'**/*{band}*.jp2'))
-        assert len(band_files) > 1, f'{os.path.join(s2_dir, coord)}'
+        band_files = glob(os.path.join(s2_dir, f'**/*{band}*.jp2'))
+        assert len(band_files) > 1, f'{s2_dir}'
         with rasterio.open(band_files[0], 'r', driver='JP2OpenJPEG') as rf:
             g_nrows, g_ncols = rf.meta['width'], rf.meta['height']
             crs = rf.crs if rf.crs is not None else "wgs84"
@@ -198,7 +204,7 @@ def create_composite(s2_dir: str, composite_dir: str, coord: str, bands: list, d
     # Combine Bands
     n_bands = len(bands)
     with rasterio.open(
-            multiband_file_path,
+            optical_composite_file.archive_path,
             'w',
             driver='GTiff',
             width=g_ncols,
@@ -213,7 +219,7 @@ def create_composite(s2_dir: str, composite_dir: str, coord: str, bands: list, d
             with rasterio.open(os.path.join(composite_dir, coord, f'{band}.tiff'), 'r', driver='GTiff') as rf:
                 wf.write(rf.read(1), indexes=j)
     shutil.rmtree(os.path.join(composite_dir, coord))
-    return multiband_file_path
+    return optical_composite_file.archive_path
 
 
 ''' In case you flip B02 with B04'''

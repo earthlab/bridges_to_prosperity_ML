@@ -100,7 +100,7 @@ def get_cloud_mask_from_file(cloud_path, crs, transform, shape, row_bound=None):
         return None
 
 
-def nan_clouds(pixels, cloud_channels, max_pixel_val: float = MAX_PIXEL_VAL):
+def nan_clouds(pixels, cloud_channels, max_pixel_val: float = MAX_RGB_VAL):
     cp = pixels * cloud_channels
     mask = np.where(np.logical_or(cp == 0, cp > max_pixel_val))
     cp[mask] = np.nan

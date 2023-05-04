@@ -12,29 +12,13 @@ from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
 from bin.composites_to_tiles import create_tiles
+from bin.download_composites import download_composites
 from definitions import REGION_FILE_PATH, COMPOSITE_DIR, TILE_DIR, TRUTH_DIR
 from src.utilities.aws import initialize_s3
 from src.utilities.config_reader import CONFIG
 from src.utilities.coords import get_bridge_locations
 
 CORES = mp.cpu_count() - 1
-
-
-def this_download(location_request_info: Tuple[str, int, int, str]) -> None:
-    for location_path, composite_size, destination, position in location_request_info:
-        s3 = initialize_s3(CONFIG.AWS.BUCKET)
-        bucket = s3.Bucket(CONFIG.AWS.BUCKET)
-        if os.path.isfile(destination):
-            return None
-        dst_root = os.path.split(destination)[0]
-        os.makedirs(dst_root, exist_ok=True)
-        print('Downloading')
-        with tqdm(total=int(composite_size), unit='B', unit_scale=True, desc=location_path, leave=False,
-                  position=int(position)) as pbar:
-            print(destination)
-            bucket.download_file(location_path, destination,
-                                 Callback=lambda bytes_transferred: pbar.update(bytes_transferred))
-    return None
 
 
 def create_dset_csv(matched_df: pd.DataFrame, ratio: float, tile_dir: str = TILE_DIR) -> None:
@@ -68,42 +52,6 @@ def create_dset_csv(matched_df: pd.DataFrame, ratio: float, tile_dir: str = TILE
     train_df.to_csv(train_csv)
     val_df.to_csv(val_csv)
     print(f'Saving to {train_csv} and {val_csv}')
-
-
-def download_composites(requested_locations: List[str] = None, composites_dir: str = COMPOSITE_DIR,
-                        s3_bucket_name: str = CONFIG.AWS.BUCKET, bucket_composite_dir: str = 'composites',
-                        cores: int = mp.cpu_count() - 1):
-    s3 = initialize_s3(s3_bucket_name)
-    s3_bucket = s3.Bucket(s3_bucket_name)
-
-    with open(REGION_FILE_PATH, 'r') as f:
-        region_info = yaml.safe_load(f)
-
-    # If user didn't specify regions then get all the region / districts in the regions.yaml file
-    if requested_locations is None:
-        requested_locations = []
-        for region in region_info:
-            for district in region_info[region]['districts']:
-                requested_locations.append(os.path.join(bucket_composite_dir, region, district))
-
-    location_info = []
-    for location in requested_locations:
-        for obj in s3_bucket.objects.filter(Prefix=location):
-            if obj.key.endswith('.tiff'):
-                destination = os.path.join(composites_dir, obj.key.strip(f'{bucket_composite_dir}/'))
-                location_info.append((obj.key, obj.size, destination))
-
-    parallel_inputs = []
-    for i, location in enumerate(np.array_split(location_info, cores)):
-        parallel_inputs.append([])
-        for info_tuple in location:
-            print(info_tuple)
-            parallel_inputs[i].append((info_tuple[0], info_tuple[1], info_tuple[2], str(i + 1)))
-    process_map(
-        this_download,
-        parallel_inputs,
-        max_workers=cores
-    )
 
 
 def prepare_optical_inputs(requested_locations: List[str] = None, composites_dir: str = COMPOSITE_DIR,

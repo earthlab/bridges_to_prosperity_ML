@@ -24,7 +24,8 @@ from src.utilities.coords import tiff_to_bbox, bridge_in_bbox
 BANDS_TO_IX = {
     'B02': 3,  # Blue
     'B03': 2,  # Green
-    'B04': 1  # Red
+    'B04': 1,  # Red,
+    'B08': 4  # IR
 }
 MAX_RGB_VAL = 4000 # counts
 MAX_IR_VAL = 4000 # counts (double check this by looking at composites)
@@ -208,7 +209,7 @@ def create_composite(s2_dir: str, composite_dir: str, coord: str, bands: list, d
             dtype=dtype
     ) as wf:
         for band in tqdm(bands, total=n_bands, desc='Combining bands...', leave=False, position=1, disable=pbar):
-            j = BANDS_TO_IX[band]
+            j = BANDS_TO_IX[band] if n_bands > 1 else 1
             with rasterio.open(os.path.join(composite_dir, coord, f'{band}.tiff'), 'r', driver='GTiff') as rf:
                 wf.write(rf.read(1), indexes=j)
     shutil.rmtree(os.path.join(composite_dir, coord))

@@ -259,6 +259,10 @@ class SinergiseSentinelAPI:
             date_dir = groups['year'] + groups['month'] + groups['day']
             file_dir = os.path.join(outdir, grid_dir, date_dir)
 
+            # Skip if file is already local
+            if os.path.exists(os.path.join(file_dir, os.path.basename(file_path))):
+                continue
+
             args.append(Namespace(available_file=file_path, bucket_name=self._bucket_name, outdir=file_dir))
 
         # proceed = input(f'Found {len(args)} files for download. Total size of files is'

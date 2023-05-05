@@ -69,7 +69,7 @@ def initialize_s3(bucket_name: str = CONFIG.AWS.BUCKET):
                     'following environment variables:\n AWS_ACCESS_KEY_ID\n AWS_SECRET_ACCESS_KEY')
 
 
-def rename_and_reupload(region: str):
+def rename_and_reupload(region: str, districts):
     files_to_upload = []
     for district in districts:
         dir = os.path.join(COMPOSITE_DIR, region, district)

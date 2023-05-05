@@ -77,7 +77,7 @@ def rename_and_reupload(region: str, districts):
             if 'multiband' in file:
                 mgrs = file[:5]
                 new_name = OpticalComposite(region, district, mgrs, ['B02', 'B03', 'B04'])
-                aws_path = os.path.join(COMPOSITE_DIR, region, district, new_name)
+                aws_path = os.path.join(COMPOSITE_DIR, region, district, new_name.name)
                 shutil.move(os.path.join(dir, file), new_name.archive_path)
                 print(new_name.name)
                 files_to_upload.append((new_name.archive_path, aws_path))

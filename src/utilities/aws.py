@@ -88,10 +88,10 @@ def rename_and_reupload(region: str, districts):
     else:
         s3_bucket = s3
 
-    for filetuple in tqdm(files_to_upload, leave=True, position=0):
+    for filetuple in tqdm.tqdm(files_to_upload, leave=True, position=0):
         file_size = os.stat(filetuple[0]).st_size
         key = filetuple[1]
-        with tqdm(total=file_size, unit='B', unit_scale=True, desc=filetuple[0], leave=False, position=1) as pbar:
+        with tqdm.tqdm(total=file_size, unit='B', unit_scale=True, desc=filetuple[0], leave=False, position=1) as pbar:
             s3_bucket.upload_file(
                 Filename=filetuple[0],
                 Bucket='b2p.njr',

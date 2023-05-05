@@ -1,7 +1,7 @@
 import argparse
 import multiprocessing as mp
 import os
-import boto3
+import botocore
 import random
 from glob import glob
 from typing import List, Tuple, Union
@@ -24,7 +24,7 @@ CORES = mp.cpu_count() - 1
 def this_download(location_request_info: Tuple[str, int, int, str]) -> None:
     for location_path, composite_size, destination, position in location_request_info:
         s3 = initialize_s3(CONFIG.AWS.BUCKET)
-        if isinstance(s3, boto3.resources.factory.s3.ServiceResource):
+        if not isinstance(s3, botocore.client.S3):
             bucket = s3.Bucket(CONFIG.AWS.BUCKET)
         else:
             bucket = s3

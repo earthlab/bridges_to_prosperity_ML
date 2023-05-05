@@ -167,8 +167,6 @@ class BaseAPI(ABC):
         self._username, self._password = self._get_auth_credentials()
 
 
-
-
 class Elevation(BaseAPI):
     """
     SRTMGL1 v003 elevation data specific methods for requesting data from LP DAAC servers. Files are downloaded in
@@ -313,9 +311,13 @@ class Elevation(BaseAPI):
         x_pixels = int((clip_bbox[2] - clip_bbox[0]) / geo_transform[1])
         y_pixels = abs(int((clip_bbox[3] - clip_bbox[1]) / geo_transform[5]))
 
+        print(x_pixels, y_pixels)
+        print([m_orig[0], 30.87, 0, m_orig[1], 0, -30.87])
+        print(clip_transform)
+
         driver = gdal.GetDriverByName('GTiff')
         output_dataset = driver.Create(input_file.replace('.tif', '_clipped.tif'), x_pixels, y_pixels,
-                                       input_tiff.RasterCount, input_tiff.GetRasterBand(1).DataType)
+                                       input_tiff.RasterCount, gdal.GDT_Float32)
 
         output_dataset.SetProjection(input_tiff.GetProjection())
         output_dataset.SetGeoTransform([m_orig[0], 30.87, 0, m_orig[1], 0, -30.87])

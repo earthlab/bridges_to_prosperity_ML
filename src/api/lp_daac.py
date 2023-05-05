@@ -308,19 +308,20 @@ class Elevation(BaseAPI):
 
         trans = osr.CoordinateTransformation(src_crs, target_crs)
         m_orig = trans.TransformPoint(clip_bbox[0], clip_bbox[3])
+        clip_transform = trans.TransformPoint(*clip_bbox)
 
         x_pixels = int((clip_bbox[2] - clip_bbox[0]) / geo_transform[1])
         y_pixels = abs(int((clip_bbox[3] - clip_bbox[1]) / geo_transform[5]))
 
         driver = gdal.GetDriverByName('GTiff')
-        output_dataset = driver.Create(input_file.replace('.tif', '_clipped.tif'), x_pixels, y_pixels, input_tiff.RasterCount,
-                                       input_tiff.GetRasterBand(1).DataType)
+        output_dataset = driver.Create(input_file.replace('.tif', '_clipped.tif'), x_pixels, y_pixels,
+                                       input_tiff.RasterCount, input_tiff.GetRasterBand(1).DataType)
 
         output_dataset.SetProjection(input_tiff.GetProjection())
         output_dataset.SetGeoTransform([m_orig[0], 30.87, 0, m_orig[1], 0, -30.87])
 
         # Perform the warp operation
-        gdal.Warp(output_dataset, input_tiff, outputBounds=clip_bbox)
+        gdal.Warp(output_dataset, input_tiff, outputBounds=clip_transform)
 
     def download_bbox(self, out_file: str, bbox: List[float], buffer: float = 0) -> None:
         """

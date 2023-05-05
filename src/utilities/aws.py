@@ -94,7 +94,7 @@ def rename_and_reupload(region: str, districts):
         with tqdm.tqdm(total=file_size, unit='B', unit_scale=True, desc=filetuple[0], leave=False, position=1) as pbar:
             s3_bucket.upload_file(
                 Filename=filetuple[0],
-                #Bucket='b2p.njr',
+                Bucket='b2p.njr',
                 Key=key,
                 Callback=lambda bytes_transferred: pbar.update(bytes_transferred),
             )

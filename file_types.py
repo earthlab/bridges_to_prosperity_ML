@@ -51,7 +51,6 @@ class OpticalComposite(FileType):
     def create(cls, file_path: str):
         name = os.path.basename(file_path)
         regex = cls.base_regex + '^(?P<bands>[a-zA-Z0-9]{3}(?:_[a-zA-Z0-9]{3})*)\.tif$'
-        print(regex)
         match = re.match(regex, name)
         if match:
             group_dict = match.groupdict()

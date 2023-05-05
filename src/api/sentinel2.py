@@ -12,6 +12,7 @@ import boto3
 import geojson
 import tqdm
 from shapely.geometry import Polygon
+from src.utilities.aws import initialize_s3
 
 PATH = os.path.dirname(__file__)
 
@@ -205,7 +206,7 @@ class SinergiseSentinelAPI:
             auth = APIAuth(identikey=identikey)
             self._s3 = auth.login(aws_account='b2p')
         else:
-            self._s3 = boto3.client('s3')
+            self._s3, client = initialize_s3()
 
     def download(self, bounds: List[float], buffer: float, outdir: str, start_date: str, end_date: str,
                  bands=None) -> None:

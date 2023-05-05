@@ -40,7 +40,7 @@ def _no_iam_auth(bucket_name: str):
         s3.meta.client.head_bucket(Bucket=bucket_name)
     except botocore.exceptions.ClientError:
         raise ValueError(f'Invalid AWS credentials or bucket {bucket_name} does not exist.')
-    return s3, False
+    return s3
 
 
 def initialize_s3(bucket_name: str = CONFIG.AWS.BUCKET):
@@ -54,11 +54,11 @@ def initialize_s3(bucket_name: str = CONFIG.AWS.BUCKET):
     # If that doesn't work try to get credentials from ~/.aws/credentials file and start a new session
     except botocore.exceptions.NoCredentialsError:
         try:
-            return _no_iam_auth(bucket_name)
+            return _no_iam_auth(bucket_name), False
         except KeyError:
             APIAuth.parse_aws_credentials()
             try:
-                return _no_iam_auth(bucket_name)
+                return _no_iam_auth(bucket_name), False
             except KeyError:
                 raise KeyError(
                     'Could not find AWS credentials in environment variables. Please either access s3 from an '

@@ -14,7 +14,7 @@ from tqdm.contrib.concurrent import process_map
 
 from bin.composites_to_tiles import create_tiles
 from definitions import REGION_FILE_PATH, COMPOSITE_DIR, TILE_DIR, TRUTH_DIR, S3_COMPOSITE_DIR
-from src.api.sentinel2 import initialize_s3
+from src.api.sentinel2 import initialize_s3_bucket
 from src.utilities.config_reader import CONFIG
 from src.utilities.coords import get_bridge_locations
 from file_types import OpticalComposite
@@ -24,11 +24,7 @@ CORES = mp.cpu_count() - 1
 
 def this_download(location_request_info: Tuple[str, int, int, str]) -> None:
     for location_path, composite_size, destination, position, bucket_name in location_request_info:
-        s3, client = initialize_s3(bucket_name)
-        if not client:
-            bucket = s3.Bucket(bucket_name)
-        else:
-            bucket = s3
+        s3 = initialize_s3_bucket(bucket_name)
         if os.path.isfile(destination):
             return None
         dst_root = os.path.split(destination)[0]
@@ -63,18 +59,13 @@ def get_requested_locations(region: str, districts: List[str]) -> List[str]:
 
 def download_composites(region: str = None, districts: List[str] = None, s3_bucket_name: str = CONFIG.AWS.BUCKET,
                         cores: int = mp.cpu_count() - 1):
-    s3, client = initialize_s3(s3_bucket_name)
-    print(client)
-    if not client:
-        s3_bucket = s3.Bucket(s3_bucket_name)
-    else:
-        s3_bucket = s3.Bucket(s3_bucket_name)
+    s3 = initialize_s3_bucket(s3_bucket_name)
 
     requested_locations = get_requested_locations(region, districts)
 
     location_info = []
     for location in requested_locations:
-        for obj in s3_bucket.objects.filter(Prefix=location):
+        for obj in s3.objects.filter(Prefix=location):
             s3_composite = OpticalComposite.create(obj.key)
             if s3_composite:
                 destination = s3_composite.archive_path

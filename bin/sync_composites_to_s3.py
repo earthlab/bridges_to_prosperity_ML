@@ -10,13 +10,13 @@ from tqdm import tqdm
 import boto3
 
 from definitions import COMPOSITE_DIR, S3_COMPOSITE_DIR
-from src.api.sentinel2 import initialize_s3
+from src.api.sentinel2 import initialize_s3_bucket
 from src.utilities.config_reader import CONFIG
 
 
 def sync_s3(root_composite_dir: str, s3_bucket_name: str, s3_directory: str):
     comp_files = glob(os.path.join(root_composite_dir, '**', '*_multiband.tiff'), recursive=True)
-    s3 = initialize_s3(s3_bucket_name)
+    s3 = initialize_s3_bucket(s3_bucket_name)
 
     for filename in tqdm(comp_files, leave=True, position=0):
         file_size = os.stat(filename).st_size

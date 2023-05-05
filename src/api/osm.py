@@ -19,7 +19,8 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
     assert os.path.isfile(s2_tiff), f'{s2_tiff} DNE'
     # the bounding box that shapely uses is a set of 4 (x,y) pairs, ox wants xmin, xmax, ymin, ymax
     (tl,tr,br,bl) = tiff_to_bbox(s2_tiff)
-    bbox = [tl[0], br[0], tl[1], br[1]] 
+    bbox = [tl[0], br[0], tl[1], br[1]]
+    print('bbox', bbox)
     # Call to ox api to get geometries for specific tags
     if debug: print('Getting water from osm')
     water = ox.geometries.geometries_from_bbox(*bbox, TAGS_WATER)

@@ -272,6 +272,13 @@ class BaseAPI(ABC):
         return lon_substrings, lat_substrings
 
     @staticmethod
+    def get_utm_epsg(lat, lon):
+        utm_zone = int((lon + 180) // 6) + 1
+        epsg_code = 32600 if lat >= 0 else 32700
+        epsg_code += utm_zone
+        return epsg_code
+
+    @staticmethod
     def _mosaic_tif_files(input_dir: str, output_file: str) -> None:
         """
         Creates a mosaic from a group of tif files in the specified input_dir
@@ -287,14 +294,38 @@ class BaseAPI(ABC):
         for file in tiff_files:
             src = rasterio.open(file)
             src_files_to_mosaic.append(src)  # Merge the TIFF files using rasterio.merge
-        mosaic, out_trans = merge(src_files_to_mosaic)  # Specify the output file path and name
+        mosaic, out_trans = merge(src_files_to_mosaic) # Specify the output file path and name
+        print('A')
+        print(out_trans, 'orig')
+        for t in out_trans:
+            print(t)
+        #print(vars(mosaic))
+        # Convert transform from lat / lon to meters
+        # Set the source and target CRS
+        print(str(src.crs))
+        src_crs = osr.SpatialReference()
+        src_crs.ImportFromEPSG(4326)
+        print(src_crs, 'src_crs')
+
+        target_crs = osr.SpatialReference()
+        target_crs.ImportFromEPSG(BaseAPI.get_utm_epsg(out_trans[2], out_trans[5]))
+
+        trans = osr.CoordinateTransformation(src_crs, target_crs)
+        m_orig = trans.TransformPoint(out_trans[2], out_trans[5])
+        m_geoloc = [30.87, 0, m_orig[0], 0, -30.87, m_orig[1], 0, 0, 1]
+        print(m_geoloc, 'm_geoloc')
+
         out_meta = src.meta.copy()
         out_meta.update({"driver": "GTiff",
                          "height": mosaic.shape[1],
                          "width": mosaic.shape[2],
-                         "transform": out_trans})  # Write the merged TIFF file to disk using rasterio
+                         "transform": m_geoloc,
+                         "crs": target_crs.ExportToWkt()})  # Write the merged TIFF file to disk using rasterio
         with rasterio.open(output_file, "w", **out_meta) as dest:
             dest.write(mosaic)
+
+        r = gdal.Open(output_file)
+        print(r.GetGeoTransform(), 'after written')
 
     def download_district(self, out_file: str, region: str, district: str, download_task: Any,
                           buffer: float = 0) -> None:
@@ -320,7 +351,7 @@ class BaseAPI(ABC):
             raise ValueError(f'No district {district} found for region {region}')
 
         bbox = region_info['districts'][district]['bbox']
-        self.download_bbox(out_file, bbox, download_task, bbox)
+        self.download_bbox(out_file, bbox, download_task, buffer)
 
     def download_bbox(self, out_file: str, bbox: List[float], download_task: Any, buffer: float = 0) -> None:
         """
@@ -354,7 +385,7 @@ class BaseAPI(ABC):
                     Namespace(
                         link=(os.path.join(self.BASE_URL, file_name)),
                         out_dir=temp_dir,
-                        top_left_coord=self._get_coordinate_from_filename(file_name),
+                        top_left_coord=self._get_top_left_coordinate_from_filename(file_name),
                         username=self._username,
                         password=self._password
                     )

@@ -39,23 +39,27 @@ class OpticalComposite(FileType):
         bands = sorted(bands)
         regex = OpticalComposite.base_regex
         for band in bands:
-            regex += band + ('_' if band != bands[-1] else '')
-        regex += '\.tif$'
+            regex += r'{}'.format(band) + (r'_' if band != bands[-1] else r'')
+        regex += r'\.tif$'
 
+        print(regex)
         files = glob.glob(in_dir + '/*', recursive=recursive)
-        matching_files = [f for f in files if re.match(regex, f)]
+
+        matching_files = [f for f in files if re.match(regex, os.path.basename(f)) is not None]
 
         return matching_files
 
     @classmethod
     def create(cls, file_path: str):
         name = os.path.basename(file_path)
-        regex = cls.base_regex + '^(?P<bands>[a-zA-Z0-9]{3}(?:_[a-zA-Z0-9]{3})*)\.tif$'
+        regex = cls.base_regex + r'(?P<bands>[a-zA-Z0-9]{3}(?:_[a-zA-Z0-9]{3})*)\.tif$'
+        print(regex)
         match = re.match(regex, name)
         if match:
             group_dict = match.groupdict()
+            print(group_dict['bands'], 'BANDS')
             return cls(region=group_dict['region'], district=group_dict['district'], military_grid=group_dict['mgrs'],
-                       bands=group_dict['bands'])
+                       bands=group_dict['bands'].split('_'))
         else:
             return None
 
@@ -83,7 +87,7 @@ class Elevation(FileType):
     @staticmethod
     def find_files(in_dir: str, recursive: bool = False):
         files = glob.glob(in_dir + '/*', recursive=recursive)
-        matching_files = [f for f in files if re.match(Elevation.base_regex, f)]
+        matching_files = [f for f in files if re.match(Elevation.base_regex, os.path.basename(f)) is not None]
 
         return matching_files
 
@@ -122,7 +126,7 @@ class Slope(FileType):
     @staticmethod
     def find_files(in_dir: str, recursive: bool = False):
         files = glob.glob(in_dir + '/*', recursive=recursive)
-        matching_files = [f for f in files if re.match(Slope.base_regex, f)]
+        matching_files = [f for f in files if re.match(Slope.base_regex, os.path.basename(f)) is not None]
 
         return matching_files
 
@@ -159,7 +163,7 @@ class OSM(FileType):
     @staticmethod
     def find_files(in_dir: str, recursive: bool = False):
         files = glob.glob(in_dir + '/*', recursive=recursive)
-        matching_files = [f for f in files if re.match(Slope.base_regex, f)]
+        matching_files = [f for f in files if re.match(Slope.base_regex, os.path.basename(f)) is not None]
 
         return matching_files
 
@@ -199,11 +203,11 @@ class TileGeoLoc(FileType):
         bands = sorted(bands)
         regex = r''
         for band in bands:
-            regex += band + '_'
-        regex += 'geoloc\.csv$'
+            regex += r'{}'.format(band) + r'_'
+        regex += r'geoloc\.csv$'
 
         files = glob.glob(in_dir + '/*', recursive=recursive)
-        matching_files = [f for f in files if re.match(regex, f)]
+        matching_files = [f for f in files if re.match(regex, os.path.basename(f)) is not None]
 
         return matching_files
 
@@ -214,7 +218,7 @@ class TileGeoLoc(FileType):
         match = re.match(regex, name)
         if match:
             group_dict = match.groupdict()
-            return cls(bands=group_dict['bands'])
+            return cls(bands=group_dict['bands'].split('_'))
         else:
             return None
 
@@ -244,11 +248,11 @@ class TileMatch(FileType):
         bands = sorted(bands)
         regex = r''
         for band in bands:
-            regex += band + '_'
-        regex += 'tile_match\.csv$'
+            regex += r'{}'.format(band) + r'_'
+        regex += r'tile_match\.csv$'
 
         files = glob.glob(in_dir + '/*', recursive=recursive)
-        matching_files = [f for f in files if re.match(regex, f)]
+        matching_files = [f for f in files if re.match(regex, os.path.basename(f)) is not None]
 
         return matching_files
 
@@ -259,7 +263,7 @@ class TileMatch(FileType):
         match = re.match(regex, name)
         if match:
             group_dict = match.groupdict()
-            return cls(bands=group_dict['bands'])
+            return cls(bands=group_dict['bands'].split('_'))
         else:
             return None
 
@@ -291,11 +295,11 @@ class Tile(FileType):
         bands = sorted(bands)
         regex = r''
         for band in bands:
-            regex += band + '_'
-        regex += str(x_min) + '_' + str(y_min) + '\.tif$'
+            regex += r'{}'.format(band) + r'_'
+        regex += r'{}'.format(x_min) + r'_' + r'{}'.format(y_min) + r'\.tif$'
 
         files = glob.glob(in_dir + '/*', recursive=recursive)
-        matching_files = [f for f in files if re.match(regex, f)]
+        matching_files = [f for f in files if re.match(regex, os.path.basename(f)) is not None]
 
         return matching_files
 
@@ -306,7 +310,8 @@ class Tile(FileType):
         match = re.match(regex, name)
         if match:
             group_dict = match.groupdict()
-            return cls(bands=group_dict['bands'], x_min=int(group_dict['x_min']), y_min=int(group_dict['y_min']))
+            return cls(bands=group_dict['bands'].split('_'), x_min=int(group_dict['x_min']),
+                       y_min=int(group_dict['y_min']))
         else:
             return None
 
@@ -338,11 +343,11 @@ class PyTorch(FileType):
         bands = sorted(bands)
         regex = r''
         for band in bands:
-            regex += band + '_'
-        regex += str(x_min) + '_' + str(y_min) + '\.pt$'
+            regex += r'{}'.format(band) + r'_'
+        regex += r'{}'.format(x_min) + r'_' + r'{}'.format(y_min) + r'\.pt$'
 
         files = glob.glob(in_dir + '/*', recursive=recursive)
-        matching_files = [f for f in files if re.match(regex, f)]
+        matching_files = [f for f in files if re.match(regex, os.path.basename(f)) is not None]
 
         return matching_files
 
@@ -353,7 +358,8 @@ class PyTorch(FileType):
         match = re.match(regex, name)
         if match:
             group_dict = match.groupdict()
-            return cls(bands=group_dict['bands'], x_min=int(group_dict['x_min']), y_min=int(group_dict['y_min']))
+            return cls(bands=group_dict['bands'].split('_'), x_min=int(group_dict['x_min']),
+                       y_min=int(group_dict['y_min']))
         else:
             return None
 
@@ -379,7 +385,7 @@ class MultiVariateComposite(FileType):
     @staticmethod
     def find_files(in_dir: str, recursive: bool = False):
         files = glob.glob(in_dir + '/*', recursive=recursive)
-        matching_files = [f for f in files if re.match(Slope.base_regex, f)]
+        matching_files = [f for f in files if re.match(Slope.base_regex, os.path.basename(f)) is not None]
 
         return matching_files
 

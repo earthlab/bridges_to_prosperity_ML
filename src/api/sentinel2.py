@@ -18,36 +18,78 @@ from src.utilities.config_reader import CONFIG
 PATH = os.path.dirname(__file__)
 
 
-def _no_iam_auth(bucket_name: str):
-    s3 = boto3.resource(
-        's3',
-        aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
-        aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
-        aws_session_token=os.environ['AWS_SESSION_TOKEN'] if 'AWS_SESSION_TOKEN' in os.environ else ''
-    )
+def _no_iam_auth_bucket(bucket_name: str):
     try:
-        s3.meta.client.head_bucket(Bucket=bucket_name)
+        s3_resource = boto3.resource(
+            's3',
+            aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+            aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+            aws_session_token=os.environ['AWS_SESSION_TOKEN'] if 'AWS_SESSION_TOKEN' in os.environ else ''
+        )
+        s3_resource.meta.client.head_bucket(Bucket=bucket_name)
+        return s3_resource.Bucket(bucket_name)
     except botocore.exceptions.ClientError:
         raise ValueError(f'Invalid AWS credentials or bucket {bucket_name} does not exist.')
-    return s3
 
 
-def initialize_s3(bucket_name: str = CONFIG.AWS.BUCKET):
+def _no_iam_auth_client(bucket_name: str):
+    try:
+        s3_resource = boto3.resource(
+            's3',
+            aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+            aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+            aws_session_token=os.environ['AWS_SESSION_TOKEN'] if 'AWS_SESSION_TOKEN' in os.environ else ''
+        )
+        s3_resource.meta.client.head_bucket(Bucket=bucket_name)
+        return boto3.client(
+            's3',
+            aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+            aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+            aws_session_token=os.environ['AWS_SESSION_TOKEN'] if 'AWS_SESSION_TOKEN' in os.environ else ''
+        )
+    except botocore.exceptions.ClientError:
+        raise ValueError(f'Invalid AWS credentials or bucket {bucket_name} does not exist.')
+
+
+def initialize_s3_bucket(bucket_name: str = CONFIG.AWS.BUCKET):
 
     # First try to authenticate with properly configured IAM profile
     try:
         s3 = boto3.resource('s3')
         s3.meta.client.head_bucket(Bucket=bucket_name)
-        return boto3.resource('s3'), True
+        return boto3.resource('s3').Bucket(bucket_name)
 
     # If that doesn't work try to get credentials from ~/.aws/credentials file and start a new session
     except botocore.exceptions.NoCredentialsError:
         try:
-            return _no_iam_auth(bucket_name), False
+            return _no_iam_auth_bucket(bucket_name)
         except KeyError:
             APIAuth.parse_aws_credentials()
             try:
-                return _no_iam_auth(bucket_name), False
+                return _no_iam_auth_bucket(bucket_name)
+            except KeyError:
+                raise KeyError(
+                    'Could not find AWS credentials in environment variables. Please either access s3 from an '
+                    'EC2 instance with S3 IAM permissions or use the aws CLI to authenticate and set the '
+                    'following environment variables:\n AWS_ACCESS_KEY_ID\n AWS_SECRET_ACCESS_KEY')
+
+
+def initialize_s3_client(bucket_name: str = CONFIG.AWS.BUCKET):
+
+    # First try to authenticate with properly configured IAM profile
+    try:
+        s3 = boto3.resource('s3')
+        s3.meta.client.head_bucket(Bucket=bucket_name)
+        return boto3.client('s3'), True
+
+    # If that doesn't work try to get credentials from ~/.aws/credentials file and start a new session
+    except botocore.exceptions.NoCredentialsError:
+        try:
+            return _no_iam_auth_client(bucket_name)
+        except KeyError:
+            APIAuth.parse_aws_credentials()
+            try:
+                return _no_iam_auth_client(bucket_name)
             except KeyError:
                 raise KeyError(
                     'Could not find AWS credentials in environment variables. Please either access s3 from an '
@@ -63,7 +105,7 @@ def _download_task(namespace: Namespace) -> None:
         namespace (Namespace): Contains the bucket name, s3 file name, and destination required for s3 download request.
         Each value in the namespace must be a pickle-izable type (i.e. str).
     """
-    s3 = boto3.client('s3')
+    s3 = initialize_s3_client(namespace.bucket_name)
     os.makedirs(namespace.outdir, exist_ok=True)
     dst = os.path.join(namespace.outdir, namespace.available_file.replace('/', '_'))
     if os.path.isfile(dst): 
@@ -244,7 +286,7 @@ class SinergiseSentinelAPI:
             auth = APIAuth(identikey=identikey)
             self._s3 = auth.login(aws_account='b2p')
         else:
-            self._s3, client = initialize_s3()
+            self._s3 = initialize_s3_client()
 
     def download(self, bounds: List[float], buffer: float, outdir: str, start_date: str, end_date: str,
                  bands=None) -> None:

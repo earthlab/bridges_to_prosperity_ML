@@ -16,7 +16,7 @@ from definitions import B2P_DIR, REGION_FILE_PATH
 from src.api.sentinel2 import SinergiseSentinelAPI
 from src.utilities import imaging
 from src.utilities.aws import upload_to_s3
-from src.api.sentinel2 import initialize_s3
+from src.api.sentinel2 import initialize_s3_bucket
 from src.utilities.config_reader import CONFIG
 
 
@@ -35,7 +35,7 @@ def _composite_task(task_args: argparse.Namespace):
         task_args.slices,
         task_args.n_cores > 1)
 
-    s3_session = initialize_s3(CONFIG.AWS.BUCKET)
+    s3_session = initialize_s3_bucket(CONFIG.AWS.BUCKET)
 
     upload_to_s3(s3_session, multi_band_file_path,
                  os.path.join('composites', task_args.region, task_args.district,
@@ -48,7 +48,7 @@ def _composite_task(task_args: argparse.Namespace):
 def get_optical_data(sentinel_2_dir: str, composite_dir: str, bands: List[str], buffer: float, slices: int,
                      s3_bucket: str, requested_regions: List[str] = None, requested_districts: List[str] = None,
                      upload_s2_dir: bool = False):
-    s3_session = initialize_s3(CONFIG.AWS.BUCKET)
+    s3_session = initialize_s3_bucket(CONFIG.AWS.BUCKET)
 
     with open(REGION_FILE_PATH, 'r') as file:
         region_info = yaml.safe_load(file)

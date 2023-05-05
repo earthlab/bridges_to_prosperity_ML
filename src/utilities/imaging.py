@@ -18,6 +18,7 @@ from torchvision.transforms import ToTensor
 from tqdm.auto import tqdm
 from PIL import Image
 from scipy import interpolate
+import affine
 
 from src.utilities.coords import tiff_to_bbox, bridge_in_bbox
 from definitions import SENTINEL_2_DIR, COMPOSITE_DIR
@@ -383,12 +384,14 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
 
     low_res_lons, low_res_lats = get_geo_locations_from_tif(low_res)
 
-    low_res_interp = interpolate.NearestNDInterpolator(list(zip(low_res_lons, low_res_lats)), low_res_data)
+    print(len(low_res_lons), len(low_res_lats), low_res_data.shape)
+
+    low_res_interp = interpolate.NearestNDInterpolator(list(zip(low_res_lats, low_res_lons)), low_res_data)
 
     high_res = gdal.Open(high_resolution_path)
 
     high_res_lons, high_res_lats = get_geo_locations_from_tif(high_res)
-    high_res_data = low_res_interp(list(zip(high_res_lons, high_res_lons)))
+    high_res_data = low_res_interp(list(zip(high_res_lats, high_res_lons)))
 
     return high_res_data
 
@@ -401,18 +404,18 @@ def get_geo_locations_from_tif(raster):
     x_origin = geo_transform[0]
     y_origin = geo_transform[3]
 
+    print(x_size, y_size, x_origin, y_origin, 'geotransform')
+
     # Get geolocation of each data point
     lats = []
     for row in range(raster.RasterYSize):
         lats.append(y_origin + (row * y_size))
-    low_res_lats = np.repeat(np.array([lats]), raster.RasterXSize, axis=0)
 
     lons = []
     for col in range(raster.RasterXSize):
         lons.append(x_origin + (col * x_size))
-    low_res_lons = np.repeat(np.array([lons]), raster.RasterYSize, axis=0)
 
-    return low_res_lons, low_res_lats
+    return lons, lats
 
 
 def _create_raster(output_path: str, columns: int, rows: int, n_band: int = 1, gdal_data_type: int = gdal.GDT_UInt16,
@@ -487,3 +490,30 @@ def numpy_array_to_raster(output_path: str, numpy_array: np.array, geo_transform
         raise Exception('Failed to create raster: %s' % output_path)
 
     return output_raster
+
+
+def convert_geo_transform_from_meters_to_lat_lon(input_file: str):
+    # Load the TIFF file
+    with rasterio.open(input_file) as src:
+        # Extract the geoTransform property
+        geo_transform = src.transform
+
+        # Convert the geoTransform values from meters to lat/lon
+        latlon_transform = affine.Affine.from_gdal(*geo_transform)
+        latlon_transform *= affine.Affine.scale(1.0 / src.res[0], 1.0 / src.res[1])
+        latlon_transform *= affine.Affine.translation(-0.5 + src.res[0] / 2.0, -0.5 + src.res[1] / 2.0)
+
+        # Update the geoTransform property with the new lat/lon values
+        dst_transform = latlon_transform.to_gdal()
+        src.transform = dst_transform
+
+        output_profile = src.profile
+        output_profile['transform'] = dst_transform
+
+        with rasterio.open(input_file, 'w', **output_profile) as dst:
+            # Write the file with the new geoTransform
+            for i in range(1, src.count + 1):
+                raster = src.read(i)
+                dst.write(raster, i)
+
+

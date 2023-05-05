@@ -37,7 +37,7 @@ def this_download(location_request_info: Tuple[str, int, int, str]) -> None:
         with tqdm(total=int(composite_size), unit='B', unit_scale=True, desc=location_path, leave=False,
                   position=int(position)) as pbar:
             print(destination)
-            bucket.download_file(location_path, Filename=destination,
+            bucket.download_file(Key=location_path, Filename=destination,
                                  Callback=lambda bytes_transferred: pbar.update(bytes_transferred))
     return None
 

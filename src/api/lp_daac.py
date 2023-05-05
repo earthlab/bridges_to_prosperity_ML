@@ -302,7 +302,8 @@ class Elevation(BaseAPI):
         m = mgrs.MGRS()
         target_crs = osr.SpatialReference()
         epsg_info = m.MGRSToUTM(mgrs_string)
-        epsg_code = int('326' if epsg_info[1] == 'N' else '327' + str(epsg_info[0]))
+        epsg_code = int(('326' if epsg_info[1] == 'N' else '327') + str(epsg_info[0]))
+        print(epsg_code)
         target_crs.ImportFromEPSG(epsg_code)
 
         trans = osr.CoordinateTransformation(src_crs, target_crs)

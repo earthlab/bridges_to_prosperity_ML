@@ -64,6 +64,7 @@ def get_requested_locations(region: str, districts: List[str]) -> List[str]:
 def download_composites(region: str = None, districts: List[str] = None, s3_bucket_name: str = CONFIG.AWS.BUCKET,
                         cores: int = mp.cpu_count() - 1):
     s3, client = initialize_s3(s3_bucket_name)
+    print(client)
     if not client:
         s3_bucket = s3.Bucket(s3_bucket_name)
     else:

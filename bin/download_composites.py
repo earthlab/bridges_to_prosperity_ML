@@ -45,8 +45,12 @@ def this_download(location_request_info: Tuple[str, int, int, str]) -> None:
 def download_composites(region: str = None, districts: List[str] = None, composites_dir: str = COMPOSITE_DIR,
                         s3_bucket_name: str = CONFIG.AWS.BUCKET, bucket_composite_dir: str = 'composites',
                         cores: int = mp.cpu_count() - 1):
-    s3 = initialize_s3(s3_bucket_name)
-    s3_bucket = s3.Bucket(s3_bucket_name)
+    s3, client = initialize_s3(s3_bucket_name)
+    print(s3, client)
+    if not client:
+        s3_bucket = s3.Bucket(s3_bucket_name)
+    else:
+        s3_bucket = s3
 
     requested_locations = []
     with open(REGION_FILE_PATH, 'r') as f:

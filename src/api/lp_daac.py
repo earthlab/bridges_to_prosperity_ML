@@ -22,7 +22,7 @@ import numpy as np
 import rasterio
 import yaml
 from netCDF4 import Dataset
-from osgeo import gdal
+from osgeo import gdal, gdalconst
 from osgeo import osr
 from rasterio.merge import merge
 from tqdm import tqdm
@@ -293,7 +293,7 @@ class Elevation(BaseAPI):
         print(r.GetGeoTransform(), 'after written')
 
     def _clip_and_convert_to_meters(self, input_file: str, mgrs_string: str, clip_bbox: List[float]):
-        input_tiff = gdal.Open(input_file)
+        input_tiff = gdal.Open(input_file, gdalconst.GA_ReadOnly)
         geo_transform = input_tiff.GetGeoTransform()
 
         src_crs = osr.SpatialReference()

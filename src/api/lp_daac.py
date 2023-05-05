@@ -295,7 +295,7 @@ class Elevation(BaseAPI):
         geo_transform = input_tiff.GetGeoTransform()
 
         src_crs = osr.SpatialReference()
-        src_crs.ImportFromEPSG(4326)
+        src_crs.ImportFromWkt(input_tiff.GetProjection())
 
         m = mgrs.MGRS()
         target_crs = osr.SpatialReference()

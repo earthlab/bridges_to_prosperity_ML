@@ -14,7 +14,7 @@ from tqdm.contrib.concurrent import process_map
 
 from bin.composites_to_tiles import create_tiles
 from definitions import REGION_FILE_PATH, COMPOSITE_DIR, TILE_DIR, TRUTH_DIR, S3_COMPOSITE_DIR
-from src.utilities.aws import initialize_s3
+from src.api.sentinel2 import initialize_s3
 from src.utilities.config_reader import CONFIG
 from src.utilities.coords import get_bridge_locations
 from file_types import OpticalComposite

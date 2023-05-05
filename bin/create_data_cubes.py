@@ -17,7 +17,7 @@ from osgeo import gdal
 from bin.composites_to_tiles import create_tiles
 from definitions import REGION_FILE_PATH, COMPOSITE_DIR, TILE_DIR, TRUTH_DIR, SENTINEL_2_DIR, ELEVATION_DIR, SLOPE_DIR,\
     S3_COMPOSITE_DIR
-from src.utilities.aws import initialize_s3
+from src.api.sentinel2 import initialize_s3
 from src.utilities.imaging import numpy_array_to_raster
 from src.utilities.config_reader import CONFIG
 from src.utilities.imaging import elevation_to_slope, subsample_geo_tiff

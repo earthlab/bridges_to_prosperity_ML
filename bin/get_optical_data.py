@@ -15,7 +15,8 @@ import yaml
 from definitions import B2P_DIR, REGION_FILE_PATH
 from src.api.sentinel2 import SinergiseSentinelAPI
 from src.utilities import imaging
-from src.utilities.aws import upload_to_s3, initialize_s3
+from src.utilities.aws import upload_to_s3
+from src.api.sentinel2 import initialize_s3
 from src.utilities.config_reader import CONFIG
 
 

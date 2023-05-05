@@ -10,7 +10,7 @@ from tqdm import tqdm
 import boto3
 
 from definitions import COMPOSITE_DIR, S3_COMPOSITE_DIR
-from src.utilities.aws import initialize_s3
+from src.api.sentinel2 import initialize_s3
 from src.utilities.config_reader import CONFIG
 
 

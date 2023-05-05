@@ -119,7 +119,7 @@ if __name__ == '__main__':
         type=str,
         nargs='+',
         required=False,
-        default=[]  # TODO: Make required with no default?
+        default=['B02', 'B03', 'B04', 'B08']
     )
     args = parser.parse_args()
 

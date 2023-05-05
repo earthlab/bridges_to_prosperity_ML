@@ -13,7 +13,7 @@ from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
 from bin.composites_to_tiles import create_tiles
-from definitions import REGION_FILE_PATH, COMPOSITE_DIR, TILE_DIR, TRUTH_DIR
+from definitions import REGION_FILE_PATH, COMPOSITE_DIR, TILE_DIR, TRUTH_DIR, S3_COMPOSITE_DIR
 from src.utilities.aws import initialize_s3
 from src.utilities.config_reader import CONFIG
 from src.utilities.coords import get_bridge_locations
@@ -40,15 +40,7 @@ def this_download(location_request_info: Tuple[str, int, int, str]) -> None:
     return None
 
 
-def download_composites(region: str = None, districts: List[str] = None,
-                        s3_bucket_name: str = CONFIG.AWS.BUCKET, bucket_composite_dir: str = 'composites',
-                        cores: int = mp.cpu_count() - 1):
-    s3, client = initialize_s3(s3_bucket_name)
-    if not client:
-        s3_bucket = s3.Bucket(s3_bucket_name)
-    else:
-        s3_bucket = s3
-
+def get_requested_locations(region: str, districts: List[str]) -> List[str]:
     requested_locations = []
     with open(REGION_FILE_PATH, 'r') as f:
         region_info = yaml.safe_load(f)
@@ -56,33 +48,41 @@ def download_composites(region: str = None, districts: List[str] = None,
     if region is None:
         for region in region_info:
             for district in region_info[region]['districts']:
-                requested_locations.append(os.path.join(bucket_composite_dir, region, district))
+                requested_locations.append(os.path.join(S3_COMPOSITE_DIR, region, district))
 
     elif districts is None:
         for district in region_info[region]['districts']:
-            requested_locations.append(os.path.join(bucket_composite_dir, region, district))
+            requested_locations.append(os.path.join(S3_COMPOSITE_DIR, region, district))
 
     else:
         for district in districts:
-            requested_locations.append(os.path.join(bucket_composite_dir, region, district))
+            requested_locations.append(os.path.join(S3_COMPOSITE_DIR, region, district))
+
+    return requested_locations
+
+
+def download_composites(region: str = None, districts: List[str] = None, s3_bucket_name: str = CONFIG.AWS.BUCKET,
+                        cores: int = mp.cpu_count() - 1):
+    s3, client = initialize_s3(s3_bucket_name)
+    if not client:
+        s3_bucket = s3.Bucket(s3_bucket_name)
+    else:
+        s3_bucket = s3
+
+    requested_locations = get_requested_locations(region, districts)
 
     location_info = []
     for location in requested_locations:
         for obj in s3_bucket.objects.filter(Prefix=location):
-            if obj.key.endswith('.tiff'):
-                destination = os.path.join(COMPOSITE_DIR, obj.key.strip(f'{bucket_composite_dir}/'))
+            s3_composite = OpticalComposite.create(obj.key)
+            if s3_composite:
+                destination = s3_composite.archive_path
                 location_info.append((obj.key, obj.size, destination))
-            # s3_composite = OpticalComposite.create(obj.key)
-            # if s3_composite:
-            #     destination = s3_composite.archive_path
-            #     location_info.append((obj.key, obj.size, destination))
 
     parallel_inputs = []
     for i, location in enumerate(np.array_split(location_info, cores)):
-        parallel_inputs.append([])
         for info_tuple in location:
-            print(info_tuple)
-            parallel_inputs[i].append((info_tuple[0], info_tuple[1], info_tuple[2], str(i + 1), s3_bucket_name))
+            parallel_inputs.append([(info_tuple[0], info_tuple[1], info_tuple[2], str(i + 1), s3_bucket_name)])
     process_map(
         this_download,
         parallel_inputs,

@@ -1,7 +1,7 @@
 import os
 import re
 from typing import List, Union
-from definitions import COMPOSITE_DIR, B2P_DIR, TILE_DIR
+from definitions import COMPOSITE_DIR, B2P_DIR, TILE_DIR, ELEVATION_DIR, SLOPE_DIR
 import glob
 
 
@@ -61,6 +61,120 @@ class OpticalComposite(FileType):
             return None
 
 
+class Elevation(FileType):
+    base_regex = r'elevation_(?P<region>[^_]+)_(?P<district>[^_]+)(?:_(?P<mgrs>[^_]{5}))?\.tif$'
+
+    def __init__(self, region: str, district: str, mgrs: str = None):
+        self.region = region
+        self.district = district
+        self.mgrs = mgrs
+        super().__init__()
+
+    @property
+    def name(self):
+        base_string = f'elevation_{self.region}_{self.district}'
+        if self.mgrs is not None:
+            base_string += f'_{self.mgrs}'
+        return base_string + '.tif'
+
+    @property
+    def archive_path(self):
+        return os.path.join(ELEVATION_DIR, self.region, self.district, self.name)
+
+    @staticmethod
+    def find_files(in_dir: str, recursive: bool = False):
+        files = glob.glob(in_dir + '/*', recursive=recursive)
+        matching_files = [f for f in files if re.match(Elevation.base_regex, f)]
+
+        return matching_files
+
+    @classmethod
+    def create(cls, file_path: str):
+        name = os.path.basename(file_path)
+        match = re.match(cls.base_regex, name)
+        if match:
+            group_dict = match.groupdict()
+            return cls(region=group_dict['region'], district=group_dict['district'],
+                       mgrs=group_dict['mgrs'] if 'mgrs' in group_dict else None)
+        else:
+            return None
+
+
+class Slope(FileType):
+    base_regex = r'slope_(?P<region>[^_]+)_(?P<district>[^_]+)(?:_(?P<mgrs>[^_]{5}))?\.tif$'
+
+    def __init__(self, region: str, district: str, mgrs: str = None):
+        self.region = region
+        self.district = district
+        self.mgrs = mgrs
+        super().__init__()
+
+    @property
+    def name(self):
+        base_string = f'slope_{self.region}_{self.district}'
+        if self.mgrs is not None:
+            base_string += f'_{self.mgrs}'
+        return base_string + '.tif'
+
+    @property
+    def archive_path(self):
+        return os.path.join(SLOPE_DIR, self.region, self.district, self.name)
+
+    @staticmethod
+    def find_files(in_dir: str, recursive: bool = False):
+        files = glob.glob(in_dir + '/*', recursive=recursive)
+        matching_files = [f for f in files if re.match(Slope.base_regex, f)]
+
+        return matching_files
+
+    @classmethod
+    def create(cls, file_path: str):
+        name = os.path.basename(file_path)
+        match = re.match(cls.base_regex, name)
+        if match:
+            group_dict = match.groupdict()
+            return cls(region=group_dict['region'], district=group_dict['district'],
+                       mgrs=group_dict['mgrs'] if 'mgrs' in group_dict else None)
+        else:
+            return None
+
+
+class OSM(FileType):
+    base_regex = r'osm_(?P<region>[^_]+)_(?P<district>[^_]+)_(?P<mgrs>[^_]+)\.tif$'
+
+    def __init__(self, region: str, district: str, mgrs: str = None):
+        self.region = region
+        self.district = district
+        self.mgrs = mgrs
+        super().__init__()
+
+    @property
+    def name(self):
+        base_string = f'slope_{self.region}_{self.district}_{self.mgrs}'
+        return base_string + '.tif'
+
+    @property
+    def archive_path(self):
+        return os.path.join(SLOPE_DIR, self.region, self.district, self.name)
+
+    @staticmethod
+    def find_files(in_dir: str, recursive: bool = False):
+        files = glob.glob(in_dir + '/*', recursive=recursive)
+        matching_files = [f for f in files if re.match(Slope.base_regex, f)]
+
+        return matching_files
+
+    @classmethod
+    def create(cls, file_path: str):
+        name = os.path.basename(file_path)
+        match = re.match(cls.base_regex, name)
+        if match:
+            group_dict = match.groupdict()
+            return cls(region=group_dict['region'], district=group_dict['district'], mgrs=group_dict['mgrs'])
+        else:
+            return None
+
+
 class TileGeoLoc(FileType):
     base_regex = r'^(?P<bands>[a-zA-Z0-9]{3}|multivariate(?:_[a-zA-Z0-9]{3}|multivariate)*)_geoloc\.csv$'
 
@@ -79,7 +193,7 @@ class TileGeoLoc(FileType):
         return base_string
 
     def archive_path(self, region: str, district: str, military_grid: str) -> str:
-        return os.path.join(B2P_DIR, 'data', TILE_DIR, region, district, military_grid, self.name)
+        return os.path.join(TILE_DIR, region, district, military_grid, self.name)
 
     @staticmethod
     def find_files(in_dir: str, bands: List[str], recursive: bool = False):
@@ -124,7 +238,7 @@ class TileMatch(FileType):
         return base_string
 
     def archive_path(self, region: str, district: str) -> str:
-        return os.path.join(B2P_DIR, 'data', TILE_DIR, region, district, self.name)
+        return os.path.join(TILE_DIR, region, district, self.name)
 
     @staticmethod
     def find_files(in_dir: str, bands: List[str], recursive: bool = False):
@@ -171,7 +285,7 @@ class Tile(FileType):
         return base_string
 
     def archive_path(self, region: str, district: str, military_grid: str) -> str:
-        return os.path.join(B2P_DIR, 'data', TILE_DIR, region, district, military_grid, self.name)
+        return os.path.join(TILE_DIR, region, district, military_grid, self.name)
 
     @staticmethod
     def find_files(in_dir: str, bands: List[str], x_min: int, y_min: int, recursive: bool = False):
@@ -218,7 +332,7 @@ class PyTorch(FileType):
         return base_string
 
     def archive_path(self, region: str, district: str, military_grid: str) -> str:
-        return os.path.join(B2P_DIR, 'data', TILE_DIR, region, district, military_grid, self.name)
+        return os.path.join(TILE_DIR, region, district, military_grid, self.name)
 
     @staticmethod
     def find_files(in_dir: str, bands: List[str], x_min: int, y_min: int, recursive: bool = False):
@@ -246,19 +360,36 @@ class PyTorch(FileType):
 
 
 class MultiVariateComposite(FileType):
-    # regex = r'optical_composite_{?<region>\s+}'
+    base_regex = r'multivariate_composite_(?P<region>[^_]+)_(?P<district>[^_]+)_(?P<mgrs>[^_]+)\.tif$'
 
-    def __init__(self, region: str, district: str, military_grid: str):
+    def __init__(self, region: str, district: str, mgrs: str = None):
         self.region = region
         self.district = district
-        self.mgrs = military_grid
+        self.mgrs = mgrs
         super().__init__()
 
     @property
     def name(self):
-        return f'multivariate_{self.region}_{self.district}_{self.mgrs}.tif'
+        base_string = f'multivariate_composite_{self.region}_{self.district}_{self.mgrs}'
+        return base_string + '.tif'
 
     @property
     def archive_path(self):
-        return os.path.join(B2P_DIR, 'data', 'multivariate_composites', self.region, self.district, self.mgrs,
-                            self.name)
+        return os.path.join(SLOPE_DIR, self.region, self.district, self.name)
+
+    @staticmethod
+    def find_files(in_dir: str, recursive: bool = False):
+        files = glob.glob(in_dir + '/*', recursive=recursive)
+        matching_files = [f for f in files if re.match(Slope.base_regex, f)]
+
+        return matching_files
+
+    @classmethod
+    def create(cls, file_path: str):
+        name = os.path.basename(file_path)
+        match = re.match(cls.base_regex, name)
+        if match:
+            group_dict = match.groupdict()
+            return cls(region=group_dict['region'], district=group_dict['district'], mgrs=group_dict['mgrs'])
+        else:
+            return None

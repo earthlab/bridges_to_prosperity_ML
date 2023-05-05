@@ -21,8 +21,7 @@ from scipy import interpolate
 
 from src.utilities.coords import tiff_to_bbox, bridge_in_bbox
 from definitions import SENTINEL_2_DIR, COMPOSITE_DIR
-from file_types import OpticalComposite
-
+from file_types import OpticalComposite, MultiVariateComposite, TileGeoLoc, Tile, PyTorch
 
 BANDS_TO_IX = {
     'B02': 3,  # Blue
@@ -30,34 +29,37 @@ BANDS_TO_IX = {
     'B04': 1,  # Red,
     'B08': 4  # IR
 }
-MAX_RGB_VAL = 4000 # counts
-MAX_IR_VAL = 4000 # counts (double check this by looking at composites)
-MAX_ELEV = 8000 # meters
+
+MAX_RGB_VAL = 4000  # counts
+MAX_IR_VAL = 4000  # counts (double check this by looking at composites)
+MAX_ELEV = 8000  # meters
 MIN_ELEV = 0  # meters
+
 
 # the max_pixel_val was set to 2500? this probably should match with the max allowed value for clouds or it shouldn't be
 # included...
+
+
 def scale(
         x: Union[float, np.array],
         max_rgb: float = MAX_IR_VAL,
         min_elev: float = MIN_ELEV,
-        max_elev:float = MAX_ELEV
+        max_elev: float = MAX_ELEV
 ) -> Union[float, np.array]:
-
     if type(x) == float:
         return x / max_rgb
     else:
         if np.shape[2] == 3:
             return x / max_rgb
-        else: # multivariate case
-            assert np.shape[2] == 8 # B04, B03, B02 (RGB), B08(IR), OSM Water, OSM Boundary, Elevation, Slope
-            normalized_rgb =  np.min(1, np.max(0,x[:,:,0:2] / max_rgb))
-            normalized_ir =  np.min(1, np.max(0,x[:,:,3] / max_rgb))
-            assert np.all(x[:,:,4:5] <= 1) and np.all(x[:,:,4:5] >= 0), 'OSM water and boundary should be binary images (only 0s and 1s)'
-            normalized_elevation = np.min(1, np.max(0,(x[:,:, 6] - min_elev) / (max_elev - min_elev)))  # in meter
-            normalied_slope =  np.min(1, np.max(0, x[:,:,7] / 90))  # in deg
-        return np.cat([normalized_rgb, normalized_ir,normalized_elevation, x[:,:,4:5],normalied_slope], dims=2)
-
+        else:  # multivariate case
+            assert np.shape[2] == 8  # B04, B03, B02 (RGB), B08(IR), OSM Water, OSM Boundary, Elevation, Slope
+            normalized_rgb = np.min(1, np.max(0, x[:, :, 0:2] / max_rgb))
+            normalized_ir = np.min(1, np.max(0, x[:, :, 3] / max_rgb))
+            assert np.all(x[:, :, 4:5] <= 1) and np.all(
+                x[:, :, 4:5] >= 0), 'OSM water and boundary should be binary images (only 0s and 1s)'
+            normalized_elevation = np.min(1, np.max(0, (x[:, :, 6] - min_elev) / (max_elev - min_elev)))  # in meter
+            normalied_slope = np.min(1, np.max(0, x[:, :, 7] / 90))  # in deg
+        return np.cat([normalized_rgb, normalized_ir, normalized_elevation, x[:, :, 4:5], normalied_slope], dims=2)
 
 
 def get_img_from_file(img_path, g_ncols, dtype, row_bound=None):
@@ -111,14 +113,20 @@ def nan_clouds(pixels, cloud_channels, max_pixel_val: float = MAX_RGB_VAL):
 
 def create_composite(region: str, district: str, coord: str, bands: list, dtype: type, num_slices: int = 1,
                      pbar: bool = True):
-    # TODO: Centralize directory resolution
     s2_dir = os.path.join(SENTINEL_2_DIR, region, district, coord)
-    composite_dir = os.path.join(COMPOSITE_DIR, region, district, coord)
     assert os.path.isdir(s2_dir)
-    os.makedirs(composite_dir, exist_ok=True)
+
     optical_composite_file = OpticalComposite(region, district, coord, bands)
     if os.path.isfile(optical_composite_file.archive_path):
         return optical_composite_file.archive_path
+
+    composite_dir = os.path.dirname(optical_composite_file.archive_path)
+    os.makedirs(composite_dir, exist_ok=True)
+
+    if num_slices > 1:
+        slice_dir = os.path.join(composite_dir, optical_composite_file.mgrs)
+        os.makedirs(slice_dir, exist_ok=True)
+
     # Loop through each band, getting a median estimate for each
     crs = None
     transform = None
@@ -146,7 +154,7 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
         for k, row_bound in tqdm(enumerate(slice_bounds), desc=f'band={band}', total=num_slices, position=2,
                                  disable=pbar):
             if num_slices > 1:
-                slice_file_path = os.path.join(composite_dir,
+                slice_file_path = os.path.join(slice_dir,
                                                f'{band}_slice|{row_bound[0]}|{row_bound[1]}|.tiff')
             else:
                 slice_file_path = joined_file_path
@@ -178,11 +186,12 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
             del median_corrected
             corrected_stack = []
             del corrected_stack
+
         # Combine slices
         if num_slices > 1:
             with rasterio.open(joined_file_path, 'w', driver='GTiff', width=g_ncols, height=g_nrows, count=1, crs=crs,
                                transform=transform, dtype=dtype) as wf:
-                for slice_file_path in glob(os.path.join(composite_dir, f'{band}_slice*.tiff')):
+                for slice_file_path in glob(os.path.join(slice_dir, f'{band}_slice*.tiff')):
                     prts = slice_file_path.split('|')
                     left = int(prts[1])
                     right = int(prts[2])
@@ -196,6 +205,9 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
                             indexes=1
                         )
                     os.remove(slice_file_path)
+
+            shutil.rmtree(slice_dir)
+
     # Combine Bands
     n_bands = len(bands)
     with rasterio.open(
@@ -211,8 +223,10 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
     ) as wf:
         for band in tqdm(bands, total=n_bands, desc='Combining bands...', leave=False, position=1, disable=pbar):
             j = BANDS_TO_IX[band] if n_bands > 1 else 1
-            with rasterio.open(os.path.join(composite_dir, f'{band}.tiff'), 'r', driver='GTiff') as rf:
+            band_path = os.path.join(composite_dir, f'{band}.tiff')
+            with rasterio.open(band_path, 'r', driver='GTiff') as rf:
                 wf.write(rf.read(1), indexes=j)
+            os.remove(band_path)
 
     return optical_composite_file.archive_path
 
@@ -272,26 +286,24 @@ def scale_multiband_composite(multiband_tiff: str):
     return scaled_tiff
 
 
-def tiff_to_tiles(
-        multiband_tiff,
-        tile_dir,
+def composite_to_tiles(
+        composite: Union[OpticalComposite, MultiVariateComposite],
+        bands,
         bridge_locations,
         tqdm_pos=None,
         tqdm_update_rate=None,
         div: int = 300  # in meters
 ):
-    root, military_grid = os.path.split(multiband_tiff)
-    military_grid = military_grid[:5]
-
-    grid_geoloc_file = os.path.join(tile_dir, military_grid + '_geoloc.csv')
-    if os.path.isfile(grid_geoloc_file):
-        df = pd.read_csv(grid_geoloc_file)
+    grid_geoloc_file = TileGeoLoc(bands=bands)
+    grid_geoloc_path = grid_geoloc_file.archive_path(composite.region, composite.district, composite.mgrs)
+    if os.path.isfile(grid_geoloc_path):
+        df = pd.read_csv(grid_geoloc_path)
         return df
 
-    grid_dir = os.path.join(tile_dir, military_grid)
+    grid_dir = os.path.basename(grid_geoloc_path)
     os.makedirs(grid_dir, exist_ok=True)
 
-    rf = gdal.Open(multiband_tiff)
+    rf = gdal.Open(composite.archive_path)
     _, xres, _, _, _, yres = rf.GetGeoTransform()
     nxpix = int(div / abs(xres))
     nypix = int(div / abs(yres))
@@ -299,7 +311,7 @@ def tiff_to_tiles(
     ysteps = np.arange(0, rf.RasterYSize, nypix).astype(np.int64).tolist()
 
     if bridge_locations is not None:
-        bbox = tiff_to_bbox(multiband_tiff)
+        bbox = tiff_to_bbox(composite.archive_path)
         this_bridge_locs = []
         p = polygon.Polygon(bbox)
         for loc in bridge_locations:
@@ -318,35 +330,36 @@ def tiff_to_tiles(
     with tqdm(
             position=tqdm_pos,
             total=numTiles,
-            desc=military_grid,
+            desc=composite.mgrs,
             miniters=tqdm_update_rate,
             disable=(tqdm_pos is None)
     ) as pbar:
         k = 0
         for xmin in xsteps:
             for ymin in ysteps:
-                tile_basename = str(xmin) + '_' + str(ymin) + '.tif'
-                tile_tiff = os.path.join(grid_dir, tile_basename)
-                pt_file = tile_tiff.split('.')[0] + '.pt'
-                if not os.path.isfile(tile_tiff):
+                tile_tiff = Tile(x_min=xmin, y_min=ymin, bands=bands)
+                tile_tiff_path = tile_tiff.archive_path(composite.region, composite.district, composite.mgrs)
+                pt_file = PyTorch(x_min=xmin, y_min=ymin, bands=bands)
+                pt_file_path = pt_file.archive_path(composite.region, composite.district, composite.mgrs)
+                if not os.path.isfile(tile_tiff_path):
                     gdal.Translate(
-                        tile_tiff,
+                        tile_tiff_path,
                         rf,
                         srcWin=(xmin, ymin, nxpix, nypix),
                     )
-                bbox = tiff_to_bbox(tile_tiff)
-                df.at[k, 'tile'] = pt_file
+                bbox = tiff_to_bbox(tile_tiff_path)
+                df.at[k, 'tile'] = pt_file_path
                 df.at[k, 'bbox'] = bbox
                 if bridge_locations is not None:
                     df.at[k, 'is_bridge'], df.at[k, 'bridge_loc'], ix = bridge_in_bbox(bbox, this_bridge_locs)
                     if ix is not None:
                         this_bridge_locs.pop(ix)
-                if not os.path.isfile(pt_file):
+                if not os.path.isfile(pt_file_path):
                     with rasterio.open(tile_tiff, 'r') as tmp:
                         scale_img = scale(tmp.read())
                         scale_img = np.moveaxis(scale_img, 0, -1)  # make dims be c, w, h
                         tensor = torch_transformer(scale_img)
-                        torch.save(tensor, pt_file)
+                        torch.save(tensor, pt_file_path)
 
                 k += 1
                 if k % tqdm_update_rate == 0:
@@ -354,10 +367,10 @@ def tiff_to_tiles(
                     pbar.refresh()
                 if k % int(round(numTiles / 4)) == 0 and k < numTiles - 1:
                     percent = int(round(k / int(round(numTiles)) * 100))
-                    pbar.set_description(f'Saving {military_grid} {percent}%')
-                    df.to_csv(grid_geoloc_file, index=False)
+                    pbar.set_description(f'Saving {composite.mgrs} {percent}%')
+                    df.to_csv(grid_geoloc_path, index=False)
         pbar.set_description(f'Saving to file {grid_geoloc_file}')
-    df.to_csv(grid_geoloc_file, index=False)
+    df.to_csv(grid_geoloc_path, index=False)
     return df
 
 

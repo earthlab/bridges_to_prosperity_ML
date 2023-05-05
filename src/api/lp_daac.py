@@ -26,6 +26,9 @@ from osgeo import gdal
 from osgeo import osr
 from rasterio.merge import merge
 from tqdm import tqdm
+import mgrs
+from geopy import Point
+from geopy.distance import distance
 
 from definitions import B2P_DIR, REGION_FILE_PATH
 from src.api.util import generate_secrets_file
@@ -62,6 +65,7 @@ def _base_download_task(task_args: Namespace) -> None:
                 fd.write(chunk)
             else:
                 break
+
 
 # Functions for elevation parallel data processing
 
@@ -138,6 +142,16 @@ def _nc_to_tif(nc_path: str, top_left_coord: Tuple[float, float], out_dir: str,
     nc_file.close()
 
 
+def mgrs_to_bbox(mgrs_string: str):
+    m = mgrs.MGRS()
+    lat, lon = m.toLatLon(mgrs_string)
+    # Calculate the bounding box
+    sw_point = Point(latitude=lat, longitude=lon)
+    ne_point = distance(kilometers=1.0).destination(sw_point, 45)
+    bounding_box = (sw_point.longitude, sw_point.latitude, ne_point.longitude, ne_point.latitude)
+    return list(bounding_box)
+
+
 class BaseAPI(ABC):
     """
     Defines all the attributes and methods common to the child APIs. NASA EarthData credentials are queried for and
@@ -151,6 +165,26 @@ class BaseAPI(ABC):
         Initializes the NASA EarthData credentials
         """
         self._username, self._password = self._get_auth_credentials()
+
+
+
+
+class Elevation(BaseAPI):
+    """
+    SRTMGL1 v003 elevation data specific methods for requesting data from LP DAAC servers. Files are downloaded in
+    parallel as netCDF files and then converted to tif format. Tif files are then made into a single tif mosaic covering
+    the entire requested region.
+    Data homepage: https://lpdaac.usgs.gov/products/srtmgl1v003/
+    Ex.
+        elevation = Elevation()
+        elevation.download_district('data/elevation/ethiopia/yem.tif', 'Ethiopia', 'Yem')
+        OR
+        elevation.download_bbox('data/elevation/ethiopia/yem.tif', [37.391, 7.559, 37.616, 8.012])
+    """
+    BASE_URL = 'https://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1_NC.003/2000.02.11/'
+
+    def __init__(self):
+        super().__init__()
 
     @staticmethod
     def _get_auth_credentials() -> Tuple[str, str]:
@@ -221,15 +255,207 @@ class BaseAPI(ABC):
 
         return substrings
 
-    def _resolve_filenames(self, bbox: List[float]) -> Tuple[List[str], List[str]]:
+    @staticmethod
+    def get_utm_epsg(lat, lon):
+        utm_zone = int((lon + 180) // 6) + 1
+        epsg_code = 32600 if lat >= 0 else 32700
+        epsg_code += utm_zone
+        return epsg_code
+
+    @staticmethod
+    def _mosaic_tif_files(input_dir: str, output_file: str) -> None:
         """
-        Files are stored with the following naming convention, for example: NASADEM_SC_n00e011.zip where n00 is 0 deg
-        latitude and e011 is 11 deg longitude, referring to the lower left coordinate of the data file. So create all
+        Creates a mosaic from a group of tif files in the specified input_dir
+        Args:
+            input_dir (str): The path to the input dir containing the tif files to be mosaiced
+            output_file (str): Path to where the output mosaic file will be written
+        """
+        # Specify the input directory containing the TIFF files
+        tiff_files = [os.path.join(input_dir, f) for f in os.listdir(input_dir) if
+                      f.endswith('.tif')]  # Open all the TIFF files using rasterio
+        src = None
+        src_files_to_mosaic = []
+        for file in tiff_files:
+            src = rasterio.open(file)
+            src_files_to_mosaic.append(src)  # Merge the TIFF files using rasterio.merge
+        mosaic, out_trans = merge(src_files_to_mosaic)  # Specify the output file path and name
+
+        out_meta = src.meta.copy()
+        out_meta.update({"driver": "GTiff",
+                         "height": mosaic.shape[1],
+                         "width": mosaic.shape[2],
+                         # "transform": m_geoloc,
+                         "transform": out_trans,
+                         # "crs": target_crs.ExportToWkt()
+                         })  # Write the merged TIFF file to disk using rasterio
+        with rasterio.open(output_file, "w", **out_meta) as dest:
+            dest.write(mosaic)
+
+        r = gdal.Open(output_file)
+        print(r.GetGeoTransform(), 'after written')
+
+    def _clip_and_convert_to_meters(self, input_file: str, mgrs_string: str, clip_bbox: List[float]):
+        input_tiff = gdal.Open(input_file)
+        geo_transform = input_tiff.GetGeoTransform()
+
+        src_crs = osr.SpatialReference()
+        src_crs.ImportFromEPSG(4326)
+
+        m = mgrs.MGRS()
+        target_crs = osr.SpatialReference()
+        target_crs.ImportFromEPSG(m.MGRSToUTM(mgrs_string))
+
+        trans = osr.CoordinateTransformation(src_crs, target_crs)
+        m_orig = trans.TransformPoint(clip_bbox[0], clip_bbox[3])
+
+        x_pixels = int((clip_bbox[2] - clip_bbox[0]) / geo_transform[1])
+        y_pixels = abs(int((clip_bbox[3] - clip_bbox[1]) / geo_transform[5]))
+
+        driver = gdal.GetDriverByName('GTiff')
+        output_dataset = driver.Create(input_file, x_pixels, y_pixels, input_tiff.RasterCount,
+                                       input_tiff.GetRasterBand(1).DataType)
+
+        output_dataset.SetProjection(input_tiff.GetProjection())
+        output_dataset.SetGeoTransform([m_orig[0], 30.87, 0, m_orig[1], 0, -30.87])
+
+        # Perform the warp operation
+        gdal.Warp(output_dataset, input_tiff, outputBounds=clip_bbox)
+
+    def download_bbox(self, out_file: str, bbox: List[float], buffer: float = 0) -> None:
+        """
+        Downloads data given a region and district. Bounding box will be read in from the region_info.yaml file in the
+        root data directory. If the region or district is not found an error will be raised.
+        Args:
+            out_file (str): Path to where the output mosaic tif file of requested data will be written to
+            bbox (list): Bounding box defining area of data request in [min_lon, min_lat, max_lon, max_lat]
+            buffer (float): Buffer to add to the bounding box in meters
+        """
+        temp_dir = self._download_bbox(bbox, buffer)
+
+        # 2) Create a composite of all tiffs in the temp_dir
+        self._mosaic_tif_files(temp_dir, output_file=out_file)
+
+        # 3) Cleanup
+        shutil.rmtree(temp_dir)
+
+    def download_district(self, out_file: str, region: str, district: str, buffer: float = 0) -> None:
+        """
+        Downloads data given a region and district. Bounding box will be read in from the region_info.yaml file in the
+        root data directory. If the region or district is not found an error will be raised.
+        Args:
+            out_file (str): Path to where the output mosaic tif file of requested data will be written to
+            region (str): Name of the region in the region_info.yaml file
+            district (str): Name of the district in the specified region's entry in the region_info.yaml file
+            buffer (float): Buffer to add to the bounding box in meters
+        """
+        with open(REGION_FILE_PATH, 'r') as f:
+            region_file_info = yaml.load(f, Loader=yaml.FullLoader)
+
+        if region not in region_file_info:
+            raise ValueError(f'No region {region} in {REGION_FILE_PATH}')
+        region_info = region_file_info[region]
+
+        if district not in region_info['districts']:
+            raise ValueError(f'No district {district} found for region {region}')
+
+        bbox = region_info['districts'][district]['bbox']
+        temp_dir = self._download_bbox(bbox, buffer)
+
+        # 2) Create a composite of all tiffs in the temp_dir
+        self._mosaic_tif_files(temp_dir, output_file=out_file)
+
+        # 3) Cleanup
+        shutil.rmtree(temp_dir)
+
+    def download_mgrs(self, out_file: str, mgrs_string: str, buffer: float = 0):
+        bbox = mgrs_to_bbox(mgrs_string)
+        temp_dir = self._download_bbox(bbox, buffer)
+
+        # 2) Create a composite of all tiffs in the temp_dir
+        self._mosaic_tif_files(temp_dir, output_file=out_file)
+        self._clip_and_convert_to_meters(out_file, mgrs_string, bbox)
+
+        # 3) Cleanup
+        shutil.rmtree(temp_dir)
+
+    def _download_bbox(self, bbox: List[float], buffer: float = 0) -> str:
+        """
+        Downloads data given a region and district. Bounding box will be read in from the region_info.yaml file in the
+        root data directory. If the region or district is not found an error will be raised.
+        Args:
+            bbox (list): Bounding box defining area of data request in [min_lon, min_lat, max_lon, max_lat]
+            buffer (float): Buffer to add to the bounding box in meters
+        """
+
+        # Convert the buffer from meters to degrees lat/long at the equator
+        buffer /= 111000
+
+        # Adjust the bounding box to include the buffer (subtract from min lat/long values, add to max lat/long values)
+        bbox[0] -= buffer
+        bbox[1] -= buffer
+        bbox[2] += buffer
+        bbox[3] += buffer
+
+        temp_dir = tempfile.mkdtemp(prefix='b2p')
+
+        try:
+            # 1) Download all overlapping files and convert to tiff in parallel
+            file_names = self._resolve_filenames(bbox)
+            task_args = []
+            for file_name in file_names:
+                task_args.append(
+                    Namespace(
+                        link=(os.path.join(self.BASE_URL, file_name)),
+                        out_dir=temp_dir,
+                        top_left_coord=self._get_top_left_coordinate_from_filename(file_name),
+                        username=self._username,
+                        password=self._password
+                    )
+                )
+
+            with mp.Pool(mp.cpu_count() - 1) as pool:
+                for _ in tqdm(pool.imap_unordered(_elevation_download_task, task_args), total=len(task_args)):
+                    pass
+
+            return temp_dir
+
+        except Exception as e:
+            shutil.rmtree(temp_dir)
+            raise e
+
+    @staticmethod
+    def _get_top_left_coordinate_from_filename(infile: str) -> Tuple[float, float]:
+        """
+        Parses the specified infile name for coordinate info. File names indicate the bottom left pixel's coordinate,
+        so need to add 1 deg (files are 1x1 deg and North-up) to lat to get top left corner.
+        Args:
+            infile (str): Name of path of file to get top left coordinate for
+        Returns:
+            top_left_coord (Tuple): Top left corner as (lon, lat)
+        """
+        infile = os.path.basename(infile)
+
+        match = re.search(r"[nsNS](\d{2})[weWE](\d{3})", infile)
+        if match:
+            n_or_s = match.group(0)[0]
+            e_or_w = match.group(0)[3]
+            n_value = match.group(1)
+            e_value = match.group(2)
+
+        lat = float(n_value) * (1 if n_or_s.lower() == 'n' else -1) + 1
+        lon = float(e_value) * (1 if e_or_w.lower() == 'e' else -1)
+
+        return lon, lat
+
+    def _resolve_filenames(self, bbox: List[float]) -> List[str]:
+        """
+        Files are stored with the following naming convention, for example: N00E003.SRTMGL1_NC.nc where N00 is 0 deg
+        latitude and E003 is 3 deg longitude, referring to the lower left coordinate of the data file. So create all
         the possible file name combinations within the range of the bounding box
         Args:
             bbox (list): Bounding box coordinates in [min_lon, min_lat, max_lon, max_lat]
         Returns:
-            lon_substrings, lat_substrings (tuple): Tuple of lists containing the filename substrings for lon and late
+            file_names (list): List of SRTMGL1_NC formatted file names within the bbox range
         """
         min_lon = bbox[0]
         min_lat = bbox[1]
@@ -269,224 +495,9 @@ class BaseAPI(ABC):
         lon_substrings = self._create_substrings(round_min_lon, round_max_lon, min_lon_ord, max_lon_ord, 3)
         lat_substrings = self._create_substrings(round_min_lat, round_max_lat, min_lat_ord, max_lat_ord, 2)
 
-        return lon_substrings, lat_substrings
-
-    @staticmethod
-    def get_utm_epsg(lat, lon):
-        utm_zone = int((lon + 180) // 6) + 1
-        epsg_code = 32600 if lat >= 0 else 32700
-        epsg_code += utm_zone
-        return epsg_code
-
-    @staticmethod
-    def _mosaic_tif_files(input_dir: str, output_file: str) -> None:
-        """
-        Creates a mosaic from a group of tif files in the specified input_dir
-        Args:
-            input_dir (str): The path to the input dir containing the tif files to be mosaiced
-            output_file (str): Path to where the output mosaic file will be written
-        """
-        # Specify the input directory containing the TIFF files
-        tiff_files = [os.path.join(input_dir, f) for f in os.listdir(input_dir) if
-                      f.endswith('.tif')]  # Open all the TIFF files using rasterio
-        src = None
-        src_files_to_mosaic = []
-        for file in tiff_files:
-            src = rasterio.open(file)
-            src_files_to_mosaic.append(src)  # Merge the TIFF files using rasterio.merge
-        mosaic, out_trans = merge(src_files_to_mosaic) # Specify the output file path and name
-        print('A')
-        print(out_trans, 'orig')
-        for t in out_trans:
-            print(t)
-        #print(vars(mosaic))
-        # Convert transform from lat / lon to meters
-        # Set the source and target CRS
-        print(str(src.crs))
-        src_crs = osr.SpatialReference()
-        src_crs.ImportFromEPSG(4326)
-        print(src_crs, 'src_crs')
-
-        target_crs = osr.SpatialReference()
-        target_crs.ImportFromEPSG(BaseAPI.get_utm_epsg(out_trans[2], out_trans[5]))
-
-        trans = osr.CoordinateTransformation(src_crs, target_crs)
-        m_orig = trans.TransformPoint(out_trans[2], out_trans[5])
-        m_geoloc = [30.87, 0, m_orig[0], 0, -30.87, m_orig[1], 0, 0, 1]
-        print(m_geoloc, 'm_geoloc')
-
-        out_meta = src.meta.copy()
-        out_meta.update({"driver": "GTiff",
-                         "height": mosaic.shape[1],
-                         "width": mosaic.shape[2],
-                         "transform": m_geoloc,
-                         "crs": target_crs.ExportToWkt()})  # Write the merged TIFF file to disk using rasterio
-        with rasterio.open(output_file, "w", **out_meta) as dest:
-            dest.write(mosaic)
-
-        r = gdal.Open(output_file)
-        print(r.GetGeoTransform(), 'after written')
-
-    def download_district(self, out_file: str, region: str, district: str, download_task: Any,
-                          buffer: float = 0) -> None:
-        """
-        Downloads data given a region and district. Bounding box will be read in from the region_info.yaml file in the
-        root data directory. If the region or district is not found an error will be raised.
-        Args:
-            out_file (str): Path to where the output mosaic tif file of requested data will be written to
-            region (str): Name of the region in the region_info.yaml file
-            district (str): Name of the district in the specified region's entry in the region_info.yaml file
-            download_task (object): Function to use to download the data. Currently, either the _slope_download_task or
-            _elevation_download_task function
-            buffer (float): Buffer to add to the bounding box in meters
-        """
-        with open(REGION_FILE_PATH, 'r') as f:
-            region_file_info = yaml.load(f, Loader=yaml.FullLoader)
-
-        if region not in region_file_info:
-            raise ValueError(f'No region {region} in {REGION_FILE_PATH}')
-        region_info = region_file_info[region]
-
-        if district not in region_info['districts']:
-            raise ValueError(f'No district {district} found for region {region}')
-
-        bbox = region_info['districts'][district]['bbox']
-        self.download_bbox(out_file, bbox, download_task, buffer)
-
-    def download_bbox(self, out_file: str, bbox: List[float], download_task: Any, buffer: float = 0) -> None:
-        """
-        Downloads data given a region and district. Bounding box will be read in from the region_info.yaml file in the
-        root data directory. If the region or district is not found an error will be raised.
-        Args:
-            out_file (str): Path to where the output mosaic tif file of requested data will be written to
-            bbox (list): Bounding box defining area of data request in [min_lon, min_lat, max_lon, max_lat]
-            download_task (object): Function to use to download the data. Currently, either the _slope_download_task or
-            _elevation_download_task function
-            buffer (float): Buffer to add to the bounding box in meters
-        """
-
-        # Convert the buffer from meters to degrees lat/long at the equator
-        buffer /= 111000
-
-        # Adjust the bounding box to include the buffer (subtract from min lat/long values, add to max lat/long values)
-        bbox[0] -= buffer
-        bbox[1] -= buffer
-        bbox[2] += buffer
-        bbox[3] += buffer
-
-        temp_dir = tempfile.mkdtemp(prefix='b2p')
-
-        try:
-            # 1) Download all overlapping files and convert to tiff in parallel
-            file_names = self._resolve_filenames(bbox)
-            task_args = []
-            for file_name in file_names:
-                task_args.append(
-                    Namespace(
-                        link=(os.path.join(self.BASE_URL, file_name)),
-                        out_dir=temp_dir,
-                        top_left_coord=self._get_top_left_coordinate_from_filename(file_name),
-                        username=self._username,
-                        password=self._password
-                    )
-                )
-
-            with mp.Pool(mp.cpu_count() - 1) as pool:
-                for _ in tqdm(pool.imap_unordered(download_task, task_args), total=len(task_args)):
-                    pass
-
-            # 2) Create a composite of all tiffs in the temp_dir
-            self._mosaic_tif_files(temp_dir, output_file=out_file)
-
-            # 3) Cleanup
-            shutil.rmtree(temp_dir)
-
-        except Exception as e:
-            shutil.rmtree(temp_dir)
-            raise e
-
-    @staticmethod
-    def _get_top_left_coordinate_from_filename(infile: str) -> Tuple[float, float]:
-        """
-        Parses the specified infile name for coordinate info. File names indicate the bottom left pixel's coordinate,
-        so need to add 1 deg (files are 1x1 deg and North-up) to lat to get top left corner.
-        Args:
-            infile (str): Name of path of file to get top left coordinate for
-        Returns:
-            top_left_coord (Tuple): Top left corner as (lon, lat)
-        """
-        infile = os.path.basename(infile)
-
-        match = re.search(r"[nsNS](\d{2})[weWE](\d{3})", infile)
-        if match:
-            n_or_s = match.group(0)[0]
-            e_or_w = match.group(0)[3]
-            n_value = match.group(1)
-            e_value = match.group(2)
-
-        lat = float(n_value) * (1 if n_or_s.lower() == 'n' else -1) + 1
-        lon = float(e_value) * (1 if e_or_w.lower() == 'e' else -1)
-
-        return lon, lat
-
-
-class Elevation(BaseAPI):
-    """
-    SRTMGL1 v003 elevation data specific methods for requesting data from LP DAAC servers. Files are downloaded in
-    parallel as netCDF files and then converted to tif format. Tif files are then made into a single tif mosaic covering
-    the entire requested region.
-    Data homepage: https://lpdaac.usgs.gov/products/srtmgl1v003/
-    Ex.
-        elevation = Elevation()
-        elevation.download_district('data/elevation/ethiopia/yem.tif', 'Ethiopia', 'Yem')
-        OR
-        elevation.download_bbox('data/elevation/ethiopia/yem.tif', [37.391, 7.559, 37.616, 8.012])
-    """
-    BASE_URL = 'https://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1_NC.003/2000.02.11/'
-
-    def __init__(self):
-        super().__init__()
-
-    def _resolve_filenames(self, bbox: List[float]) -> List[str]:
-        """
-        Files are stored with the following naming convention, for example: N00E003.SRTMGL1_NC.nc where N00 is 0 deg
-        latitude and E003 is 3 deg longitude, referring to the lower left coordinate of the data file. So create all
-        the possible file name combinations within the range of the bounding box
-        Args:
-            bbox (list): Bounding box coordinates in [min_lon, min_lat, max_lon, max_lat]
-        Returns:
-            file_names (list): List of SRTMGL1_NC formatted file names within the bbox range
-        """
-        lon_substrings, lat_substrings = super()._resolve_filenames(bbox)
-
         file_names = []
         for lon in lon_substrings:
             for lat in lat_substrings:
                 file_names.append(f"{lat.upper()}{lon.upper()}.SRTMGL1_NC.nc")
 
         return file_names
-
-    def download_district(self, out_file: str, region: str, district: str, buffer: float = 0) -> None:
-        """
-        Downloads data given a region and district. Bounding box will be read in from the region_info.yaml file in the
-        root data directory. If the region or district is not found an error will be raised.
-        Args:
-            out_file (str): Path to where the output mosaic tif file of requested data will be written to
-            region (str): Name of the region in the region_info.yaml file
-            district (str): Name of the district in the specified region's entry in the region_info.yaml file
-            buffer (float): Buffer to add to the bounding box in meters
-        """
-        super().download_district(out_file, region, district, _elevation_download_task, buffer)
-
-    def download_bbox(self, out_file: str, bbox: List[float], _download_task: Any = None, buffer: float = 0):
-        """
-        Downloads data given a region and district. Bounding box will be read in from the region_info.yaml file in the
-        root data directory. If the region or district is not found an error will be raised.
-        Args:
-            out_file (str): Path to where the output mosaic tif file of requested data will be written to
-            bbox (list): Bounding box defining area of data request in [min_lon, min_lat, max_lon, max_lat]
-            _download_task (object): Function to use to download the data. This is a dummy parameter in order to match
-            the signature of te super method
-            buffer (float): Buffer to add to the bounding box in meters
-        """
-        super().download_bbox(out_file, bbox, _elevation_download_task, buffer)

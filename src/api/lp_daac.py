@@ -305,25 +305,27 @@ class Elevation(BaseAPI):
         target_crs.ImportFromEPSG(epsg_code)
 
         trans = osr.CoordinateTransformation(src_crs, target_crs)
-        m_orig = trans.TransformPoint(clip_bbox[0], clip_bbox[3])
-        clip_transform = trans.TransformPoint(*clip_bbox)
+        ll = trans.TransformPoint(*clip_bbox[:2])
+        tr = trans.TransformPoint(*clip_bbox[2:])
+
+        print(clip_bbox)
+        print(ll)
+        print(tr)
 
         x_pixels = int((clip_bbox[2] - clip_bbox[0]) / geo_transform[1])
         y_pixels = abs(int((clip_bbox[3] - clip_bbox[1]) / geo_transform[5]))
 
         print(x_pixels, y_pixels)
-        print([m_orig[0], 30.87, 0, m_orig[1], 0, -30.87])
-        print(clip_transform)
 
         driver = gdal.GetDriverByName('GTiff')
         output_dataset = driver.Create(input_file.replace('.tif', '_clipped.tif'), x_pixels, y_pixels,
                                        input_tiff.RasterCount, gdal.GDT_Float32)
 
         output_dataset.SetProjection(input_tiff.GetProjection())
-        output_dataset.SetGeoTransform([m_orig[0], 30.87, 0, m_orig[1], 0, -30.87])
+        output_dataset.SetGeoTransform([ll[0], 30.87, 0, tr[1], 0, -30.87])
 
         # Perform the warp operation
-        gdal.Warp(output_dataset, input_tiff, outputBounds=clip_transform)
+        gdal.Warp(output_dataset, input_tiff, outputBounds=[*ll, *tr])
 
     def download_bbox(self, out_file: str, bbox: List[float], buffer: float = 0) -> None:
         """

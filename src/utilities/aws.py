@@ -74,13 +74,13 @@ def rename_and_reupload(region: str, districts):
     for district in districts:
         dir = os.path.join(COMPOSITE_DIR, region, district)
         for file in os.listdir(dir):
-            if 'multiband' in file or 'B02' in file:
+            if 'multiband' in file:
                 mgrs = file[:5]
                 new_name = OpticalComposite(region, district, mgrs, ['B02', 'B03', 'B04'])
                 aws_path = os.path.join(COMPOSITE_DIR, region, district, new_name.name)
-                shutil.move(os.path.join(dir, file), new_name.archive_path)
+
                 print(new_name.name)
-                files_to_upload.append((new_name.archive_path, aws_path))
+                files_to_upload.append((os.path.join(dir, file), new_name.archive_path, aws_path))
 
     s3, client = initialize_s3('b2p.njr')
     if not client:
@@ -90,7 +90,7 @@ def rename_and_reupload(region: str, districts):
 
     for filetuple in tqdm.tqdm(files_to_upload, leave=True, position=0):
         file_size = os.stat(filetuple[0]).st_size
-        key = filetuple[1]
+        key = filetuple[2]
         with tqdm.tqdm(total=file_size, unit='B', unit_scale=True, desc=filetuple[0], leave=False, position=1) as pbar:
             s3_bucket.upload_file(
                 Filename=filetuple[0],
@@ -98,3 +98,4 @@ def rename_and_reupload(region: str, districts):
                 Key=key,
                 Callback=lambda bytes_transferred: pbar.update(bytes_transferred),
             )
+            shutil.move(filetuple[0], filetuple[1])

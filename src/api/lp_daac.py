@@ -313,7 +313,7 @@ class Elevation(BaseAPI):
         y_pixels = abs(int((clip_bbox[3] - clip_bbox[1]) / geo_transform[5]))
 
         driver = gdal.GetDriverByName('GTiff')
-        output_dataset = driver.Create(input_file, x_pixels, y_pixels, input_tiff.RasterCount,
+        output_dataset = driver.Create(input_file.replace('.tif', '_clipped.tif'), x_pixels, y_pixels, input_tiff.RasterCount,
                                        input_tiff.GetRasterBand(1).DataType)
 
         output_dataset.SetProjection(input_tiff.GetProjection())

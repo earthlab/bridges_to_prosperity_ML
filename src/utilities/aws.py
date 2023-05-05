@@ -69,12 +69,12 @@ def initialize_s3(bucket_name: str = CONFIG.AWS.BUCKET):
                     'following environment variables:\n AWS_ACCESS_KEY_ID\n AWS_SECRET_ACCESS_KEY')
 
 
-def rename_and_reupload(region: str, districts):
+def rename_and_reupload(region: str):
     files_to_upload = []
     for district in districts:
         dir = os.path.join(COMPOSITE_DIR, region, district)
         for file in os.listdir(dir):
-            if 'multiband' in file:
+            if 'multiband' in file or 'B02' in file:
                 mgrs = file[:5]
                 new_name = OpticalComposite(region, district, mgrs, ['B02', 'B03', 'B04'])
                 aws_path = os.path.join(COMPOSITE_DIR, region, district, new_name.name)

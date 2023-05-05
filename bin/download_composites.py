@@ -22,7 +22,7 @@ CORES = mp.cpu_count() - 1
 
 
 def this_download(location_request_info: Tuple[str, int, int, str]) -> None:
-    for location_path, composite_size, destination, position in location_request_info:
+    for location_path, composite_size, destination, position, bucket_name in location_request_info:
         s3, client = initialize_s3(CONFIG.AWS.BUCKET)
         print(s3, client)
         if not client:
@@ -37,7 +37,7 @@ def this_download(location_request_info: Tuple[str, int, int, str]) -> None:
         with tqdm(total=int(composite_size), unit='B', unit_scale=True, desc=location_path, leave=False,
                   position=int(position)) as pbar:
             print(destination)
-            bucket.download_file(Key=location_path, Filename=destination,
+            bucket.download_file(Key=location_path, Filename=destination, Bucket=bucket_name,
                                  Callback=lambda bytes_transferred: pbar.update(bytes_transferred))
     return None
 
@@ -81,7 +81,7 @@ def download_composites(region: str = None, districts: List[str] = None, composi
         parallel_inputs.append([])
         for info_tuple in location:
             print(info_tuple)
-            parallel_inputs[i].append((info_tuple[0], info_tuple[1], info_tuple[2], str(i + 1)))
+            parallel_inputs[i].append((info_tuple[0], info_tuple[1], info_tuple[2], str(i + 1), s3_bucket_name))
     process_map(
         this_download,
         parallel_inputs,

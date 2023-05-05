@@ -68,7 +68,7 @@ def download_composites(region: str = None, districts: List[str] = None, s3_buck
     if not client:
         s3_bucket = s3.Bucket(s3_bucket_name)
     else:
-        s3_bucket = s3
+        s3_bucket = s3.Bucket(s3_bucket_name)
 
     requested_locations = get_requested_locations(region, districts)
 

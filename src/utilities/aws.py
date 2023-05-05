@@ -1,4 +1,5 @@
 import os
+import shutil
 
 import boto3
 import botocore.exceptions
@@ -6,6 +7,8 @@ import tqdm
 
 from src.api.sentinel2 import APIAuth
 from src.utilities.config_reader import CONFIG
+from definitions import COMPOSITE_DIR
+from file_types import OpticalComposite
 
 
 def upload_to_s3(session, filename: str, key: str, bucket: str = None):
@@ -64,3 +67,34 @@ def initialize_s3(bucket_name: str = CONFIG.AWS.BUCKET):
                     'Could not find AWS credentials in environment variables. Please either access s3 from an '
                     'EC2 instance with S3 IAM permissions or use the aws CLI to authenticate and set the '
                     'following environment variables:\n AWS_ACCESS_KEY_ID\n AWS_SECRET_ACCESS_KEY')
+
+
+def rename_and_reupload(region: str, districts):
+    files_to_upload = []
+    for district in districts:
+        dir = os.path.join(COMPOSITE_DIR, region, district)
+        for file in os.listdir(dir):
+            if 'multiband' in file:
+                mgrs = file[:5]
+                new_name = OpticalComposite(region, district, mgrs, ['B02', 'B03', 'B04'])
+                aws_path = os.path.join(COMPOSITE_DIR, region, district, new_name)
+                shutil.move(os.path.join(dir, file), new_name.archive_path)
+                print(new_name.name)
+                files_to_upload.append((new_name.archive_path, aws_path))
+
+    s3, client = initialize_s3('b2p.njr')
+    if not client:
+        s3_bucket = s3.Bucket('b2p.njr')
+    else:
+        s3_bucket = s3
+
+    for filetuple in tqdm(files_to_upload, leave=True, position=0):
+        file_size = os.stat(filetuple[0]).st_size
+        key = filetuple[1]
+        with tqdm(total=file_size, unit='B', unit_scale=True, desc=filetuple[0], leave=False, position=1) as pbar:
+            s3_bucket.upload_file(
+                Filename=filetuple[0],
+                Bucket='b2p.njr',
+                Key=key,
+                Callback=lambda bytes_transferred: pbar.update(bytes_transferred),
+            )

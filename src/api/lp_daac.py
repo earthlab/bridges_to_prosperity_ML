@@ -284,9 +284,7 @@ class Elevation(BaseAPI):
         out_meta.update({"driver": "GTiff",
                          "height": mosaic.shape[1],
                          "width": mosaic.shape[2],
-                         # "transform": m_geoloc,
-                         "transform": out_trans,
-                         # "crs": target_crs.ExportToWkt()
+                         "transform": out_trans
                          })  # Write the merged TIFF file to disk using rasterio
         with rasterio.open(output_file, "w", **out_meta) as dest:
             dest.write(mosaic)
@@ -303,7 +301,9 @@ class Elevation(BaseAPI):
 
         m = mgrs.MGRS()
         target_crs = osr.SpatialReference()
-        target_crs.ImportFromEPSG(m.MGRSToUTM(mgrs_string))
+        epsg_info = m.MGRSToUTM(mgrs_string)
+        epsg_code = int('326' if epsg_info[1] == 'N' else '327' + str(epsg_info[0]))
+        target_crs.ImportFromEPSG(epsg_code)
 
         trans = osr.CoordinateTransformation(src_crs, target_crs)
         m_orig = trans.TransformPoint(clip_bbox[0], clip_bbox[3])

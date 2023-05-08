@@ -387,10 +387,13 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
 
     print(len(low_res_lons), len(low_res_lats), low_res_data.shape)
 
-    def lookup_nearest(lon: int, lat: int):
-        xi = np.abs(np.array(low_res_lats) - lat).argmin()
+    def lookup_nearest_lon(lon: int):
         yi = np.abs(np.array(low_res_lons) - lon).argmin()
-        return low_res_data[yi, xi]
+        return yi
+
+    def lookup_nearest_lat(lat: int):
+        yi = np.abs(np.array(low_res_lats) - lat).argmin()
+        return yi
 
     high_res = gdal.Open(high_resolution_path)
 
@@ -400,9 +403,13 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
     print('A', high_res_lons[0], high_res_lons[-1], high_res_lats[0], high_res_lats[-1])
 
     high_res_data = np.zeros((len(high_res_lats), len(high_res_lons)))
-    for y, lon in tqdm(enumerate(high_res_lons), total=len(high_res_lons)):
-        for x, lat in tqdm(enumerate(high_res_lats), total=len(high_res_lats)):
-            high_res_data[y, x] = lookup_nearest(lon, lat)
+
+    closest_lats = [lookup_nearest_lat(lat) for lat in high_res_lats]
+    closest_lons = [lookup_nearest_lon(lon) for lon in high_res_lats]
+
+    for y in tqdm(closest_lons, total=len(closest_lons)):
+        for x in tqdm(closest_lats, total=len(closest_lats)):
+            high_res_data[y, x] = low_res_data[y,x]
 
     print('HRD', high_res_data.shape)
 

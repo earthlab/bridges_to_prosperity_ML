@@ -136,8 +136,8 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
 
             # TODO: Check if all_bands_file exists
             all_bands_file = OpticalComposite(region, district, rgb_file.mgrs, ['B02', 'B03', 'B04', 'B08'])
-            combine_bands(rgb_file.archive_path, all_bands_file.archive_path)
-            combine_bands(ir_file.archive_path, all_bands_file.archive_path)
+            combine_bands(rgb_file.archive_path, all_bands_file.archive_path, new_bands=3)
+            combine_bands(ir_file.archive_path, all_bands_file.archive_path, new_bands=1)
 
             multivariate_file = MultiVariateCompositeFile(region, district, rgb_file.mgrs)
             os.makedirs(os.path.dirname(multivariate_file.archive_path), exist_ok=True)
@@ -164,9 +164,9 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
 
             getOsm(all_bands_file.archive_path, osm_file.archive_path)
 
-            combine_bands(osm_file.archive_path, multivariate_file.archive_path)
-            combine_bands(mgrs_elevation_outfile.archive_path, multivariate_file.archive_path)
-            combine_bands(mgrs_slope_outfile.archive_path, multivariate_file.archive_path)
+            combine_bands(osm_file.archive_path, multivariate_file.archive_path, new_bands=1)
+            combine_bands(mgrs_elevation_outfile.archive_path, multivariate_file.archive_path, new_bands=1)
+            combine_bands(mgrs_slope_outfile.archive_path, multivariate_file.archive_path, new_bands=1)
 
 
 if __name__ == "__main__":

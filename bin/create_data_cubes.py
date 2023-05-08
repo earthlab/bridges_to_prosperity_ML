@@ -157,7 +157,7 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
                 elevation_api.lat_lon_to_meters(mgrs_elevation_outfile.archive_path)
                 high_res_elevation = subsample_geo_tiff(mgrs_elevation_outfile.archive_path,
                                                         all_bands_file.archive_path)
-                numpy_array_to_raster(mgrs_elevation_outfile.archive_path, high_res_elevation, high_res_geo_reference,
+                numpy_array_to_raster(mgrs_elevation_outfile.archive_path.replace('.tif', 'high_res.tif'), high_res_elevation, high_res_geo_reference,
                                       'wgs84')
 
             mgrs_slope_outfile = SlopeFile(region, district, rgb_file.mgrs)

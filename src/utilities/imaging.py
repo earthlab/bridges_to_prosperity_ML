@@ -400,9 +400,9 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
     print('A', high_res_lons[0], high_res_lons[-1], high_res_lats[0], high_res_lats[-1])
 
     high_res_data = np.zeros((len(high_res_lats), len(high_res_lons)))
-    for lon in high_res_lons:
-        for lat in high_res_lats:
-            high_res_data[lon, lat] = lookup_nearest(lon, lat)
+    for y, lon in enumerate(high_res_lons):
+        for x, lat in enumerate(high_res_lats):
+            high_res_data[y, x] = lookup_nearest(lon, lat)
 
     print('HRD', high_res_data.shape)
 

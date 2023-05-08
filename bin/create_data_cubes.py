@@ -29,6 +29,9 @@ from bin.download_composites import download_composites, get_requested_locations
 from src.api.sentinel2 import SinergiseSentinelAPI
 from src.api.lp_daac import Elevation as ElevationAPI
 from src.api.osm import getOsm
+import mgrs
+from geopy import Point
+from geopy.distance import distance
 
 from file_types import OpticalComposite, Elevation as ElevationFile, Slope as SlopeFile, OSM as OSMFile,\
     MultiVariateComposite as MultiVariateCompositeFile
@@ -49,6 +52,25 @@ def combine_bands(source_file: str, target_file: str):
         with rasterio.open(target_file, 'w+', **meta) as dst:
             for i in range(d):
                 dst.write_band(i + 1, src_file.read(i + 1))
+
+
+def mgrs_to_bbox(mgrs_string: str):
+    m = mgrs.MGRS()
+    lat, lon = m.toLatLon(mgrs_string)
+    # Calculate the bounding box
+    sw_point = Point(latitude=lat, longitude=lon)
+    ne_point = distance(kilometers=1.0).destination(sw_point, 45)
+    bounding_box = (sw_point.longitude, sw_point.latitude, ne_point.longitude, ne_point.latitude)
+    return list(bounding_box)
+
+
+def copy_geo_transform(source_file: str, target_file: str):
+    source_tif = gdal.Open(source_file)
+    target_tif = gdal.Open(target_file)
+    target_tif.SetGeoTransform(source_tif.GetGeoTransform())
+
+    source_tif = None
+    target_tif = None
 
 
 def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORES, region: List[str] = None,
@@ -124,9 +146,6 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
             ir_tiff_file = gdal.Open(ir_file.archive_path)
             print(ir_tiff_file.GetGeoTransform(), 'ir_gt')
 
-            #  TODO: # Need to make elevation files based on the military grid so we can get EPSG from it and convert from lat / lon to meters
-
-
             # TODO: Check if all_bands_file exists
             all_bands_file = OpticalComposite(region, district, rgb_file.mgrs, ['B02', 'B03', 'B04', 'B08'])
             combine_bands(rgb_file.archive_path, all_bands_file.archive_path)
@@ -139,14 +158,21 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
 
             mgrs_elevation_outfile = ElevationFile(region, district, rgb_file.mgrs)
             if not os.path.exists(mgrs_elevation_outfile.archive_path):
-                high_res_elevation = subsample_geo_tiff(elevation_file.archive_path, all_bands_file.archive_path)
+                # Clip to bbox so we can convert to meters
+                mgrs_bbox = mgrs_to_bbox(rgb_file.mgrs)
+                elevation_api.clip(elevation_file.archive_path, mgrs_elevation_outfile.archive_path, mgrs_bbox)
+                copy_geo_transform(rgb_file.archive_path, mgrs_elevation_outfile.archive_path)
+                high_res_elevation = subsample_geo_tiff(mgrs_elevation_outfile.archive_path, all_bands_file.archive_path)
                 numpy_array_to_raster(mgrs_elevation_outfile.archive_path, high_res_elevation, high_res_geo_reference,
                                       'wgs84')
 
-            mgrs_slope_file = SlopeFile(region, district, rgb_file.mgrs)
-            if not os.path.exists(mgrs_slope_file.archive_path):
-                high_res_slope = subsample_geo_tiff(slope_file.archive_path, all_bands_file.archive_path)
-                numpy_array_to_raster(mgrs_slope_file.archive_path, high_res_slope, high_res_geo_reference, 'wgs84')
+            mgrs_slope_outfile = SlopeFile(region, district, rgb_file.mgrs)
+            if not os.path.exists(mgrs_slope_outfile.archive_path):
+                mgrs_bbox = mgrs_to_bbox(rgb_file.mgrs)
+                elevation_api.clip(slope_file.archive_path, mgrs_slope_outfile.archive_path, mgrs_bbox)
+                copy_geo_transform(rgb_file.archive_path, mgrs_slope_outfile.archive_path)
+                high_res_slope = subsample_geo_tiff(mgrs_slope_outfile.archive_path, all_bands_file.archive_path)
+                numpy_array_to_raster(mgrs_slope_outfile.archive_path, high_res_slope, high_res_geo_reference, 'wgs84')
 
             osm_file = OSMFile(region, district, rgb_file.mgrs)
             os.makedirs(os.path.dirname(osm_file.archive_path), exist_ok=True)

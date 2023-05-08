@@ -26,9 +26,6 @@ from osgeo import gdal, gdalconst
 from osgeo import osr
 from rasterio.merge import merge
 from tqdm import tqdm
-import mgrs
-from geopy import Point
-from geopy.distance import distance
 
 from definitions import B2P_DIR, REGION_FILE_PATH
 from src.api.util import generate_secrets_file
@@ -140,16 +137,6 @@ def _nc_to_tif(nc_path: str, top_left_coord: Tuple[float, float], out_dir: str,
     # Close the GeoTIFF file and netCDF file
     tif_dataset = None
     nc_file.close()
-
-
-def mgrs_to_bbox(mgrs_string: str):
-    m = mgrs.MGRS()
-    lat, lon = m.toLatLon(mgrs_string)
-    # Calculate the bounding box
-    sw_point = Point(latitude=lat, longitude=lon)
-    ne_point = distance(kilometers=1.0).destination(sw_point, 45)
-    bounding_box = (sw_point.longitude, sw_point.latitude, ne_point.longitude, ne_point.latitude)
-    return list(bounding_box)
 
 
 class BaseAPI(ABC):
@@ -290,11 +277,11 @@ class Elevation(BaseAPI):
         r = gdal.Open(output_file)
         print(r.GetGeoTransform(), 'after written')
 
-    def _clip_and_convert_to_meters(self, input_file: str, mgrs_string: str, clip_bbox: List[float]):
+    def clip(self, input_file: str, output_file: str, clip_bbox: List[float]):
         input_tif = gdal.Open(input_file, gdalconst.GA_ReadOnly)
-        geo_transform = input_tif.GetGeoTransform()
         print(clip_bbox)
-        output_tif = gdal.Translate(input_file.replace('.tif', '_clipped.tif'), input_tif, projWin=[clip_bbox[0], clip_bbox[3], clip_bbox[2], clip_bbox[1]])
+        output_tif = gdal.Translate(output_file, input_tif,
+                                    projWin=[clip_bbox[0], clip_bbox[3], clip_bbox[2], clip_bbox[1]])
         output_tif = None
 
     def download_bbox(self, out_file: str, bbox: List[float], buffer: float = 0) -> None:

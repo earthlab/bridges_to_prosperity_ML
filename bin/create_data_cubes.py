@@ -40,20 +40,17 @@ CORES = mp.cpu_count() - 1
 Image.MAX_IMAGE_PIXELS = None
 
 
-def combine_bands(source_file: str, target_file: str):
+def combine_bands(source_file: str, target_file: str, new_bands: int):
     with rasterio.open(source_file, 'r') as src_file:
         # copy and update the metadata from the input raster for the output
         meta = src_file.meta.copy()
         d = meta['count']
         meta.update(
-            count=d + 1
+            count=d + new_bands
         )
-        print(meta)
         with rasterio.open(target_file, 'w+', **meta) as dst:
-            dst_meta = dst.meta.copy()
-            b = dst_meta['count']
-            for i in range(d):
-                dst.write_band(b + 1, src_file.read(1))
+            for i in range(new_bands):
+                dst.write_band(d + i + 1, src_file.read(i+1))
 
 
 def mgrs_to_bbox(mgrs_string: str):

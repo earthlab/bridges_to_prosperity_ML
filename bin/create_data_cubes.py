@@ -59,7 +59,7 @@ def mgrs_to_bbox(mgrs_string: str):
     lat, lon = m.toLatLon(mgrs_string)
     # Calculate the bounding box
     sw_point = Point(latitude=lat, longitude=lon)
-    ne_point = distance(kilometers=100.0 * np.sqrt(2)).destination(sw_point, 45)
+    ne_point = distance(kilometers=109.8 * np.sqrt(2)).destination(sw_point, 45)
     bounding_box = (sw_point.longitude, sw_point.latitude, ne_point.longitude, ne_point.latitude)
     return list(bounding_box)
 
@@ -118,19 +118,6 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
         # TODO: Make slices configurable
         sentinel2_to_composite(10, cores, bands=['B08'], region=region, districts=[district])
 
-        # Get elevation and slope if they don't exist
-        print('Elevation')
-        elevation_file = ElevationFile(region, district)
-        os.makedirs(os.path.dirname(elevation_file.archive_path), exist_ok=True)
-        if not os.path.exists(elevation_file.archive_path):
-            elevation_api.download_district(elevation_file.archive_path, region, district, buffer=100)
-
-        print('Slope')
-        slope_file = SlopeFile(region, district)
-        os.makedirs(os.path.dirname(slope_file.archive_path), exist_ok=True)
-        if not os.path.exists(slope_file.archive_path):
-            elevation_to_slope(elevation_file.archive_path, slope_file.archive_path)
-
         composite_dir = os.path.join(COMPOSITE_DIR, region, district)
 
         rgb_composites = OpticalComposite.find_files(composite_dir, ['B02', 'B03', 'B04'], recursive=True)
@@ -162,7 +149,8 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
             if not os.path.exists(mgrs_elevation_outfile.archive_path):
                 # Clip to bbox so we can convert to meters
                 mgrs_bbox = mgrs_to_bbox(rgb_file.mgrs)
-                elevation_api.clip(elevation_file.archive_path, mgrs_elevation_outfile.archive_path, mgrs_bbox)
+                elevation_api.download_district(mgrs_elevation_outfile.archive_path, region, district, buffer=5000)
+                elevation_api.clip(mgrs_elevation_outfile.archive_path, mgrs_elevation_outfile.archive_path, mgrs_bbox)
                 print('Copying geo transform')
                 copy_geo_transform(rgb_file.archive_path, mgrs_elevation_outfile.archive_path)
                 high_res_elevation = subsample_geo_tiff(mgrs_elevation_outfile.archive_path,
@@ -172,11 +160,7 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
 
             mgrs_slope_outfile = SlopeFile(region, district, rgb_file.mgrs)
             if not os.path.exists(mgrs_slope_outfile.archive_path):
-                mgrs_bbox = mgrs_to_bbox(rgb_file.mgrs)
-                elevation_api.clip(slope_file.archive_path, mgrs_slope_outfile.archive_path, mgrs_bbox)
-                copy_geo_transform(rgb_file.archive_path, mgrs_slope_outfile.archive_path)
-                high_res_slope = subsample_geo_tiff(mgrs_slope_outfile.archive_path, all_bands_file.archive_path)
-                numpy_array_to_raster(mgrs_slope_outfile.archive_path, high_res_slope, high_res_geo_reference, 'wgs84')
+                elevation_to_slope(mgrs_elevation_outfile.archive_path, mgrs_slope_outfile.archive_path)
 
             osm_file = OSMFile(region, district, rgb_file.mgrs)
             os.makedirs(os.path.dirname(osm_file.archive_path), exist_ok=True)
@@ -184,8 +168,8 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
             getOsm(all_bands_file.archive_path, osm_file.archive_path)
 
             combine_bands(osm_file.archive_path, multivariate_file.archive_path)
-            combine_bands(elevation_file.archive_path, multivariate_file.archive_path)
-            combine_bands(slope_file.archive_path, multivariate_file.archive_path)
+            combine_bands(mgrs_elevation_outfile.archive_path, multivariate_file.archive_path)
+            combine_bands(mgrs_slope_outfile.archive_path, multivariate_file.archive_path)
 
 
 if __name__ == "__main__":

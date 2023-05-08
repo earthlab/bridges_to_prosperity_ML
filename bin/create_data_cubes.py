@@ -59,7 +59,7 @@ def mgrs_to_bbox(mgrs_string: str):
     lat, lon = m.toLatLon(mgrs_string)
     # Calculate the bounding box
     sw_point = Point(latitude=lat, longitude=lon)
-    ne_point = distance(kilometers=100.0).destination(sw_point, 45)
+    ne_point = distance(kilometers=100.0 * np.sqrt(2)).destination(sw_point, 45)
     bounding_box = (sw_point.longitude, sw_point.latitude, ne_point.longitude, ne_point.latitude)
     return list(bounding_box)
 

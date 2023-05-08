@@ -65,8 +65,10 @@ def mgrs_to_bbox(mgrs_string: str):
 
 
 def copy_geo_transform(source_file: str, target_file: str):
+    print('Setting geo transform')
     source_tif = gdal.Open(source_file)
     target_tif = gdal.Open(target_file)
+    print(source_tif.GetGeoTransform())
     target_tif.SetGeoTransform(source_tif.GetGeoTransform())
 
     source_tif = None
@@ -161,8 +163,10 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
                 # Clip to bbox so we can convert to meters
                 mgrs_bbox = mgrs_to_bbox(rgb_file.mgrs)
                 elevation_api.clip(elevation_file.archive_path, mgrs_elevation_outfile.archive_path, mgrs_bbox)
+                print('Copying geo transform')
                 copy_geo_transform(rgb_file.archive_path, mgrs_elevation_outfile.archive_path)
-                high_res_elevation = subsample_geo_tiff(mgrs_elevation_outfile.archive_path, all_bands_file.archive_path)
+                high_res_elevation = subsample_geo_tiff(mgrs_elevation_outfile.archive_path,
+                                                        all_bands_file.archive_path)
                 numpy_array_to_raster(mgrs_elevation_outfile.archive_path, high_res_elevation, high_res_geo_reference,
                                       'wgs84')
 

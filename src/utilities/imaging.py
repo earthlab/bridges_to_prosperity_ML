@@ -382,6 +382,7 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
     low_res_band = low_res.GetRasterBand(1)
     low_res_data = low_res_band.ReadAsArray()
 
+    print(low_resolution_path)
     low_res_lons, low_res_lats = get_geo_locations_from_tif(low_res)
 
     print(len(low_res_lons), len(low_res_lats), low_res_data.shape)
@@ -390,6 +391,7 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
 
     high_res = gdal.Open(high_resolution_path)
 
+    print(high_resolution_path)
     high_res_lons, high_res_lats = get_geo_locations_from_tif(high_res)
     high_res_data = low_res_interp(list(zip(high_res_lats, high_res_lons)))
 

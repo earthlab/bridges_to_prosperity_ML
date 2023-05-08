@@ -393,6 +393,10 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
 
     high_res_lons, high_res_lats = get_geo_locations_from_tif(high_res)
     print(high_resolution_path, len(high_res_lats), len(high_res_lons))
+
+    print('A', low_res_lons[0], low_res_lons[-1], low_res_lats[0], low_res_lats[-1])
+    print('A', high_res_lons[0], high_res_lons[-1], high_res_lats[0], high_res_lats[-1])
+
     high_res_data = low_res_interp(list(zip(high_res_lats, high_res_lons)))
 
     print('HRD', high_res_data.shape)

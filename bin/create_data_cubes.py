@@ -53,10 +53,8 @@ def combine_bands(source_file: str, target_file: str, new_bands: int):
         meta.update(
             count=existing_band_count + new_bands
         )
-        print(meta)
         with rasterio.open(target_file, 'w+', **meta) as dst:
             for i in range(new_bands):
-                print('Adding band', existing_band_count + i + 1, i + 1)
                 dst.write_band(existing_band_count + i + 1, src_file.read(i+1))
 
 

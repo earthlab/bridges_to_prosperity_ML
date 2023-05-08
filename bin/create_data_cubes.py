@@ -124,7 +124,7 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
             ir_tiff_file = gdal.Open(ir_file.archive_path)
             print(ir_tiff_file.GetGeoTransform(), 'ir_gt')
 
-            TODO: # Need to make elevation files based on the military grid so we can get EPSG from it and convert from lat / lon to meters
+            #  TODO: # Need to make elevation files based on the military grid so we can get EPSG from it and convert from lat / lon to meters
 
 
             # TODO: Check if all_bands_file exists

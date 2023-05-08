@@ -291,22 +291,11 @@ class Elevation(BaseAPI):
         print(r.GetGeoTransform(), 'after written')
 
     def _clip_and_convert_to_meters(self, input_file: str, mgrs_string: str, clip_bbox: List[float]):
-        input_tiff = gdal.Open(input_file, gdalconst.GA_ReadOnly)
-        geo_transform = input_tiff.GetGeoTransform()
+        input_tif = gdal.Open(input_file, gdalconst.GA_ReadOnly)
+        geo_transform = input_tif.GetGeoTransform()
 
-        x_pixels = int((clip_bbox[2] - clip_bbox[0]) / geo_transform[1])
-        y_pixels = abs(int((clip_bbox[3] - clip_bbox[1]) / geo_transform[5]))
-
-        print(x_pixels, y_pixels)
-
-        driver = gdal.GetDriverByName('GTiff')
-        output_dataset = driver.Create(input_file.replace('.tif', '_clipped.tif'), x_pixels, y_pixels,
-                                       input_tiff.RasterCount, gdal.GDT_Float32)
-
-        # Perform the warp operation
-        gdal.Warp(output_dataset, input_tiff, outputBounds=clip_bbox)
-
-
+        output_tif = gdal.Translate(input_tif.replace('.tif', '_clipped.tif'), input_tif, clip_bbox)
+        output_tif = None
 
     def download_bbox(self, out_file: str, bbox: List[float], buffer: float = 0) -> None:
         """

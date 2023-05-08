@@ -391,9 +391,11 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
 
     high_res = gdal.Open(high_resolution_path)
 
-    print(high_resolution_path)
     high_res_lons, high_res_lats = get_geo_locations_from_tif(high_res)
+    print(high_resolution_path, len(high_res_lats), len(high_res_lons))
     high_res_data = low_res_interp(list(zip(high_res_lats, high_res_lons)))
+
+    print('HRD', high_res_data.shape)
 
     return high_res_data
 

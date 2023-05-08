@@ -293,8 +293,8 @@ class Elevation(BaseAPI):
     def _clip_and_convert_to_meters(self, input_file: str, mgrs_string: str, clip_bbox: List[float]):
         input_tif = gdal.Open(input_file, gdalconst.GA_ReadOnly)
         geo_transform = input_tif.GetGeoTransform()
-
-        output_tif = gdal.Translate(input_file.replace('.tif', '_clipped.tif'), input_tif, projWin=clip_bbox)
+        print(clip_bbox)
+        output_tif = gdal.Translate(input_file.replace('.tif', '_clipped.tif'), input_tif, projWin=[clip_bbox[0], clip_bbox[3], clip_bbox[2], clip_bbox[1]])
         output_tif = None
 
     def download_bbox(self, out_file: str, bbox: List[float], buffer: float = 0) -> None:

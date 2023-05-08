@@ -23,7 +23,7 @@ import rasterio
 import yaml
 from netCDF4 import Dataset
 from osgeo import gdal, gdalconst
-from osgeo import osr
+from osgeo import osr, ogr
 from rasterio.merge import merge
 from tqdm import tqdm
 
@@ -330,16 +330,23 @@ class Elevation(BaseAPI):
         # 3) Cleanup
         shutil.rmtree(temp_dir)
 
-    def download_mgrs(self, out_file: str, mgrs_string: str, buffer: float = 0):
-        bbox = mgrs_to_bbox(mgrs_string)
-        temp_dir = self._download_bbox(bbox, buffer)
+    def lat_lon_to_meters(self, input_tiff: str):
+        input_tiff_file = gdal.Open(input_tiff, gdal.GA_Update)
 
-        # 2) Create a composite of all tiffs in the temp_dir
-        self._mosaic_tif_files(temp_dir, output_file=out_file)
-        self._clip_and_convert_to_meters(out_file, mgrs_string, bbox)
+        src_crs = osr.SpatialReference()
+        src_crs.ImportFromEPSG(4326)  # Lat / lon
 
-        # 3) Cleanup
-        shutil.rmtree(temp_dir)
+        geo_transform = input_tiff_file.GetGeoTransform()
+        print('Old geo transform')
+        dst_epsg = self.get_utm_epsg(geo_transform[3], geo_transform[0])
+        dst_crs = osr.SpatialReference()
+        dst_crs.ImportFromEPSG(dst_epsg)
+
+        point = ogr.Geometry(ogr.wkbPoint)
+        point.AddPoint(geo_transform[3], geo_transform[0])
+        new_geo_transform = [point.GetX(), 30.87, 0, point.GetY(), 0, -30.87]
+        input_tiff_file.SetGeoTransform(new_geo_transform)
+        input_tiff_file = None
 
     def _download_bbox(self, bbox: List[float], buffer: float = 0) -> str:
         """

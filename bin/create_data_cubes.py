@@ -149,8 +149,8 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
             if not os.path.exists(mgrs_elevation_outfile.archive_path):
                 # Clip to bbox so we can convert to meters
                 mgrs_bbox = mgrs_to_bbox(rgb_file.mgrs)
-                elevation_api.download_district(mgrs_elevation_outfile.archive_path, region, district, buffer=5000)
-                elevation_api.clip(mgrs_elevation_outfile.archive_path, mgrs_elevation_outfile.archive_path, mgrs_bbox)
+                elevation_api.download_bbox(mgrs_elevation_outfile.archive_path, mgrs_bbox, buffer=5000)
+                elevation_api.lat_lon_to_meters(mgrs_elevation_outfile.archive_path)
                 print('Copying geo transform')
                 copy_geo_transform(rgb_file.archive_path, mgrs_elevation_outfile.archive_path)
                 high_res_elevation = subsample_geo_tiff(mgrs_elevation_outfile.archive_path,

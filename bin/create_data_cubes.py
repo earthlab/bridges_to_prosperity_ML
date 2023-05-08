@@ -67,7 +67,7 @@ def mgrs_to_bbox(mgrs_string: str):
 def copy_geo_transform(source_file: str, target_file: str):
     print('Setting geo transform')
     source_tif = gdal.Open(source_file)
-    target_tif = gdal.Open(target_file)
+    target_tif = gdal.Open(target_file, gdal.GA_Update)
     print(source_tif.GetGeoTransform())
     target_tif.SetGeoTransform(source_tif.GetGeoTransform())
 

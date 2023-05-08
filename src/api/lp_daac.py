@@ -344,6 +344,8 @@ class Elevation(BaseAPI):
 
         point = ogr.Geometry(ogr.wkbPoint)
         point.AddPoint(geo_transform[3], geo_transform[0])
+        transform = osr.CoordinateTransformation(src_crs, dst_crs)
+        point.Transform(transform)
         new_geo_transform = [point.GetX(), 30.87, 0, point.GetY(), 0, -30.87]
         input_tiff_file.SetGeoTransform(new_geo_transform)
         input_tiff_file = None

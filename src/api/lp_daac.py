@@ -294,7 +294,7 @@ class Elevation(BaseAPI):
         input_tif = gdal.Open(input_file, gdalconst.GA_ReadOnly)
         geo_transform = input_tif.GetGeoTransform()
 
-        output_tif = gdal.Translate(input_tif.replace('.tif', '_clipped.tif'), input_tif, clip_bbox)
+        output_tif = gdal.Translate(input_file.replace('.tif', '_clipped.tif'), input_tif, clip_bbox)
         output_tif = None
 
     def download_bbox(self, out_file: str, bbox: List[float], buffer: float = 0) -> None:

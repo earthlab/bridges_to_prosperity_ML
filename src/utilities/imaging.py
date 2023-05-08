@@ -387,17 +387,22 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
 
     print(len(low_res_lons), len(low_res_lats), low_res_data.shape)
 
-    low_res_interp = interpolate.NearestNDInterpolator(list(zip(low_res_lats, low_res_lons)), low_res_data)
+    def lookup_nearest(lon: int, lat: int):
+        xi = np.abs(low_res_lats - lat).argmin()
+        yi = np.abs(low_res_lons - lon).argmin()
+        return low_res_data[yi, xi]
 
     high_res = gdal.Open(high_resolution_path)
 
     high_res_lons, high_res_lats = get_geo_locations_from_tif(high_res)
     print(high_resolution_path, len(high_res_lats), len(high_res_lons))
-
     print('A', low_res_lons[0], low_res_lons[-1], low_res_lats[0], low_res_lats[-1])
     print('A', high_res_lons[0], high_res_lons[-1], high_res_lats[0], high_res_lats[-1])
 
-    high_res_data = low_res_interp(list(zip(high_res_lats, high_res_lons)))
+    high_res_data = np.zeros(high_res_lats, high_res_lons)
+    for lon in high_res_lons:
+        for lat in high_res_lats:
+            high_res_data[lon, lat] = lookup_nearest(lon, lat)
 
     print('HRD', high_res_data.shape)
 

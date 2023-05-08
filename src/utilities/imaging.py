@@ -388,8 +388,8 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
     print(len(low_res_lons), len(low_res_lats), low_res_data.shape)
 
     def lookup_nearest(lon: int, lat: int):
-        xi = np.abs(low_res_lats - lat).argmin()
-        yi = np.abs(low_res_lons - lon).argmin()
+        xi = np.abs(np.array(low_res_lats) - lat).argmin()
+        yi = np.abs(np.array(low_res_lons) - lon).argmin()
         return low_res_data[yi, xi]
 
     high_res = gdal.Open(high_resolution_path)

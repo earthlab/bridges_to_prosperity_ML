@@ -278,7 +278,7 @@ class Elevation(BaseAPI):
         print(r.GetGeoTransform(), 'after written')
 
     def clip(self, input_file: str, output_file: str, clip_bbox: List[float]):
-        input_tif = gdal.Open(input_file, gdalconst.GA_ReadOnly)
+        input_tif = gdal.Open(input_file)
         print(clip_bbox)
         output_tif = gdal.Translate(output_file, input_tif,
                                     projWin=[clip_bbox[0], clip_bbox[3], clip_bbox[2], clip_bbox[1]])

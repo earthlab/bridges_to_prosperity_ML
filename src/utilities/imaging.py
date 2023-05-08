@@ -457,6 +457,10 @@ def elevation_to_slope(elevation_file: str, slope_outfile: str):
     geo_transform = dataset.GetGeoTransform()
     projection = dataset.GetProjection()
 
+    n_nan = np.count_nonzero(np.isnan(slope_deg))
+
+    print("Number of NaN values:", n_nan)
+
     numpy_array_to_raster(slope_outfile, slope_deg, geo_transform, projection)
 
 

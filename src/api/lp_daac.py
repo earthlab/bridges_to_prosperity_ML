@@ -337,7 +337,7 @@ class Elevation(BaseAPI):
         src_crs.ImportFromEPSG(4326)  # Lat / lon
 
         geo_transform = input_tiff_file.GetGeoTransform()
-        print('Old geo transform')
+        print('Old geo transform', geo_transform)
         dst_epsg = self.get_utm_epsg(geo_transform[3], geo_transform[0])
         dst_crs = osr.SpatialReference()
         dst_crs.ImportFromEPSG(dst_epsg)

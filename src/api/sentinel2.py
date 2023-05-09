@@ -144,15 +144,16 @@ class APIAuth:
         'opp': 'arn:aws:iam::080475411655:role/Shibboleth-Customer-Admin'
     }
 
-    def __init__(self, identikey: str) -> None:
+    def __init__(self, identikey: str, no_auth: bool = False) -> None:
         """
         Queries the user for identikey password and configures saml2aws for CU AWS authentication
         Args:
             identikey (str): CU identikey used to log into AWS accounts
         """
-        self._identikey = identikey
-        self._password = getpass.getpass('identikey password:')
-        self._configure_saml2aws()
+        if not no_auth:
+            self._identikey = identikey
+            self._password = getpass.getpass('identikey password:')
+            self._configure_saml2aws()
 
     def login(self, aws_account: str, ttl: int = MAX_SESSION_DURATION) -> boto3.client:
         """

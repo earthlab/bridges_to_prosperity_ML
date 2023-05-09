@@ -325,10 +325,12 @@ class SinergiseSentinelAPI:
             file_path = file_info[0]
             if '/preview/' in file_path:
                 continue
-
+            print(file_path)
             file = Sentinel2Tile.create(file_path)
+            print(file)
             if file is None:
                 file = Sentinel2Cloud.create(file_path)
+                print(file)
                 if file is None:
                     continue
 

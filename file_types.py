@@ -48,7 +48,6 @@ class OpticalComposite(FileType):
 
         regex += r'\.tif$'
         files = glob.glob(in_dir + '/**/*', recursive=recursive)
-        print(files)
 
         matching_files = [f for f in files if re.match(regex, os.path.basename(f)) is not None]
 
@@ -105,6 +104,7 @@ class Sentinel2Tile(FileType):
         for band in bands:
             regex += r'{}'.format(band) + (r'_' if band != bands[-1] else r'')
         regex += r'\.jp2$'
+
         files = glob.glob(in_dir + '/**/*', recursive=recursive)
         matching_files = [f for f in files if re.match(regex, os.path.basename(f)) is not None]
 

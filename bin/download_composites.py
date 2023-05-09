@@ -102,12 +102,9 @@ if __name__ == "__main__":
     parser.add_argument('--s3_bucket_name', '-b', required=False, default=CONFIG.AWS.BUCKET, type=str,
                         help='Name of s3 bucket to search for composites in. Default is from project config, which is'
                              f' currently set to {CONFIG.AWS.BUCKET}')
-    parser.add_argument('--bucket_composite_dir', required=False, default='composites', type=str,
-                        help="Name of the composite root directory in the s3 bucket. Default is  'composites'")
     parser.add_argument('--cores', required=False, type=int, default=mp.cpu_count() - 1,
                         help='Number of cores to use when making tiles in parallel. Default is cpu_count - 1')
     args = parser.parse_args()
 
     download_composites(region=args.region, districts=args.districts,
-                        s3_bucket_name=args.s3_bucket_name, bucket_composite_dir=args.bucket_composite_dir,
-                        cores=args.cores)
+                        s3_bucket_name=args.s3_bucket_name, cores=args.cores)

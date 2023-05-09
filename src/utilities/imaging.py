@@ -122,7 +122,6 @@ def get_cloud_mask_from_file(cloud_path, crs, transform, shape, row_bound=None):
             return np.where(cloud_img == 0, 1, 0)
         return np.where(cloud_img[row_bound[0]:row_bound[1], :] == 0, 1, 0)
     except Exception as e:
-        print(traceback.format_exc())
         return None
 
 
@@ -138,12 +137,14 @@ def resolve_crs(lat, lon):
     crs = osr.SpatialReference()
     # Set the projection using the EPSG code
     crs.ImportFromEPSG(epsg_code)
+    print(epsg_code)
 
     return crs
 
 
 def create_composite(region: str, district: str, coord: str, bands: list, dtype: type, num_slices: int = 1,
                      pbar: bool = True):
+    print('Creating composite for', coord)
     s2_dir = os.path.join(SENTINEL_2_DIR, region, district, coord)
     assert os.path.isdir(s2_dir)
 
@@ -162,13 +163,13 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
     crs = None
     transform = None
     for band in tqdm(bands, desc=f'Processing {coord}', leave=True, position=1, total=len(bands), disable=pbar):
-        band_files = Sentinel2Tile.find_files(s2_dir, band)
+        band_files = Sentinel2Tile.find_files(s2_dir, [band], recursive=True)
         assert len(band_files) > 1, f'{s2_dir}'
         with rasterio.open(band_files[0], 'r', driver='JP2OpenJPEG') as rf:
             g_nrows, g_ncols = rf.meta['width'], rf.meta['height']
             if rf.crs is None:
                 bbox = mgrs_to_bbox(coord)
-                crs = resolve_crs(bbox[3], bbox[0])
+                crs = rasterio.crs.CRS.from_wkt(resolve_crs(bbox[3], bbox[0]).ExportToWkt())
             else:
                 crs = rf.crs
             transform = rf.transform
@@ -541,31 +542,6 @@ def numpy_array_to_raster(output_path: str, numpy_array: np.array, geo_transform
         raise Exception('Failed to create raster: %s' % output_path)
 
     return output_raster
-
-
-def convert_geo_transform_from_meters_to_lat_lon(input_file: str):
-    # Load the TIFF file
-    with rasterio.open(input_file) as src:
-        # Extract the geoTransform property
-        geo_transform = src.transform
-
-        # Convert the geoTransform values from meters to lat/lon
-        latlon_transform = affine.Affine.from_gdal(*geo_transform)
-        latlon_transform *= affine.Affine.scale(1.0 / src.res[0], 1.0 / src.res[1])
-        latlon_transform *= affine.Affine.translation(-0.5 + src.res[0] / 2.0, -0.5 + src.res[1] / 2.0)
-
-        # Update the geoTransform property with the new lat/lon values
-        dst_transform = latlon_transform.to_gdal()
-        src.transform = dst_transform
-
-        output_profile = src.profile
-        output_profile['transform'] = dst_transform
-
-        with rasterio.open(input_file, 'w', **output_profile) as dst:
-            # Write the file with the new geoTransform
-            for i in range(1, src.count + 1):
-                raster = src.read(i)
-                dst.write(raster, i)
 
 
 def fix_crs(in_dir: str):

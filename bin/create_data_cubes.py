@@ -66,8 +66,8 @@ def combine_bands(source_file: str, target_file: str, new_bands: int):
                     dst.write_band(i + 1, src_file.read(i+1))
 
 
-def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORES, region: List[str] = None,
-                      districts: List[str] = None):
+def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORES, slices: int = 6,
+                      region: List[str] = None, districts: List[str] = None):
     debug = True
 
     with open(REGION_FILE_PATH, 'r') as f:
@@ -101,13 +101,12 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
 
         # Download any s2 data that doesn't exist
         # TODO: Reimplement this
-        s2_dir = os.path.join(SENTINEL_2_DIR, region, district)
-        for date in dates:
-            sentinel2_api.download(bbox, 100, s2_dir, date[0], date[1], bands=['B08'])
+        # s2_dir = os.path.join(SENTINEL_2_DIR, region, district)
+        # for date in dates:
+        #     sentinel2_api.download(bbox, 100, s2_dir, date[0], date[1], bands=['B08'])
 
         print('Making ir composites')
-        # TODO: Make slices configurable
-        sentinel2_to_composite(10, cores, bands=['B08'], region=region, districts=[district])
+        sentinel2_to_composite(slices, cores, bands=['B08'], region=region, districts=[district])
 
         composite_dir = os.path.join(COMPOSITE_DIR, region, district)
 
@@ -198,7 +197,9 @@ if __name__ == "__main__":
                              f' currently set to {CONFIG.AWS.BUCKET}')
     parser.add_argument('--cores', required=False, type=int, default=mp.cpu_count() - 1,
                         help='Number of cores to use when making tiles in parallel. Default is cpu_count - 1')
+    parser.add_argument('--slices', required=False, type=int, default=6,
+                        help='Number of slices to use when making composites. Default is 6')
     args = parser.parse_args()
 
-    create_date_cubes(s3_bucket_name=args.s3_bucket_name, cores=args.cores, region=args.region,
+    create_date_cubes(s3_bucket_name=args.s3_bucket_name, cores=args.cores, slices=args.slices, region=args.region,
                       districts=args.districts)

@@ -4,6 +4,10 @@ from typing import List
 from geopandas import GeoDataFrame
 from shapely.geometry import Polygon
 import pandas as pd
+from src.utilities.imaging import fix_crs
+from file_types import OpticalComposite
+import shutil
+from src.api.sentinel2 import initialize_s3_bucket
 
 
 def find_directories(root_dir: str, file_extension: str) -> List[str]:
@@ -41,3 +45,21 @@ def results_csv_to_shapefile(csv_path: str, out_path: str):
 
     gdf = GeoDataFrame(df, crs="EPSG:4326", geometry=geometry)
     gdf.to_file(out_path)
+
+
+def fix_file_name_and_crs(in_dir: str, region: str, district: str):
+    for file in os.listdir(in_dir):
+        if file.endswith('multiband.tiff'):
+            mgrs = file[:5]
+            optical_composite = OpticalComposite(region=region, district=district, military_grid=mgrs,
+                                                 bands=['B02', 'B03', 'B04'])
+            shutil.copy(os.path.join(in_dir, file), optical_composite.archive_path)
+
+    #fix_crs(in_dir)
+    bucket = initialize_s3_bucket()
+    for file in os.listdir(in_dir):
+        optical_composite = OpticalComposite.create(file)
+        if optical_composite is not None:
+            bucket.upload_file(Key=os.path.join('composites', optical_composite.region, optical_composite.district,
+                                                optical_composite.name),
+                               Filename=os.path.join(in_dir, file))

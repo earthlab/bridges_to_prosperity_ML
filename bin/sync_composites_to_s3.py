@@ -5,6 +5,7 @@ import argparse
 import glob
 import os
 from glob import glob
+from typing import List
 
 from tqdm import tqdm
 import boto3
@@ -16,14 +17,13 @@ from src.utilities.config_reader import CONFIG
 from file_types import OpticalComposite
 
 
-# TODO: Add bands parameter
-def sync_s3(root_composite_dir: str, s3_bucket_name: str, s3_directory: str):
-    comp_files = OpticalComposite.find_files(root_composite_dir, recursive=True)
+def sync_s3(root_composite_dir: str, s3_bucket_name: str, s3_directory: str, bands: List[str] = None):
+    comp_files = OpticalComposite.find_files(root_composite_dir, bands=bands, recursive=True)
     s3 = initialize_s3_bucket(s3_bucket_name)
 
     for filename in tqdm(comp_files, leave=True, position=0):
         file_size = os.stat(filename).st_size
-        key = os.path.join(s3_directory, filename.replace(root_composite_dir, ''))
+        key = os.path.join(s3_directory, os.path.basename(filename))
         with tqdm(total=file_size, unit='B', unit_scale=True, desc=filename, leave=False, position=1) as pbar:
             s3.upload_file(
                 Filename=filename,
@@ -43,6 +43,9 @@ if __name__ == "__main__":
                         help='Name of the s3 bucket to upload the tiles to. Default is bucket specified in config.yaml')
     parser.add_argument('--s3_directory', '-s3', type=str, required=False, default=S3_COMPOSITE_DIR,
                         help='Root directory where composites will be stored in s3')
+    parser.add_argument('--bands', type=str, required=False, default=None, nargs='+',
+                        help='The bands to upload. Default is None for all bands')
     args = parser.parse_args()
 
-    sync_s3(root_composite_dir=args.composite_dir, s3_bucket_name=args.s3_bucket_name, s3_directory=args.s3_directory)
+    sync_s3(root_composite_dir=args.composite_dir, s3_bucket_name=args.s3_bucket_name, s3_directory=args.s3_directory,
+            bands=args.bands)

@@ -83,7 +83,7 @@ def initialize_s3_client(bucket_name: str = CONFIG.AWS.BUCKET):
         return boto3.client('s3'), True
 
     # If that doesn't work try to get credentials from ~/.aws/credentials file and start a new session
-    except (botocore.exceptions.NoCredentialsError, botocore.exceptions.ClientError):
+    except botocore.exceptions.NoCredentialsError:
         try:
             return _no_iam_auth_client(bucket_name)
         except KeyError:
@@ -105,7 +105,7 @@ def _download_task(namespace: Namespace) -> None:
         namespace (Namespace): Contains the bucket name, s3 file name, and destination required for s3 download request.
         Each value in the namespace must be a pickle-izable type (i.e. str).
     """
-    s3 = initialize_s3_client(namespace.bucket_name)
+    s3 = initialize_s3_client(CONFIG.AWS.BUCKET)
     os.makedirs(namespace.outdir, exist_ok=True)
     dst = os.path.join(namespace.outdir, namespace.available_file.replace('/', '_'))
     if os.path.isfile(dst):

@@ -31,7 +31,7 @@ def upload_to_s3(session, filename: str, key: str, bucket: str = None):
 
 
 def refresh_token():
-    s = APIAuth('')
+    s = APIAuth('', no_auth=True)
     s.parse_aws_credentials()
 
     session = boto3.Session(

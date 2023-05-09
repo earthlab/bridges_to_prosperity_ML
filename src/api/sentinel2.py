@@ -325,12 +325,12 @@ class SinergiseSentinelAPI:
             file_path = file_info[0]
             if '/preview/' in file_path:
                 continue
-            print(file_path)
-            file = Sentinel2Tile.create(file_path)
-            print(file)
+
+            created_file_path = file_path.replace('_qi_', '').replace('/', '_')
+
+            file = Sentinel2Tile.create(created_file_path)
             if file is None:
-                file = Sentinel2Cloud.create(file_path)
-                print(file)
+                file = Sentinel2Cloud.create(created_file_path)
                 if file is None:
                     continue
 
@@ -395,9 +395,7 @@ class SinergiseSentinelAPI:
                     MaxKeys=100,
                     RequestPayer='requester'
                 )
-                # TODO: Maybe use file type class creation here
                 if 'Contents' in list(response.keys()):
-                    print(v['Key'] for v in response['Contents'])
                     info += [
                         (v['Key'], v['Size']) for v in response['Contents'] if
                         any([band + '.jp2' in v['Key'] for band in bands]) or 'MSK_CLOUDS_B00.gml' in v['Key']

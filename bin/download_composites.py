@@ -58,8 +58,11 @@ def get_requested_locations(region: str, districts: List[str]) -> List[str]:
 
 
 def download_composites(region: str = None, districts: List[str] = None, s3_bucket_name: str = CONFIG.AWS.BUCKET,
-                        cores: int = mp.cpu_count() - 1):
+                        cores: int = mp.cpu_count() - 1, bands: List[str] = None):
     s3 = initialize_s3_bucket(s3_bucket_name)
+
+    if bands is not None:
+        bands = sorted(bands)
 
     requested_locations = get_requested_locations(region, districts)
 
@@ -68,6 +71,9 @@ def download_composites(region: str = None, districts: List[str] = None, s3_buck
         for obj in s3.objects.filter(Prefix=location):
             s3_composite = OpticalComposite.create(obj.key)
             if s3_composite:
+                if bands is not None:
+                    if s3_composite.bands != bands:
+                        continue
                 destination = s3_composite.archive_path
                 location_info.append((obj.key, obj.size, destination))
 
@@ -104,6 +110,9 @@ if __name__ == "__main__":
                              f' currently set to {CONFIG.AWS.BUCKET}')
     parser.add_argument('--cores', required=False, type=int, default=mp.cpu_count() - 1,
                         help='Number of cores to use when making tiles in parallel. Default is cpu_count - 1')
+    parser.add_argument('--bands', required=False, type=str, default=None, nargs='+',
+                        help='The bands to download composites for. The default is None which will select all band '
+                             'combinations')
     args = parser.parse_args()
 
     download_composites(region=args.region, districts=args.districts,

@@ -133,7 +133,7 @@ def nan_clouds(pixels, cloud_channels, max_pixel_val: float = MAX_RGB_VAL):
     return cp
 
 
-def resolve_crs(lon, lat):
+def resolve_crs(lat, lon):
     epsg_code = get_utm_epsg(lat, lon)
     crs = osr.SpatialReference()
     # Set the projection using the EPSG code

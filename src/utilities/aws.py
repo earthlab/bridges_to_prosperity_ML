@@ -42,10 +42,10 @@ def refresh_token():
     )
 
     # Check the current expiration time of the session token
-    print(session.get_credentials().expiry_time)
+    #print(session.get_credentials().expiry_time)
 
     # Refresh the session token
     session.get_credentials().refresh()
 
     # Check the new expiration time of the session token
-    print(session.get_credentials().expiry_time)
+    #print(session.get_credentials().expiry_time)

@@ -99,11 +99,11 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
         # Load composites from S3
         download_composites(region, [district], s3_bucket_name, cores)
 
-        # Download any s2 data that doesn't exist  # TODO: Change this to all bands
+        # Download any s2 data that doesn't exist
         # TODO: Reimplement this
-        # s2_dir = os.path.join(SENTINEL_2_DIR, region, district)
-        # for date in dates:
-        #     sentinel2_api.download(bbox, 100, s2_dir, date[0], date[1], bands=['B08'])
+        s2_dir = os.path.join(SENTINEL_2_DIR, region, district)
+        for date in dates:
+            sentinel2_api.download(bbox, 100, s2_dir, date[0], date[1], bands=['B08'])
 
         print('Making ir composites')
         # TODO: Make slices configurable

@@ -397,6 +397,7 @@ class SinergiseSentinelAPI:
                 )
                 # TODO: Maybe use file type class creation here
                 if 'Contents' in list(response.keys()):
+                    print(v['Key'] for v in response['Contents'])
                     info += [
                         (v['Key'], v['Size']) for v in response['Contents'] if
                         any([band + '.jp2' in v['Key'] for band in bands]) or 'MSK_CLOUDS_B00.gml' in v['Key']

@@ -83,7 +83,7 @@ def initialize_s3_client(bucket_name: str = CONFIG.AWS.BUCKET):
         return boto3.client('s3'), True
 
     # If that doesn't work try to get credentials from ~/.aws/credentials file and start a new session
-    except botocore.exceptions.NoCredentialsError:
+    except (botocore.exceptions.NoCredentialsError, botocore.exceptions.ClientError):
         try:
             return _no_iam_auth_client(bucket_name)
         except KeyError:
@@ -268,8 +268,6 @@ class SinergiseSentinelAPI:
         api = SinergiseSentinelAPI()
         api.download([27.876, -45.678, 28.012, -45.165], 1000, '/example/outdir', '2021-01-01', '2021-02-01')
     """
-    CLOUD_PATTERN = r'tiles/(?P<utm_code>\d+)/(?P<latitude_band>\S+)/(?P<square>\S+)/(?P<year>\d{4})/(?P<month>\d+)/(?P<day>\d+)/0/qi/MSK_CLOUDS_B00.gml.*'
-
     def __init__(self, identikey: str = None) -> None:
         """
         Creates a boto3 client object for making requests. If using a CU AWS account the user's identikey can be input

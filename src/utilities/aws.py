@@ -7,7 +7,9 @@ from src.utilities.config_reader import CONFIG
 from definitions import COMPOSITE_DIR
 from file_types import OpticalComposite
 from src.api.sentinel2 import APIAuth
-import boto3
+from boto3 import Session
+from botocore.credentials import RefreshableCredentials
+from botocore.session import get_session
 
 
 def upload_to_s3(session, filename: str, key: str, bucket: str = None):
@@ -33,6 +35,22 @@ def upload_to_s3(session, filename: str, key: str, bucket: str = None):
 def refresh_token():
     s = APIAuth('', no_auth=True)
     s.parse_aws_credentials()
+
+    session = Session(region_name='us-west2')
+
+    sts_client = session.client(service_name="sts", region_name='us-west2')
+    response = sts_client.assume_role(
+        RoleArn='arn:aws:iam::120656651053:role/Shibboleth-Customer-Admin',
+        RoleSessionName=self.session_name,
+        DurationSeconds=self.session_ttl,
+    ).get("Credentials")
+
+    credentials = {
+        "access_key": response.get("AccessKeyId"),
+        "secret_key": response.get("SecretAccessKey"),
+        "token": response.get("SessionToken"),
+        "expiry_time": response.get("Expiration").isoformat(),
+    }
 
     session = boto3.Session(
         aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],

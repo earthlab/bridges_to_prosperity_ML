@@ -19,10 +19,14 @@ from tqdm.auto import tqdm
 from PIL import Image
 from scipy import interpolate
 import affine
+import mgrs
+from geopy import Point
+from geopy.distance import distance
+import pyproj
 
 from src.utilities.coords import tiff_to_bbox, bridge_in_bbox
 from definitions import SENTINEL_2_DIR, COMPOSITE_DIR
-from file_types import OpticalComposite, MultiVariateComposite, TileGeoLoc, Tile, PyTorch
+from file_types import OpticalComposite, MultiVariateComposite, TileGeoLoc, Tile, PyTorch, Sentinel2Tile
 
 BANDS_TO_IX = {
     'B02': 3,  # Blue
@@ -61,6 +65,23 @@ def scale(
             normalized_elevation = np.min(1, np.max(0, (x[:, :, 6] - min_elev) / (max_elev - min_elev)))  # in meter
             normalied_slope = np.min(1, np.max(0, x[:, :, 7] / 90))  # in deg
         return np.cat([normalized_rgb, normalized_ir, normalized_elevation, x[:, :, 4:5], normalied_slope], dims=2)
+
+
+def get_utm_epsg(lat, lon):
+    utm_zone = int((lon + 180) // 6) + 1
+    epsg_code = 32600 if lat >= 0 else 32700
+    epsg_code += utm_zone
+    return epsg_code
+
+
+def mgrs_to_bbox(mgrs_string: str):
+    m = mgrs.MGRS()
+    lat, lon = m.toLatLon(mgrs_string)
+    # Calculate the bounding box
+    sw_point = Point(latitude=lat, longitude=lon)
+    ne_point = distance(kilometers=109.8 * np.sqrt(2)).destination(sw_point, 45)
+    bounding_box = (sw_point.longitude, sw_point.latitude, ne_point.longitude, ne_point.latitude)
+    return list(bounding_box)
 
 
 def get_img_from_file(img_path, g_ncols, dtype, row_bound=None):
@@ -112,6 +133,15 @@ def nan_clouds(pixels, cloud_channels, max_pixel_val: float = MAX_RGB_VAL):
     return cp
 
 
+def resolve_crs(lon, lat):
+    epsg_code = get_utm_epsg(lat, lon)
+    crs = osr.SpatialReference()
+    # Set the projection using the EPSG code
+    crs.ImportFromEPSG(epsg_code)
+
+    return crs
+
+
 def create_composite(region: str, district: str, coord: str, bands: list, dtype: type, num_slices: int = 1,
                      pbar: bool = True):
     s2_dir = os.path.join(SENTINEL_2_DIR, region, district, coord)
@@ -132,11 +162,15 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
     crs = None
     transform = None
     for band in tqdm(bands, desc=f'Processing {coord}', leave=True, position=1, total=len(bands), disable=pbar):
-        band_files = glob(os.path.join(s2_dir, f'**/*{band}*.jp2'))
+        band_files = Sentinel2Tile.find_files(s2_dir, band)
         assert len(band_files) > 1, f'{s2_dir}'
         with rasterio.open(band_files[0], 'r', driver='JP2OpenJPEG') as rf:
             g_nrows, g_ncols = rf.meta['width'], rf.meta['height']
-            crs = rf.crs if rf.crs is not None else "wgs84"
+            if rf.crs is None:
+                bbox = mgrs_to_bbox(coord)
+                crs = resolve_crs(bbox[3], bbox[0])
+            else:
+                crs = rf.crs
             transform = rf.transform
 
         # Handle slicing if necessary, slicing along rows only
@@ -155,8 +189,7 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
         for k, row_bound in tqdm(enumerate(slice_bounds), desc=f'band={band}', total=num_slices, position=2,
                                  disable=pbar):
             if num_slices > 1:
-                slice_file_path = os.path.join(slice_dir,
-                                               f'{band}_slice|{row_bound[0]}|{row_bound[1]}|.tiff')
+                slice_file_path = os.path.join(slice_dir, f'{band}_slice|{row_bound[0]}|{row_bound[1]}|.tiff')
             else:
                 slice_file_path = joined_file_path
             if os.path.isfile(slice_file_path):
@@ -381,11 +414,7 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
     # Access the data
     low_res_band = low_res.GetRasterBand(1)
     low_res_data = low_res_band.ReadAsArray()
-
-    print(low_resolution_path)
     low_res_lons, low_res_lats = get_geo_locations_from_tif(low_res)
-
-    print(len(low_res_lons), len(low_res_lats), low_res_data.shape)
 
     def lookup_nearest_lon(lon: int):
         yi = np.abs(np.array(low_res_lons) - lon).argmin()
@@ -398,20 +427,15 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
     high_res = gdal.Open(high_resolution_path)
 
     high_res_lons, high_res_lats = get_geo_locations_from_tif(high_res)
-    print(high_resolution_path, len(high_res_lats), len(high_res_lons))
-    print('A', low_res_lons[0], low_res_lons[-1], low_res_lats[0], low_res_lats[-1])
-    print('A', high_res_lons[0], high_res_lons[-1], high_res_lats[0], high_res_lats[-1])
 
     high_res_data = np.zeros((len(high_res_lats), len(high_res_lons)))
 
     closest_lats = [lookup_nearest_lat(lat) for lat in high_res_lats]
-    closest_lons = [lookup_nearest_lon(lon) for lon in high_res_lats]
+    closest_lons = [lookup_nearest_lon(lon) for lon in high_res_lons]
 
-    for y in tqdm(closest_lons, total=len(closest_lons)):
-        for x in tqdm(closest_lats, total=len(closest_lats)):
-            high_res_data[y, x] = low_res_data[y,x]
-
-    print('HRD', high_res_data.shape)
+    for i, y in enumerate(closest_lons):
+        for j, x in enumerate(closest_lats):
+            high_res_data[j, i] = low_res_data[x, y]
 
     return high_res_data
 
@@ -483,8 +507,8 @@ def elevation_to_slope(elevation_file: str, slope_outfile: str):
 
 
 def numpy_array_to_raster(output_path: str, numpy_array: np.array, geo_transform,
-                          projection, n_band: int = 1, no_data: int = 0, gdal_data_type: int = gdal.GDT_UInt16,
-                          spatial_reference_system_wkid: int = 4326):
+                          projection: str, n_band: int = 1, no_data: int = -1,
+                          gdal_data_type: int = gdal.GDT_UInt16):
     """
     Returns a gdal raster data source
     Args:
@@ -502,7 +526,10 @@ def numpy_array_to_raster(output_path: str, numpy_array: np.array, geo_transform
     # create output raster
     output_raster = _create_raster(output_path, int(columns), int(rows), n_band, gdal_data_type)
 
+    print('Setting projected')
+    print(projection)
     output_raster.SetProjection(projection)
+    print('Set')
     output_raster.SetGeoTransform(geo_transform)
     output_band = output_raster.GetRasterBand(1)
     output_band.SetNoDataValue(no_data)
@@ -541,3 +568,18 @@ def convert_geo_transform_from_meters_to_lat_lon(input_file: str):
                 dst.write(raster, i)
 
 
+def fix_crs(in_dir: str):
+    for file in os.listdir(in_dir):
+        optical_composite = OpticalComposite.create(file)
+        if optical_composite is not None:
+            tiff_file = gdal.Open(os.path.join(in_dir, file), gdal.GA_Update)
+            projection = tiff_file.GetProjection()
+            epsg = int(pyproj.Proj(projection).crs.to_epsg())
+            # print(epsg)
+            # if epsg == 4326:
+            print(optical_composite.mgrs)
+            bbox = mgrs_to_bbox(optical_composite.mgrs)
+            crs = resolve_crs(bbox[3], bbox[0])
+            tiff_file.SetProjection(crs.ExportToWkt())
+            print(int(pyproj.Proj(crs.ExportToWkt()).crs.to_epsg()))
+            tiff_file = None

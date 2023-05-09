@@ -13,9 +13,12 @@ from definitions import COMPOSITE_DIR, S3_COMPOSITE_DIR
 from src.api.sentinel2 import initialize_s3_bucket
 from src.utilities.config_reader import CONFIG
 
+from file_types import OpticalComposite
 
+
+# TODO: Add bands parameter
 def sync_s3(root_composite_dir: str, s3_bucket_name: str, s3_directory: str):
-    comp_files = glob(os.path.join(root_composite_dir, '**', '*_multiband.tiff'), recursive=True)
+    comp_files = OpticalComposite.find_files(root_composite_dir, recursive=True)
     s3 = initialize_s3_bucket(s3_bucket_name)
 
     for filename in tqdm(comp_files, leave=True, position=0):
@@ -24,7 +27,6 @@ def sync_s3(root_composite_dir: str, s3_bucket_name: str, s3_directory: str):
         with tqdm(total=file_size, unit='B', unit_scale=True, desc=filename, leave=False, position=1) as pbar:
             s3.upload_file(
                 Filename=filename,
-                Bucket=s3_bucket_name,
                 Key=key,
                 Callback=lambda bytes_transferred: pbar.update(bytes_transferred),
             )

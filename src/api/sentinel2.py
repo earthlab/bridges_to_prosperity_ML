@@ -15,6 +15,8 @@ import tqdm
 from shapely.geometry import Polygon
 from src.utilities.config_reader import CONFIG
 
+from file_types import Sentinel2Tile, Sentinel2Cloud
+
 PATH = os.path.dirname(__file__)
 
 
@@ -52,7 +54,6 @@ def _no_iam_auth_client(bucket_name: str):
 
 
 def initialize_s3_bucket(bucket_name: str = CONFIG.AWS.BUCKET):
-
     # First try to authenticate with properly configured IAM profile
     try:
         s3 = boto3.resource('s3')
@@ -75,7 +76,6 @@ def initialize_s3_bucket(bucket_name: str = CONFIG.AWS.BUCKET):
 
 
 def initialize_s3_client(bucket_name: str = CONFIG.AWS.BUCKET):
-
     # First try to authenticate with properly configured IAM profile
     try:
         s3 = boto3.resource('s3')
@@ -108,8 +108,8 @@ def _download_task(namespace: Namespace) -> None:
     s3 = initialize_s3_client(namespace.bucket_name)
     os.makedirs(namespace.outdir, exist_ok=True)
     dst = os.path.join(namespace.outdir, namespace.available_file.replace('/', '_'))
-    if os.path.isfile(dst): 
-        return 
+    if os.path.isfile(dst):
+        return
     s3.download_file(namespace.bucket_name, namespace.available_file,
                      dst,
                      ExtraArgs={'RequestPayer': 'requester'}
@@ -267,8 +267,6 @@ class SinergiseSentinelAPI:
         api = SinergiseSentinelAPI()
         api.download([27.876, -45.678, 28.012, -45.165], 1000, '/example/outdir', '2021-01-01', '2021-02-01')
     """
-
-    TILE_PATTERN = r'tiles/(?P<utm_code>\d+)/(?P<latitude_band>\S+)/(?P<square>\S+)/(?P<year>\d{4})/(?P<month>\d+)/(?P<day>\d+)/0/B(?P<band>\d{2})\.jp2.*'
     CLOUD_PATTERN = r'tiles/(?P<utm_code>\d+)/(?P<latitude_band>\S+)/(?P<square>\S+)/(?P<year>\d{4})/(?P<month>\d+)/(?P<day>\d+)/0/qi/MSK_CLOUDS_B00.gml.*'
 
     def __init__(self, identikey: str = None) -> None:
@@ -327,18 +325,13 @@ class SinergiseSentinelAPI:
             if '/preview/' in file_path:
                 continue
 
-            tile_match = re.match(self.TILE_PATTERN, file_path)
-            cloud_match = re.match(self.CLOUD_PATTERN, file_path)
-            if tile_match:
-                groups = tile_match.groupdict()
-            elif cloud_match:
-                groups = cloud_match.groupdict()
-            else:
-                continue
+            file = Sentinel2Tile.create(file_path)
+            if file is None:
+                file = Sentinel2Cloud.create(file_path)
+                if file is None:
+                    continue
 
-            grid_dir = groups['utm_code'] + groups['latitude_band'] + groups['square']
-            date_dir = groups['year'] + groups['month'] + groups['day']
-            file_dir = os.path.join(outdir, grid_dir, date_dir)
+            file_dir = os.path.join(outdir, file.mgrs_grid, file.date_str)
 
             # Skip if file is already local
             if os.path.exists(os.path.join(file_dir, os.path.basename(file_path))):
@@ -350,8 +343,8 @@ class SinergiseSentinelAPI:
         #                 f' {round(total_data, 2)}GB and estimated cost will be ${round(0.09 * total_data, 2)}'
         #                 f'. Proceed (y/n)?')
         print(f'Found {len(args)} files for download. Total size of files is'
-             f' {round(total_data, 2)}GB and estimated cost will be ${round(0.09 * total_data, 2)}'
-             )
+              f' {round(total_data, 2)}GB and estimated cost will be ${round(0.09 * total_data, 2)}'
+              )
         # if proceed == 'y':
         with mp.Pool(mp.cpu_count() - 1) as pool:
             for _ in tqdm.tqdm(pool.imap_unordered(_download_task, args), total=len(args)):
@@ -399,10 +392,11 @@ class SinergiseSentinelAPI:
                     MaxKeys=100,
                     RequestPayer='requester'
                 )
+                # TODO: Maybe use file type class creation here
                 if 'Contents' in list(response.keys()):
                     info += [
                         (v['Key'], v['Size']) for v in response['Contents'] if
-                        any([band+'.jp2' in v['Key'] for band in bands]) or 'MSK_CLOUDS_B00.gml' in v['Key']
+                        any([band + '.jp2' in v['Key'] for band in bands]) or 'MSK_CLOUDS_B00.gml' in v['Key']
                     ]
 
         return info

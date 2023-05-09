@@ -24,14 +24,14 @@ CORES = mp.cpu_count() - 1
 
 def this_download(location_request_info: Tuple[str, int, int, str]) -> None:
     for location_path, composite_size, destination, position, bucket_name in location_request_info:
-        s3 = initialize_s3_bucket(bucket_name)
+        bucket = initialize_s3_bucket(bucket_name)
         if os.path.isfile(destination):
             return None
         dst_root = os.path.split(destination)[0]
         os.makedirs(dst_root, exist_ok=True)
         with tqdm(total=int(composite_size), unit='B', unit_scale=True, desc=location_path, leave=False,
                   position=int(position)) as pbar:
-            bucket.download_file(Key=location_path, Filename=destination, Bucket=bucket_name,
+            bucket.download_file(Key=location_path, Filename=destination,
                                  Callback=lambda bytes_transferred: pbar.update(bytes_transferred))
     return None
 

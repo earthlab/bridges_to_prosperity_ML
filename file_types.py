@@ -1,7 +1,8 @@
 import os
 import re
 from typing import List, Union
-from definitions import COMPOSITE_DIR, B2P_DIR, TILE_DIR, ELEVATION_DIR, SLOPE_DIR
+from definitions import COMPOSITE_DIR, B2P_DIR, TILE_DIR, ELEVATION_DIR, SLOPE_DIR, SENTINEL_2_DIR, MULTIVARIATE_DIR,\
+    OSM_DIR
 import glob
 
 
@@ -35,15 +36,19 @@ class OpticalComposite(FileType):
         return os.path.join(B2P_DIR, 'data', COMPOSITE_DIR, self.region, self.district, self.name)
 
     @staticmethod
-    def find_files(in_dir: str, bands: List[str], recursive: bool = False):
+    def find_files(in_dir: str, bands: List[str] = None, recursive: bool = False):
+        if bands is None:
+            bands = []
         bands = sorted(bands)
         regex = OpticalComposite.base_regex
         for band in bands:
             regex += r'{}'.format(band) + (r'_' if band != bands[-1] else r'')
-        regex += r'\.tif$'
+        if not bands:
+            regex += '.*'
 
-        print(regex)
-        files = glob.glob(in_dir + '/*', recursive=recursive)
+        regex += r'\.tif$'
+        files = glob.glob(in_dir + '/**/*', recursive=recursive)
+        print(files)
 
         matching_files = [f for f in files if re.match(regex, os.path.basename(f)) is not None]
 
@@ -53,13 +58,118 @@ class OpticalComposite(FileType):
     def create(cls, file_path: str):
         name = os.path.basename(file_path)
         regex = cls.base_regex + r'(?P<bands>[a-zA-Z0-9]{3}(?:_[a-zA-Z0-9]{3})*)\.tif$'
-        print(regex)
         match = re.match(regex, name)
         if match:
             group_dict = match.groupdict()
-            print(group_dict['bands'], 'BANDS')
             return cls(region=group_dict['region'], district=group_dict['district'], military_grid=group_dict['mgrs'],
                        bands=group_dict['bands'].split('_'))
+        else:
+            return None
+
+
+class Sentinel2Tile(FileType):
+    base_regex = r'tiles_(?P<utm_code>\d+)_(?P<latitude_band>\S+)_(?P<square>\S+)_(?P<year>\d{4})_(?P<month>\d+)_(?P<day>\d+)_(?P<sequence>\d{1})_'
+
+    def __init__(self, utm_code: str, latitude_band: str, square: str, year: int, month: int, day: int, band: str,
+                 sequence: int = 0):
+        self.utm_code = utm_code
+        self.latitude_band = latitude_band
+        self.square = square
+        self.year = year
+        self.month = month
+        self.day = day
+        self.band = band
+        self.sequence = sequence
+        super().__init__()
+
+    @property
+    def name(self) -> str:
+        return f'tiles_{self.utm_code}_{self.latitude_band}_{self.square}_{self.year}_{self.month}_{self.day}_{self.sequence}_' \
+               f'{self.band}.jp2'
+
+    @property
+    def mgrs_grid(self):
+        return f'{self.utm_code}{self.latitude_band}{self.square}'
+
+    @property
+    def date_str(self):
+        return f'{self.year}{self.month}{self.day}'
+
+    def archive_path(self, region: str, district: str) -> str:
+        return os.path.join(SENTINEL_2_DIR, region, district, self.mgrs_grid, self.date_str, self.name)
+
+    @staticmethod
+    def find_files(in_dir: str, bands: List[str], recursive: bool = False):
+        bands = sorted(bands)
+        regex = Sentinel2Tile.base_regex
+        for band in bands:
+            regex += r'{}'.format(band) + (r'_' if band != bands[-1] else r'')
+        regex += r'\.jp2$'
+        files = glob.glob(in_dir + '/**/*', recursive=recursive)
+        matching_files = [f for f in files if re.match(regex, os.path.basename(f)) is not None]
+
+        return matching_files
+
+    @classmethod
+    def create(cls, file_path: str):
+        regex = cls.base_regex + r'(?P<band>B\d{2})\.jp2$'
+        name = os.path.basename(file_path)
+        match = re.match(regex, name)
+        if match:
+            group_dict = match.groupdict()
+            return cls(utm_code=group_dict['utm_code'], latitude_band=group_dict['latitude_band'],
+                       square=group_dict['square'], year=group_dict['year'], month=group_dict['month'],
+                       day=group_dict['day'], band=group_dict['band'], sequence=group_dict['sequence'])
+        else:
+            return None
+
+
+class Sentinel2Cloud(FileType):
+    base_regex = r'tiles_(?P<utm_code>\d+)_(?P<latitude_band>\S+)_(?P<square>\S+)_(?P<year>\d{4})_(?P<month>\d+)_(?P<day>\d+)_(?P<sequence>\d{1})_qi_MSK_CLOUDS_B00.gml'
+
+    def __init__(self, utm_code: str, latitude_band: str, square: str, year: int, month: int, day: int,
+                 sequence: int = 0):
+        self.utm_code = utm_code
+        self.latitude_band = latitude_band
+        self.square = square
+        self.year = year
+        self.month = month
+        self.day = day
+        self.sequence = sequence
+        super().__init__()
+
+    @property
+    def name(self) -> str:
+        return f'tiles_{self.utm_code}_{self.latitude_band}_{self.square}_{self.year}_{self.month}_{self.day}_' \
+               f'{self.sequence}_qi_MSK_CLOUDS_B00.gml'
+
+    @property
+    def mgrs_grid(self):
+        return f'{self.utm_code}{self.latitude_band}{self.square}'
+
+    @property
+    def date_str(self):
+        return f'{self.year}{self.month}{self.day}'
+
+    def archive_path(self, region: str, district: str) -> str:
+        return os.path.join(SENTINEL_2_DIR, region, district, self.mgrs_grid, self.date_str, self.name)
+
+    @staticmethod
+    def find_files(in_dir: str, recursive: bool = False):
+        files = glob.glob(in_dir + '/**/*', recursive=recursive)
+        matching_files = [f for f in files if re.match(Sentinel2Cloud.base_regex, os.path.basename(f)) is not None]
+
+        return matching_files
+
+    @classmethod
+    def create(cls, file_path: str):
+        name = os.path.basename(file_path)
+        match = re.match(cls.base_regex, name)
+        if match:
+            group_dict = match.groupdict()
+            return cls(utm_code=group_dict['utm_code'], latitude_band=group_dict['latitude_band'],
+                       square=group_dict['square'], year=group_dict['year'], month=group_dict['month'],
+                       day=group_dict['day'], sequence=group_dict['sequence'])
         else:
             return None
 
@@ -153,12 +263,12 @@ class OSM(FileType):
 
     @property
     def name(self):
-        base_string = f'slope_{self.region}_{self.district}_{self.mgrs}'
+        base_string = f'osm_{self.region}_{self.district}_{self.mgrs}'
         return base_string + '.tif'
 
     @property
     def archive_path(self):
-        return os.path.join(SLOPE_DIR, self.region, self.district, self.name)
+        return os.path.join(OSM_DIR, self.region, self.district, self.name)
 
     @staticmethod
     def find_files(in_dir: str, recursive: bool = False):
@@ -380,7 +490,7 @@ class MultiVariateComposite(FileType):
 
     @property
     def archive_path(self):
-        return os.path.join(SLOPE_DIR, self.region, self.district, self.name)
+        return os.path.join(MULTIVARIATE_DIR, self.region, self.district, self.name)
 
     @staticmethod
     def find_files(in_dir: str, recursive: bool = False):

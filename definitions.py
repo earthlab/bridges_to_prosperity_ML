@@ -9,7 +9,9 @@ TRUTH_DIR = os.path.join(B2P_DIR, 'data', 'ground_truth')
 SENTINEL_2_DIR = os.path.join(B2P_DIR, 'data', 'sentinel2')
 ELEVATION_DIR = os.path.join(B2P_DIR, 'data', 'elevation')
 SLOPE_DIR = os.path.join(B2P_DIR, 'data', 'slope')
+MULTIVARIATE_DIR = os.path.join(B2P_DIR, 'data', 'multivariate')
 TORCH_DIR = os.path.join(B2P_DIR, 'data', 'torch')
+OSM_DIR = os.path.join(B2P_DIR, 'data', 'osm')
 SECRETS_FILE_PATH = os.path.join(B2P_DIR, 'secrets.yaml')
 
 # S3

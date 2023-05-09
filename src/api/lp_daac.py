@@ -16,7 +16,7 @@ from abc import ABC
 from argparse import Namespace
 from http.cookiejar import CookieJar
 from typing import Tuple, List, Any
-from src.utilities.imaging import numpy_array_to_raster
+from src.utilities.imaging import get_utm_epsg
 
 import numpy as np
 import rasterio
@@ -241,13 +241,6 @@ class Elevation(BaseAPI):
         return substrings
 
     @staticmethod
-    def get_utm_epsg(lat, lon):
-        utm_zone = int((lon + 180) // 6) + 1
-        epsg_code = 32600 if lat >= 0 else 32700
-        epsg_code += utm_zone
-        return epsg_code
-
-    @staticmethod
     def _mosaic_tif_files(input_dir: str, output_file: str) -> None:
         """
         Creates a mosaic from a group of tif files in the specified input_dir
@@ -273,9 +266,6 @@ class Elevation(BaseAPI):
                          })  # Write the merged TIFF file to disk using rasterio
         with rasterio.open(output_file, "w", **out_meta) as dest:
             dest.write(mosaic)
-
-        r = gdal.Open(output_file)
-        print(r.GetGeoTransform(), 'after written')
 
     def clip(self, input_file: str, output_file: str, clip_bbox: List[float]):
         input_tif = gdal.Open(input_file)
@@ -338,7 +328,7 @@ class Elevation(BaseAPI):
 
         geo_transform = input_tiff_file.GetGeoTransform()
         print('Old geo transform', geo_transform)
-        dst_epsg = self.get_utm_epsg(geo_transform[3], geo_transform[0])
+        dst_epsg = get_utm_epsg(geo_transform[3], geo_transform[0])
         dst_crs = osr.SpatialReference()
         dst_crs.ImportFromEPSG(dst_epsg)
 

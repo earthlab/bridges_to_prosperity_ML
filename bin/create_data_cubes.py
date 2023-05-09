@@ -12,14 +12,14 @@ import rasterio
 import yaml
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
-from osgeo import gdal
+from osgeo import gdal, osr
 from PIL import Image
 
 from bin.composites_to_tiles import create_tiles
 from definitions import REGION_FILE_PATH, COMPOSITE_DIR, TILE_DIR, TRUTH_DIR, SENTINEL_2_DIR, ELEVATION_DIR, SLOPE_DIR,\
     S3_COMPOSITE_DIR
 from src.api.sentinel2 import initialize_s3_bucket
-from src.utilities.imaging import numpy_array_to_raster
+from src.utilities.imaging import numpy_array_to_raster, mgrs_to_bbox, get_utm_epsg
 from src.utilities.config_reader import CONFIG
 from src.utilities.imaging import elevation_to_slope, subsample_geo_tiff
 from src.utilities.coords import get_bridge_locations
@@ -29,9 +29,6 @@ from bin.download_composites import download_composites, get_requested_locations
 from src.api.sentinel2 import SinergiseSentinelAPI
 from src.api.lp_daac import Elevation as ElevationAPI
 from src.api.osm import getOsm
-import mgrs
-from geopy import Point
-from geopy.distance import distance
 
 from file_types import OpticalComposite, Elevation as ElevationFile, Slope as SlopeFile, OSM as OSMFile,\
     MultiVariateComposite as MultiVariateCompositeFile
@@ -42,41 +39,31 @@ Image.MAX_IMAGE_PIXELS = None
 
 def combine_bands(source_file: str, target_file: str, new_bands: int):
     if os.path.exists(target_file):
-        with rasterio.open(target_file, 'r') as src_file:
-            existing_band_count = src_file.meta['count']
+        with rasterio.open(target_file, 'r') as target_f:
+            existing_band_count = target_f.meta['count']
+            with rasterio.open(source_file, 'r') as src_file:
+                # copy and update the metadata from the input raster for the output
+                meta = src_file.meta.copy()
+                meta.update(
+                    count=existing_band_count + new_bands
+                )
+                with rasterio.open(target_file, 'w+', **meta) as dst:
+                    for i in range(existing_band_count + new_bands):
+                        if i + 1 > existing_band_count:
+                            dst.write_band(i + 1, src_file.read(i + 1 - existing_band_count))
+                        else:
+                            dst.write_band(i + 1, target_f.read(i + 1))
     else:
         existing_band_count = 0
-
-    with rasterio.open(source_file, 'r') as src_file:
-        # copy and update the metadata from the input raster for the output
-        meta = src_file.meta.copy()
-        meta.update(
-            count=existing_band_count + new_bands
-        )
-        with rasterio.open(target_file, 'w+', **meta) as dst:
-            for i in range(new_bands):
-                dst.write_band(existing_band_count + i + 1, src_file.read(i+1))
-
-
-def mgrs_to_bbox(mgrs_string: str):
-    m = mgrs.MGRS()
-    lat, lon = m.toLatLon(mgrs_string)
-    # Calculate the bounding box
-    sw_point = Point(latitude=lat, longitude=lon)
-    ne_point = distance(kilometers=109.8 * np.sqrt(2)).destination(sw_point, 45)
-    bounding_box = (sw_point.longitude, sw_point.latitude, ne_point.longitude, ne_point.latitude)
-    return list(bounding_box)
-
-
-def copy_geo_transform(source_file: str, target_file: str):
-    print('Setting geo transform')
-    source_tif = gdal.Open(source_file)
-    target_tif = gdal.Open(target_file, gdal.GA_Update)
-    print(source_tif.GetGeoTransform())
-    target_tif.SetGeoTransform(source_tif.GetGeoTransform())
-
-    source_tif = None
-    target_tif = None
+        with rasterio.open(source_file, 'r') as src_file:
+            # copy and update the metadata from the input raster for the output
+            meta = src_file.meta.copy()
+            meta.update(
+                count=existing_band_count + new_bands
+            )
+            with rasterio.open(target_file, 'w+', **meta) as dst:
+                for i in range(new_bands):
+                    dst.write_band(i + 1, src_file.read(i+1))
 
 
 def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORES, region: List[str] = None,
@@ -141,37 +128,52 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
 
             # TODO: Check if all_bands_file exists
             all_bands_file = OpticalComposite(region, district, rgb_file.mgrs, ['B02', 'B03', 'B04', 'B08'])
-            combine_bands(rgb_file.archive_path, all_bands_file.archive_path, new_bands=3)
-            combine_bands(ir_file.archive_path, all_bands_file.archive_path, new_bands=1)
+            if not os.path.exists(all_bands_file.archive_path):
+                combine_bands(rgb_file.archive_path, all_bands_file.archive_path, new_bands=3)
+                combine_bands(ir_file.archive_path, all_bands_file.archive_path, new_bands=1)
 
-            multivariate_file = MultiVariateCompositeFile(region, district, rgb_file.mgrs)
-            os.makedirs(os.path.dirname(multivariate_file.archive_path), exist_ok=True)
+            mgrs_lat_lon_bbox = mgrs_to_bbox(all_bands_file.mgrs)
+            epsg_code = get_utm_epsg(mgrs_lat_lon_bbox[3], mgrs_lat_lon_bbox[0])
+            proj = osr.SpatialReference()
+            proj.ImportFromEPSG(epsg_code)
+            projection = proj.ExportToWkt()
+
             all_bands_tiff_file = gdal.Open(all_bands_file.archive_path)
             high_res_geo_reference = all_bands_tiff_file.GetGeoTransform()
 
             mgrs_elevation_outfile = ElevationFile(region, district, rgb_file.mgrs)
+            os.makedirs(os.path.dirname(mgrs_elevation_outfile.archive_path), exist_ok=True)
             if not os.path.exists(mgrs_elevation_outfile.archive_path):
                 # Clip to bbox so we can convert to meters
                 mgrs_bbox = mgrs_to_bbox(rgb_file.mgrs)
                 elevation_api.download_bbox(mgrs_elevation_outfile.archive_path, mgrs_bbox, buffer=5000)
                 elevation_api.lat_lon_to_meters(mgrs_elevation_outfile.archive_path)
-            high_res_elevation = subsample_geo_tiff(mgrs_elevation_outfile.archive_path,
-                                                    all_bands_file.archive_path)
-            numpy_array_to_raster(mgrs_elevation_outfile.archive_path.replace('.tif', 'high_res.tif'), high_res_elevation, high_res_geo_reference,
-                                  'wgs84')
+                high_res_elevation = subsample_geo_tiff(mgrs_elevation_outfile.archive_path,
+                                                        all_bands_file.archive_path)
+                numpy_array_to_raster(mgrs_elevation_outfile.archive_path, high_res_elevation, high_res_geo_reference,
+                                      projection)
 
             mgrs_slope_outfile = SlopeFile(region, district, rgb_file.mgrs)
+            os.makedirs(os.path.dirname(mgrs_slope_outfile.archive_path), exist_ok=True)
             if not os.path.exists(mgrs_slope_outfile.archive_path):
                 elevation_to_slope(mgrs_elevation_outfile.archive_path, mgrs_slope_outfile.archive_path)
+
+                high_res_slope = subsample_geo_tiff(mgrs_slope_outfile.archive_path,
+                                                    all_bands_file.archive_path)
+                numpy_array_to_raster(mgrs_slope_outfile.archive_path, high_res_slope, high_res_geo_reference,
+                                      projection)
 
             osm_file = OSMFile(region, district, rgb_file.mgrs)
             os.makedirs(os.path.dirname(osm_file.archive_path), exist_ok=True)
 
             getOsm(all_bands_file.archive_path, osm_file.archive_path)
 
-            combine_bands(osm_file.archive_path, multivariate_file.archive_path, new_bands=1)
-            combine_bands(mgrs_elevation_outfile.archive_path, multivariate_file.archive_path, new_bands=1)
-            combine_bands(mgrs_slope_outfile.archive_path, multivariate_file.archive_path, new_bands=1)
+            multivariate_file = MultiVariateCompositeFile(region, district, rgb_file.mgrs)
+            os.makedirs(os.path.dirname(multivariate_file.archive_path), exist_ok=True)
+            combine_bands(all_bands_file.archive_path, multivariate_file.archive_path, new_bands=4)  # 1, 2, 3, 4
+            combine_bands(osm_file.archive_path, multivariate_file.archive_path, new_bands=2)  # 5, 6
+            combine_bands(mgrs_elevation_outfile.archive_path, multivariate_file.archive_path, new_bands=1)  # 7
+            combine_bands(mgrs_slope_outfile.archive_path, multivariate_file.archive_path, new_bands=1)  # 8
 
 
 if __name__ == "__main__":

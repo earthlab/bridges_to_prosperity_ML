@@ -358,6 +358,7 @@ def composite_to_tiles(
         for loc in bridge_locations:
             if p.contains(loc):
                 this_bridge_locs.append(loc)
+        print(len(this_bridge_locs), composite.mgrs, 'BRIDGES')
     numTiles = len(xsteps) * len(ysteps)
     torch_transformer = ToTensor()
     df = pd.DataFrame(

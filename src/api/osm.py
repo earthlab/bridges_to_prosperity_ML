@@ -27,7 +27,7 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
     #bbox = [tl[1], br[1], tl[0], br[0]]
     optical_composite = OpticalComposite.create(s2_tiff)
     mgrs_bbox = mgrs_to_bbox(optical_composite.mgrs)
-    bbox = [mgrs_bbox[3], mgrs_bbox[1], mgrs_bbox[2], mgrs_bbox[0]]
+    bbox = [mgrs_bbox[3], mgrs_bbox[1], mgrs_bbox[0], mgrs_bbox[2]]
     print(bbox)
     # Call to ox api to get geometries for specific tags
     if debug: print('Getting water from osm')

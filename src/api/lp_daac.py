@@ -433,8 +433,8 @@ class Elevation(BaseAPI):
             round_min_lon = math.floor(min_lon)
 
         if max_lon < 0:
-            max_lon_ord = 'w'
             round_max_lon = math.floor(abs(max_lon))
+            max_lon_ord = 'w' if round_max_lon != 0 else 'e'
         else:
             max_lon_ord = 'e'
             round_max_lon = math.ceil(max_lon)
@@ -448,8 +448,8 @@ class Elevation(BaseAPI):
             round_min_lat = math.floor(min_lat)
 
         if max_lat < 0:
-            max_lat_ord = 's'
             round_max_lat = math.floor(abs(max_lat))
+            max_lat_ord = 's' if round_max_lat != 0 else 'n'
         else:
             max_lat_ord = 'n'
             round_max_lat = math.ceil(max_lat)

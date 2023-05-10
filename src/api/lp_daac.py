@@ -80,14 +80,14 @@ def _elevation_download_task(task_args: Namespace) -> None:
             task_args.top_left_coord (list): List giving coordinate of top left of image [lon, lat] so tif file can be
             geo-referenced
     """
-    dest = os.path.join(task_args.out_dir, os.path.basename(task_args.link))
-    task_args.dest = dest
+    dest = os.path.join(task_args['out_dir'], os.path.basename(task_args['link']))
+    task_args['dest'] = dest
     _base_download_task(task_args)
 
-    _nc_to_tif(task_args.dest, task_args.top_left_coord, task_args.out_dir)
+    _nc_to_tif(task_args['dest'], task_args['top_left_coord'], task_args['out_dir'])
 
     # Just want the .tif file at the end
-    os.remove(task_args.dest)
+    os.remove(task_args['dest'])
 
 
 def _nc_to_tif(nc_path: str, top_left_coord: Tuple[float, float], out_dir: str,

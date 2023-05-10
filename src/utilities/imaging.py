@@ -392,7 +392,7 @@ def composite_to_tiles(
                     with rasterio.open(tile_tiff_path, 'r') as tmp:
                         scale_img = tmp.read()
                         scale_img = np.moveaxis(scale_img, 0, -1)  # make dims be c, w, h
-                        scale_img = scale(scale())
+                        scale_img = scale(scale_img)
                         tensor = torch_transformer(scale_img)
                         torch.save(tensor, pt_file_path)
 

@@ -23,9 +23,12 @@ TAGS_BOUNDARY = {
 def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
     assert os.path.isfile(s2_tiff), f'{s2_tiff} DNE'
     # the bounding box that shapely uses is a set of 4 (x,y) pairs, ox wants ymax, ymin, xmin, xmax
-    (tl,tr,br,bl) = tiff_to_bbox(s2_tiff)
-    print((tl,tr,br,bl))
-    bbox = [tl[1], br[1], tl[0], br[0]]
+    #(tl,tr,br,bl) = tiff_to_bbox(s2_tiff)
+    #bbox = [tl[1], br[1], tl[0], br[0]]
+    optical_composite = OpticalComposite.create(s2_tiff)
+    mgrs_bbox = mgrs_to_bbox(optical_composite.mgrs)
+    bbox = [mgrs_bbox[3], mgrs_bbox[1], mgrs_bbox[2], mgrs_bbox[0]]
+    print(bbox)
     # Call to ox api to get geometries for specific tags
     if debug: print('Getting water from osm')
     water = ox.geometries.geometries_from_bbox(*bbox, TAGS_WATER)

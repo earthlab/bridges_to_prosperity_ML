@@ -12,7 +12,7 @@ import rasterio
 import yaml
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
-from osgeo import gdal, osr
+from osgeo import gdal, osr, ogr
 from PIL import Image
 
 from bin.composites_to_tiles import create_tiles
@@ -64,6 +64,32 @@ def combine_bands(source_file: str, target_file: str, new_bands: int):
             with rasterio.open(target_file, 'w+', **meta) as dst:
                 for i in range(new_bands):
                     dst.write_band(i + 1, src_file.read(i+1))
+
+
+def fix_s2_projection(input_file: str):
+    tiff_file = gdal.Open(input_file, gdal.GA_Update)
+    optical_composite = OpticalComposite.create(input_file)
+    mgrs_bbox = mgrs_to_bbox(optical_composite.mgrs)
+
+    epsg_code = get_utm_epsg(mgrs_bbox[3], mgrs_bbox[0])
+
+    src_crs = osr.SpatialReference()
+    src_crs.ImportFromEPSG(4326)  # Lat / lon
+
+    dst_crs = osr.SpatialReference()
+    dst_crs.ImportFromEPSG(epsg_code)
+
+    point = ogr.Geometry(ogr.wkbPoint)
+    point.AddPoint(mgrs_bbox[1], mgrs_bbox[0])
+    transform = osr.CoordinateTransformation(src_crs, dst_crs)
+    point.Transform(transform)
+
+    top_left_lat = point.GetY() + (10980 * 10)
+    top_left_lon = point.GetX()
+
+    new_geo_transform = [top_left_lon, 10, 0, top_left_lat, 0, -10]
+    tiff_file.SetGeoTransform(new_geo_transform)
+    tiff_file = None
 
 
 def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORES, slices: int = 6,
@@ -128,6 +154,8 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
                 combine_bands(rgb_file.archive_path, all_bands_file.archive_path, new_bands=3)
                 combine_bands(ir_file.archive_path, all_bands_file.archive_path, new_bands=1)
 
+            fix_s2_projection(all_bands_file.archive_path)
+
             mgrs_lat_lon_bbox = mgrs_to_bbox(all_bands_file.mgrs)
             epsg_code = get_utm_epsg(mgrs_lat_lon_bbox[3], mgrs_lat_lon_bbox[0])
             proj = osr.SpatialReference()
@@ -143,6 +171,7 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
             if not os.path.exists(mgrs_elevation_outfile.archive_path):
                 # Clip to bbox so we can convert to meters
                 mgrs_bbox = mgrs_to_bbox(rgb_file.mgrs)
+                print(mgrs_bbox)
                 elevation_api.download_bbox(mgrs_elevation_outfile.archive_path, mgrs_bbox, buffer=5000)
                 up_sample_elevation = True
 

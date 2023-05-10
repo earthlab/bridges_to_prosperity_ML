@@ -47,7 +47,6 @@ def tiff_to_bbox(tiff: str, debug: bool = False):
     bl = (lx, by)
     tr = (rx, ty)
     br = (rx, by)
-    print(tl, tr, br, bl)
     bbox = lat_long_bbox((tl, tr, br, bl), tform)
 
     if debug:

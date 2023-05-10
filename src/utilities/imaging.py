@@ -17,8 +17,6 @@ from shapely.geometry import polygon
 from torchvision.transforms import ToTensor
 from tqdm.auto import tqdm
 from PIL import Image
-from scipy import interpolate
-import affine
 import mgrs
 from geopy import Point
 from geopy.distance import distance
@@ -169,7 +167,7 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
             g_nrows, g_ncols = rf.meta['width'], rf.meta['height']
             if rf.crs is None:
                 bbox = mgrs_to_bbox(coord)
-                crs = rasterio.crs.CRS.from_wkt(resolve_crs(bbox[3], bbox[0]).ExportToWkt())
+                crs = rasterio.crs.CRS().from_wkt(wkt=resolve_crs(bbox[3], bbox[0]).ExportToWkt())
             else:
                 crs = rf.crs
             transform = rf.transform
@@ -182,7 +180,7 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
             slice_bounds.append((slice_end_pts[-2], slice_end_pts[-1]))
         else:
             slice_bounds = [None]
-        joined_file_path = os.path.join(composite_dir, f'{band}.tiff')
+        joined_file_path = os.path.join(composite_dir, f'{band}_{coord}.tiff')
         if os.path.isfile(joined_file_path):
             continue
 
@@ -258,7 +256,7 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
     ) as wf:
         for band in tqdm(bands, total=n_bands, desc='Combining bands...', leave=False, position=1, disable=pbar):
             j = BANDS_TO_IX[band] if n_bands > 1 else 1
-            band_path = os.path.join(composite_dir, f'{band}.tiff')
+            band_path = os.path.join(composite_dir, f'{band}_{coord}.tiff')
             with rasterio.open(band_path, 'r', driver='GTiff') as rf:
                 wf.write(rf.read(1), indexes=j)
             os.remove(band_path)

@@ -154,6 +154,7 @@ class BaseAPI(ABC):
         self._username, self._password = self._get_auth_credentials()
 
 
+# TODO: Write unit tests!!!
 class Elevation(BaseAPI):
     """
     SRTMGL1 v003 elevation data specific methods for requesting data from LP DAAC servers. Files are downloaded in
@@ -226,12 +227,12 @@ class Elevation(BaseAPI):
         if min_ord == max_ord:
             abs_min = min(min_deg, max_deg)
             abs_max = max(min_deg, max_deg)
-            deg_range = np.arange(abs_min, abs_max, 1)
+            deg_range = np.arange(abs_min, abs_max + 1 if min_ord in ['s', 'w'] else 0, 1)
             for deg in deg_range:
                 substrings.append(min_ord + format_str.format(deg))
         else:
             # Only other combo would be min_lon_ord is w and max_lon_ord is e
-            neg_range = np.arange(1, min_deg, 1)
+            neg_range = np.arange(1, min_deg + 1, 1)
             pos_range = np.arange(0, max_deg, 1)
             for deg in neg_range:
                 substrings.append(min_ord + format_str.format(deg))
@@ -449,6 +450,7 @@ class Elevation(BaseAPI):
             max_lat_ord = 'n'
             round_max_lat = math.ceil(max_lat)
 
+        print(round_min_lat, round_max_lat, min_lat_ord, max_lat_ord)
         lon_substrings = self._create_substrings(round_min_lon, round_max_lon, min_lon_ord, max_lon_ord, 3)
         lat_substrings = self._create_substrings(round_min_lat, round_max_lat, min_lat_ord, max_lat_ord, 2)
 

@@ -267,13 +267,6 @@ class Elevation(BaseAPI):
         with rasterio.open(output_file, "w", **out_meta) as dest:
             dest.write(mosaic)
 
-    def clip(self, input_file: str, output_file: str, clip_bbox: List[float]):
-        input_tif = gdal.Open(input_file)
-        print(clip_bbox)
-        output_tif = gdal.Translate(output_file, input_tif,
-                                    projWin=[clip_bbox[0], clip_bbox[3], clip_bbox[2], clip_bbox[1]])
-        output_tif = None
-
     def download_bbox(self, out_file: str, bbox: List[float], buffer: float = 0) -> None:
         """
         Downloads data given a region and district. Bounding box will be read in from the region_info.yaml file in the
@@ -327,7 +320,6 @@ class Elevation(BaseAPI):
         src_crs.ImportFromEPSG(4326)  # Lat / lon
 
         geo_transform = input_tiff_file.GetGeoTransform()
-        print('Old geo transform', geo_transform)
         dst_epsg = get_utm_epsg(geo_transform[3], geo_transform[0])
         dst_crs = osr.SpatialReference()
         dst_crs.ImportFromEPSG(dst_epsg)
@@ -374,7 +366,6 @@ class Elevation(BaseAPI):
                         password=self._password
                     )
                 )
-            print(task_args)
             with mp.Pool(mp.cpu_count() - 1) as pool:
                 for _ in tqdm(pool.imap(_elevation_download_task, task_args), total=len(task_args)):
                     pass
@@ -455,7 +446,6 @@ class Elevation(BaseAPI):
             round_max_lat = math.ceil(max_lat)
 
         lon_substrings = self._create_substrings(round_min_lon, round_max_lon, min_lon_ord, max_lon_ord, 3)
-        print(round_min_lat, round_max_lat, min_lat_ord, max_lat_ord)
         lat_substrings = self._create_substrings(round_min_lat, round_max_lat, min_lat_ord, max_lat_ord, 2)
 
         file_names = []

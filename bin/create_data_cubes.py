@@ -150,20 +150,23 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
                 # Clip to bbox so we can convert to meters
                 mgrs_bbox = mgrs_to_bbox(rgb_file.mgrs)
                 elevation_api.download_bbox(mgrs_elevation_outfile.archive_path, mgrs_bbox, buffer=5000)
-                elevation_api.lat_lon_to_meters(mgrs_elevation_outfile.archive_path)
-                high_res_elevation = subsample_geo_tiff(mgrs_elevation_outfile.archive_path,
-                                                        all_bands_file.archive_path)
-                numpy_array_to_raster(mgrs_elevation_outfile.archive_path, high_res_elevation, high_res_geo_reference,
-                                      projection)
 
+            # Calculate slope from gradient before up-sampling elevation data
             mgrs_slope_outfile = SlopeFile(region, district, rgb_file.mgrs)
             os.makedirs(os.path.dirname(mgrs_slope_outfile.archive_path), exist_ok=True)
             if not os.path.exists(mgrs_slope_outfile.archive_path):
                 elevation_to_slope(mgrs_elevation_outfile.archive_path, mgrs_slope_outfile.archive_path)
-
+                elevation_api.lat_lon_to_meters(mgrs_elevation_outfile.archive_path)
                 high_res_slope = subsample_geo_tiff(mgrs_slope_outfile.archive_path,
                                                     all_bands_file.archive_path)
                 numpy_array_to_raster(mgrs_slope_outfile.archive_path, high_res_slope, high_res_geo_reference,
+                                      projection)
+
+            if not os.path.exists(mgrs_elevation_outfile.archive_path):
+                elevation_api.lat_lon_to_meters(mgrs_elevation_outfile.archive_path)
+                high_res_elevation = subsample_geo_tiff(mgrs_elevation_outfile.archive_path,
+                                                        all_bands_file.archive_path)
+                numpy_array_to_raster(mgrs_elevation_outfile.archive_path, high_res_elevation, high_res_geo_reference,
                                       projection)
 
             osm_file = OSMFile(region, district, rgb_file.mgrs)

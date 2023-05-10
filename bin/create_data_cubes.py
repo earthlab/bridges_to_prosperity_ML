@@ -137,12 +137,14 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
             all_bands_tiff_file = gdal.Open(all_bands_file.archive_path)
             high_res_geo_reference = all_bands_tiff_file.GetGeoTransform()
 
+            up_sample_elevation = False
             mgrs_elevation_outfile = ElevationFile(region, district, rgb_file.mgrs)
             os.makedirs(os.path.dirname(mgrs_elevation_outfile.archive_path), exist_ok=True)
             if not os.path.exists(mgrs_elevation_outfile.archive_path):
                 # Clip to bbox so we can convert to meters
                 mgrs_bbox = mgrs_to_bbox(rgb_file.mgrs)
                 elevation_api.download_bbox(mgrs_elevation_outfile.archive_path, mgrs_bbox, buffer=5000)
+                up_sample_elevation = True
 
             # Calculate slope from gradient before up-sampling elevation data
             mgrs_slope_outfile = SlopeFile(region, district, rgb_file.mgrs)
@@ -155,7 +157,7 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
                 numpy_array_to_raster(mgrs_slope_outfile.archive_path, high_res_slope, high_res_geo_reference,
                                       projection)
 
-            if not os.path.exists(mgrs_elevation_outfile.archive_path):
+            if up_sample_elevation:
                 elevation_api.lat_lon_to_meters(mgrs_elevation_outfile.archive_path)
                 high_res_elevation = subsample_geo_tiff(mgrs_elevation_outfile.archive_path,
                                                         all_bands_file.archive_path)

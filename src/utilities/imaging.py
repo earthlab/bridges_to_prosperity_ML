@@ -389,7 +389,7 @@ def composite_to_tiles(
                     if ix is not None:
                         this_bridge_locs.pop(ix)
                 if not os.path.isfile(pt_file_path):
-                    with rasterio.open(tile_tiff, 'r') as tmp:
+                    with rasterio.open(tile_tiff_path, 'r') as tmp:
                         scale_img = scale(tmp.read())
                         scale_img = np.moveaxis(scale_img, 0, -1)  # make dims be c, w, h
                         tensor = torch_transformer(scale_img)

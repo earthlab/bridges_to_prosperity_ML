@@ -84,7 +84,9 @@ def _elevation_download_task(task_args: Namespace) -> None:
     task_args.dest = dest
     _base_download_task(task_args)
 
-    _nc_to_tif(task_args.dest, task_args.top_left_coord, task_args.out_dir)
+    top_left_coord = (float(task_args.top_left_lon), float(task_args.top_left_lat))
+
+    _nc_to_tif(task_args.dest, top_left_coord, task_args.out_dir)
 
     # Just want the .tif file at the end
     os.remove(task_args.dest)
@@ -365,11 +367,13 @@ class Elevation(BaseAPI):
             file_names = self._resolve_filenames(bbox)
             task_args = []
             for file_name in file_names:
+                lon, lat = self._get_top_left_coordinate_from_filename(file_name)
                 task_args.append(
                     Namespace(
                         link=(os.path.join(self.BASE_URL, file_name)),
                         out_dir=temp_dir,
-                        top_left_coord=self._get_top_left_coordinate_from_filename(file_name),
+                        top_left_lon=str(lon),
+                        top_left_lat=str(lat),
                         username=self._username,
                         password=self._password
                     )

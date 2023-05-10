@@ -18,10 +18,13 @@ TAGS_BOUNDARY = {
 """
     Given a tiff from from sentinel2 get the corresponding waterways and governmental boundaries from OSM, then combine the two into a hypercube
 """
+
+
 def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
     assert os.path.isfile(s2_tiff), f'{s2_tiff} DNE'
     # the bounding box that shapely uses is a set of 4 (x,y) pairs, ox wants ymax, ymin, xmin, xmax
     (tl,tr,br,bl) = tiff_to_bbox(s2_tiff)
+    print((tl,tr,br,bl))
     bbox = [tl[1], br[1], tl[0], br[0]]
     # Call to ox api to get geometries for specific tags
     if debug: print('Getting water from osm')

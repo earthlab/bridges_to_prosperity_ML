@@ -59,6 +59,7 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
     # Remove anything with nan
     water_trim = water.loc[:,['geometry', 'waterway']].dropna()
     boundary_trim = boundary.loc[:,['geometry', 'boundary']].dropna()
+    boundary_trim = boundary_trim[boundary_trim['geometry'].geom_type == 'LineString']
     # convert to crs that matches the sentinel2
 
     water_trim = water_trim.to_crs(f'epsg:{epsg_code}')

@@ -494,7 +494,7 @@ class MultiVariateComposite(FileType):
 
     @staticmethod
     def find_files(in_dir: str, recursive: bool = False):
-        files = glob.glob(in_dir + '/*', recursive=recursive)
+        files = glob.glob(in_dir + '/**/*', recursive=recursive)
         matching_files = [f for f in files if re.match(Slope.base_regex, os.path.basename(f)) is not None]
 
         return matching_files

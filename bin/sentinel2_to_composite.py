@@ -67,7 +67,7 @@ def sentinel2_to_composite(slices, n_cores: int, bands: List[str], region: str, 
                 _composite_task(arg)
         else:
             with mp.Pool(n_cores) as pool:
-                parallel_batches = split_list(args, n_cores)
+                parallel_batches = split_list(args, n_cores) if n_cores > len(args) else args
                 print(parallel_batches)
                 print(n_cores)
                 print('\tUsing multiprocessing...')

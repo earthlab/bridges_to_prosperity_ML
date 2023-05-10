@@ -63,13 +63,13 @@ def scale(
             assert np.all(normalized_osm <= 1) and np.all(normalized_osm >= 0),\
                 'OSM water and boundary should be binary images (only 0s and 1s)'
             normalized_elevation = np.clip((x[:, :, 6] - min_elev) / (max_elev - min_elev), 0, 1)  # in meter
-            normalied_slope = np.clip(x[:, :, 7] / 90, 0, 1)  # in deg
+            normalized_slope = np.clip(x[:, :, 7] / 90, 0, 1)  # in deg
         return np.concatenate([
             normalized_rgb,
             normalized_ir.reshape((*normalized_ir.shape, 1)),
             normalized_osm,
             normalized_elevation.reshape((*normalized_elevation.shape, 1)),
-            normalied_slope.reshape((*normalized_slope.shape, 1))],
+            normalized_slope.reshape((*normalized_slope.shape, 1))],
             axis=2)
 
 

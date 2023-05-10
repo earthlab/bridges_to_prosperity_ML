@@ -14,7 +14,8 @@ TAGS_WATER = {
     'waterway': True
 }
 TAGS_BOUNDARY = {
-    'boundary': True
+    'boundary': "administrative",
+    'admin_level': True  # TODO: This gets all of them ...
 }
 
 """

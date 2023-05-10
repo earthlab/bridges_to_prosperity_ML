@@ -61,6 +61,7 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
                 out=dst.read(1),
                 transform=src.transform
             )
+            print(water_arr)
             if debug: print('Writing water to hypercube tiff')
             dst.write_band(1, water_arr)
 

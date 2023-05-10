@@ -63,6 +63,7 @@ def scale(
                 x[:, :, 4:6] >= 0), 'OSM water and boundary should be binary images (only 0s and 1s)'
             normalized_elevation = np.clip((x[:, :, 6] - min_elev) / (max_elev - min_elev), 0, 1)  # in meter
             normalied_slope = np.clip(x[:, :, 7] / 90, 0, 1)  # in deg
+            print(normalized_rgb.shape, normalized_ir.shape, x[:, :, 4:6].shape, normalized_elevation.shape, normalied_slope.shape)
         return np.concatenate([normalized_rgb, normalized_ir, x[:, :, 4:6], normalized_elevation, normalied_slope],
                               axis=2)
 

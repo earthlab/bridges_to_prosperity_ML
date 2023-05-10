@@ -116,6 +116,10 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
         for rgb_comp in rgb_composites:
             rgb_file = OpticalComposite.create(rgb_comp)
 
+            multivariate_file = MultiVariateCompositeFile(region, district, rgb_file.mgrs)
+            if os.path.exists(multivariate_file.archive_path):
+                continue
+
             rgb_tiff_file = gdal.Open(rgb_file.archive_path)
             print(rgb_tiff_file.GetGeoTransform(), 'rgb_gt')
 

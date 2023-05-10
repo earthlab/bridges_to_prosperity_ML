@@ -20,7 +20,7 @@ TAGS_BOUNDARY = {
 """
 def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
     assert os.path.isfile(s2_tiff), f'{s2_tiff} DNE'
-    # the bounding box that shapely uses is a set of 4 (x,y) pairs, ox wants xmin, xmax, ymin, ymax
+    # the bounding box that shapely uses is a set of 4 (x,y) pairs, ox wants ymax, ymin, xmin, xmax
     (tl,tr,br,bl) = tiff_to_bbox(s2_tiff)
     bbox = [tl[1], br[1], tl[0], br[0]]
     # Call to ox api to get geometries for specific tags

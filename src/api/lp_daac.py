@@ -374,7 +374,7 @@ class Elevation(BaseAPI):
                         password=self._password
                     )
                 )
-
+            print(task_args)
             with mp.Pool(mp.cpu_count() - 1) as pool:
                 for _ in tqdm(pool.imap_unordered(_elevation_download_task, task_args), total=len(task_args)):
                     pass

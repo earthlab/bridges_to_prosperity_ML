@@ -41,10 +41,10 @@ def _base_download_task(task_args: Namespace) -> None:
             task_args.password (str): NASA EarthData password
             task_args.dest (str): Path to where the data will be written
     """
-    link = task_args.link
+    link = task_args['link']
 
     pm = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-    pm.add_password(None, "https://urs.earthdata.nasa.gov", task_args.username, task_args.password)
+    pm.add_password(None, "https://urs.earthdata.nasa.gov", task_args['username'], task_args['password'])
     cookie_jar = CookieJar()
     opener = urllib.request.build_opener(
         urllib.request.HTTPBasicAuthHandler(pm),
@@ -55,7 +55,7 @@ def _base_download_task(task_args: Namespace) -> None:
     response = urllib.request.urlopen(myrequest)
     response.begin()
 
-    with open(task_args.dest, 'wb') as fd:
+    with open(task_args['dest'], 'wb') as fd:
         while True:
             chunk = response.read()
             if chunk:

@@ -59,13 +59,18 @@ def scale(
             assert x.shape[2] == 8  # B04, B03, B02 (RGB), B08(IR), OSM Water, OSM Boundary, Elevation, Slope
             normalized_rgb = np.clip(x[:, :, 0:3] / max_rgb, 0, 1)
             normalized_ir = np.clip(x[:, :, 3] / max_ir, 0, 1)
-            assert np.all(x[:, :, 4:6] <= 1) and np.all(
-                x[:, :, 4:6] >= 0), 'OSM water and boundary should be binary images (only 0s and 1s)'
+            normalized_osm = x[:, :, 4:6]
+            assert np.all(normalized_osm <= 1) and np.all(normalized_osm >= 0),\
+                'OSM water and boundary should be binary images (only 0s and 1s)'
             normalized_elevation = np.clip((x[:, :, 6] - min_elev) / (max_elev - min_elev), 0, 1)  # in meter
             normalied_slope = np.clip(x[:, :, 7] / 90, 0, 1)  # in deg
-            print(normalized_rgb.shape, normalized_ir.shape, x[:, :, 4:6].shape, normalized_elevation.shape, normalied_slope.shape)
-        return np.concatenate([normalized_rgb, normalized_ir, x[:, :, 4:6], normalized_elevation, normalied_slope],
-                              axis=2)
+        return np.concatenate([
+            normalized_rgb,
+            normalized_ir.reshape((*normalized_ir.shape, 1)),
+            normalized_osm,
+            normalized_elevation.reshape((*normalized_elevation.shape, 1)),
+            normalied_slope.reshape((*normalized_slope.shape, 1))],
+            axis=2)
 
 
 def get_utm_epsg(lat, lon):

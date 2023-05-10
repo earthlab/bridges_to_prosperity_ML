@@ -27,7 +27,7 @@ def create_tiles(args):
         multivariate_file = MultiVariateComposite.create(multivariate_path)
         if multivariate_file is None:
             continue
-        df_i = composite_to_tiles(multivariate_path, multivariate_file.bands, bridge_locs, pos)
+        df_i = composite_to_tiles(multivariate_path, None, bridge_locs, pos)
         df.append(df_i)
     df = pd.concat(df, ignore_index=True)
     return df

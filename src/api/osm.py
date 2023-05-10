@@ -15,7 +15,7 @@ TAGS_WATER = {
 }
 TAGS_BOUNDARY = {
     'boundary': "administrative",
-    'admin_level': True  # TODO: This gets all of them ...
+    'admin_level': [3, 4, 5, 6, 7, 8, 9, 10, 11]
 }
 
 """
@@ -95,3 +95,4 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
                 transform=new_transform
             )
             dst.write_band(2, boundary_arr)
+            print('boundary set', set(boundary_arr.flatten()))

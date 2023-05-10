@@ -363,9 +363,11 @@ class Elevation(BaseAPI):
                     )
                 )
             print(task_args)
-            with mp.Pool(mp.cpu_count() - 1) as pool:
-                for _ in tqdm(pool.imap(_elevation_download_task, [vars(args) for args in task_args]), total=len(task_args)):
-                    pass
+            for task in [vars(args) for args in task_args]:
+                _elevation_download_task(task)
+            # with mp.Pool(mp.cpu_count() - 1) as pool:
+            #     for _ in tqdm(pool.imap(_elevation_download_task, [vars(args) for args in task_args]), total=len(task_args)):
+            #         pass
 
             return temp_dir
 

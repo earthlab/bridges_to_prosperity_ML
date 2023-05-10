@@ -22,8 +22,7 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
     assert os.path.isfile(s2_tiff), f'{s2_tiff} DNE'
     # the bounding box that shapely uses is a set of 4 (x,y) pairs, ox wants xmin, xmax, ymin, ymax
     (tl,tr,br,bl) = tiff_to_bbox(s2_tiff)
-    mgrs_bbox = mgrs_to_bbox(OpticalComposite.create(s2_tiff).mgrs)
-    bbox = [tl[0], br[0], tl[1], br[1]]
+    bbox = [tl[1], br[1], tl[0], br[0]]
     # Call to ox api to get geometries for specific tags
     if debug: print('Getting water from osm')
     water = ox.geometries.geometries_from_bbox(*bbox, TAGS_WATER)
@@ -43,6 +42,9 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
     with rasterio.open(s2_tiff, 'r') as src:
         meta = src.meta.copy()
         meta['count'] = 2
+        meta.update(
+            compress='lzw'
+        )
 
         with rasterio.open(dst_tiff, 'w+', **meta) as dst:
             # Rasterize water shapes

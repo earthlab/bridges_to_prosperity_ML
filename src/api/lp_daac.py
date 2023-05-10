@@ -227,7 +227,7 @@ class Elevation(BaseAPI):
         if min_ord == max_ord:
             abs_min = min(min_deg, max_deg)
             abs_max = max(min_deg, max_deg)
-            deg_range = np.arange(abs_min, abs_max + 1 if min_ord in ['s', 'w'] else 0, 1)
+            deg_range = np.arange(abs_min, abs_max + (1 if min_ord in ['s', 'w'] else 0), 1)
             for deg in deg_range:
                 substrings.append(min_ord + format_str.format(deg))
         else:

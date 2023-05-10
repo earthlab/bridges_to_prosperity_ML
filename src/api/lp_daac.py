@@ -320,6 +320,7 @@ class Elevation(BaseAPI):
         src_crs.ImportFromEPSG(4326)  # Lat / lon
 
         geo_transform = input_tiff_file.GetGeoTransform()
+        print(geo_transform, 'gglatlon')
         dst_epsg = get_utm_epsg(geo_transform[3], geo_transform[0])
         dst_crs = osr.SpatialReference()
         dst_crs.ImportFromEPSG(dst_epsg)
@@ -350,11 +351,14 @@ class Elevation(BaseAPI):
         bbox[2] += buffer
         bbox[3] += buffer
 
+        print(bbox)
+
         temp_dir = tempfile.mkdtemp(prefix='b2p')
 
         try:
             # 1) Download all overlapping files and convert to tiff in parallel
             file_names = self._resolve_filenames(bbox)
+            print(file_names)
             task_args = []
             for file_name in file_names:
                 task_args.append(

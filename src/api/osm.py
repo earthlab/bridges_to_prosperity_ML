@@ -15,7 +15,7 @@ TAGS_WATER = {
 }
 TAGS_BOUNDARY = {
     'boundary': "administrative",
-    'admin_level': ['11']
+    'admin_level': True
 }
 
 """

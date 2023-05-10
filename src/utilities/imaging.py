@@ -56,13 +56,13 @@ def scale(
             return x / max_rgb
         else:  # multivariate case
             assert x.shape[2] == 8  # B04, B03, B02 (RGB), B08(IR), OSM Water, OSM Boundary, Elevation, Slope
-            normalized_rgb = np.min(1, np.max(0, x[:, :, 0:2] / max_rgb))
+            normalized_rgb = np.min(1, np.max(0, x[:, :, 0:3] / max_rgb))
             normalized_ir = np.min(1, np.max(0, x[:, :, 3] / max_rgb))
-            assert np.all(x[:, :, 4:5] <= 1) and np.all(
-                x[:, :, 4:5] >= 0), 'OSM water and boundary should be binary images (only 0s and 1s)'
+            assert np.all(x[:, :, 4:6] <= 1) and np.all(
+                x[:, :, 4:6] >= 0), 'OSM water and boundary should be binary images (only 0s and 1s)'
             normalized_elevation = np.min(1, np.max(0, (x[:, :, 6] - min_elev) / (max_elev - min_elev)))  # in meter
             normalied_slope = np.min(1, np.max(0, x[:, :, 7] / 90))  # in deg
-        return np.cat([normalized_rgb, normalized_ir, normalized_elevation, x[:, :, 4:5], normalied_slope], dims=2)
+        return np.cat([normalized_rgb, normalized_ir, x[:, :, 4:6], normalized_elevation, normalied_slope], dims=2)
 
 
 def get_utm_epsg(lat, lon):
@@ -390,8 +390,9 @@ def composite_to_tiles(
                         this_bridge_locs.pop(ix)
                 if not os.path.isfile(pt_file_path):
                     with rasterio.open(tile_tiff_path, 'r') as tmp:
-                        scale_img = scale(tmp.read())
+                        scale_img = tmp.read()
                         scale_img = np.moveaxis(scale_img, 0, -1)  # make dims be c, w, h
+                        scale_img = scale(scale())
                         tensor = torch_transformer(scale_img)
                         torch.save(tensor, pt_file_path)
 

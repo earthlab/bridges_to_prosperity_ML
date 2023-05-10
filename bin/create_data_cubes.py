@@ -92,6 +92,76 @@ def fix_s2_projection(input_file: str):
     tiff_file = None
 
 
+def mgrs_task(args: Namespace):
+    elevation_api = ElevationAPI()
+    rgb_file = OpticalComposite.create(args.rgb_comp)
+    region = args.region
+    district = args.district
+
+    multivariate_file = MultiVariateCompositeFile(region, district, rgb_file.mgrs)
+    if os.path.exists(multivariate_file.archive_path):
+        return
+
+    ir_file = OpticalComposite(region, district, rgb_file.mgrs, ['B08'])
+    assert os.path.isfile(ir_file.archive_path), f'IR composite should already exist for {ir_file.archive_path}'
+    print(rgb_file.mgrs)
+    all_bands_file = OpticalComposite(region, district, rgb_file.mgrs, ['B02', 'B03', 'B04', 'B08'])
+    if not os.path.exists(all_bands_file.archive_path):
+        combine_bands(rgb_file.archive_path, all_bands_file.archive_path, new_bands=3)
+        combine_bands(ir_file.archive_path, all_bands_file.archive_path, new_bands=1)
+
+    fix_s2_projection(all_bands_file.archive_path)
+
+    mgrs_lat_lon_bbox = mgrs_to_bbox(all_bands_file.mgrs)
+    epsg_code = get_utm_epsg(mgrs_lat_lon_bbox[3], mgrs_lat_lon_bbox[0])
+    proj = osr.SpatialReference()
+    proj.ImportFromEPSG(epsg_code)
+    projection = proj.ExportToWkt()
+
+    all_bands_tiff_file = gdal.Open(all_bands_file.archive_path)
+    high_res_geo_reference = all_bands_tiff_file.GetGeoTransform()
+
+    up_sample_elevation = False
+    mgrs_elevation_outfile = ElevationFile(region, district, rgb_file.mgrs)
+    os.makedirs(os.path.dirname(mgrs_elevation_outfile.archive_path), exist_ok=True)
+    if not os.path.exists(mgrs_elevation_outfile.archive_path):
+        # Clip to bbox so we can convert to meters
+        mgrs_bbox = mgrs_to_bbox(rgb_file.mgrs)
+        print(mgrs_bbox)
+        elevation_api.download_bbox(mgrs_elevation_outfile.archive_path, mgrs_bbox, buffer=5000)
+        up_sample_elevation = True
+
+    # Calculate slope from gradient before up-sampling elevation data
+    mgrs_slope_outfile = SlopeFile(region, district, rgb_file.mgrs)
+    os.makedirs(os.path.dirname(mgrs_slope_outfile.archive_path), exist_ok=True)
+    if not os.path.exists(mgrs_slope_outfile.archive_path):
+        elevation_to_slope(mgrs_elevation_outfile.archive_path, mgrs_slope_outfile.archive_path)
+        elevation_api.lat_lon_to_meters(mgrs_slope_outfile.archive_path)
+        high_res_slope = subsample_geo_tiff(mgrs_slope_outfile.archive_path,
+                                            all_bands_file.archive_path)
+        numpy_array_to_raster(mgrs_slope_outfile.archive_path, high_res_slope, high_res_geo_reference,
+                              projection)
+
+    if up_sample_elevation:
+        elevation_api.lat_lon_to_meters(mgrs_elevation_outfile.archive_path)
+        high_res_elevation = subsample_geo_tiff(mgrs_elevation_outfile.archive_path,
+                                                all_bands_file.archive_path)
+        numpy_array_to_raster(mgrs_elevation_outfile.archive_path, high_res_elevation, high_res_geo_reference,
+                              projection)
+
+    osm_file = OSMFile(region, district, rgb_file.mgrs)
+    os.makedirs(os.path.dirname(osm_file.archive_path), exist_ok=True)
+
+    getOsm(all_bands_file.archive_path, osm_file.archive_path)
+
+    multivariate_file = MultiVariateCompositeFile(region, district, rgb_file.mgrs)
+    os.makedirs(os.path.dirname(multivariate_file.archive_path), exist_ok=True)
+    combine_bands(all_bands_file.archive_path, multivariate_file.archive_path, new_bands=4)  # 1, 2, 3, 4
+    combine_bands(osm_file.archive_path, multivariate_file.archive_path, new_bands=2)  # 5, 6
+    combine_bands(mgrs_elevation_outfile.archive_path, multivariate_file.archive_path, new_bands=1)  # 7
+    combine_bands(mgrs_slope_outfile.archive_path, multivariate_file.archive_path, new_bands=1)  # 8
+
+
 def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORES, slices: int = 6,
                       region: List[str] = None, districts: List[str] = None):
     debug = True
@@ -126,10 +196,10 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
         download_composites(region, [district], s3_bucket_name, cores)
 
         # Download any s2 data that doesn't exist
-        # TODO: Reimplement this
-        # s2_dir = os.path.join(SENTINEL_2_DIR, region, district)
-        # for date in dates:
-        #     sentinel2_api.download(bbox, 100, s2_dir, date[0], date[1], bands=['B08'])
+        # TODO: Find a way to not look for overlapping tiles if files already exist
+        s2_dir = os.path.join(SENTINEL_2_DIR, region, district)
+        for date in dates:
+            sentinel2_api.download(bbox, 100, s2_dir, date[0], date[1], bands=['B08'])
 
         print('Making ir composites')
         sentinel2_to_composite(slices, cores, bands=['B08'], region=region, districts=[district])
@@ -139,71 +209,15 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
         rgb_composites = OpticalComposite.find_files(composite_dir, ['B02', 'B03', 'B04'], recursive=True)
 
         # TODO: Parallelize this
+        task_args = []
         for rgb_comp in rgb_composites:
-            rgb_file = OpticalComposite.create(rgb_comp)
+            task_args.append(Namespace(rgb_comp=rgb_comp, region=region, district=district))
 
-            multivariate_file = MultiVariateCompositeFile(region, district, rgb_file.mgrs)
-            if os.path.exists(multivariate_file.archive_path):
-                continue
-
-            ir_file = OpticalComposite(region, district, rgb_file.mgrs, ['B08'])
-            assert os.path.isfile(ir_file.archive_path), f'IR composite should already exist for {ir_file.archive_path}'
-            print(rgb_file.mgrs)
-            all_bands_file = OpticalComposite(region, district, rgb_file.mgrs, ['B02', 'B03', 'B04', 'B08'])
-            if not os.path.exists(all_bands_file.archive_path):
-                combine_bands(rgb_file.archive_path, all_bands_file.archive_path, new_bands=3)
-                combine_bands(ir_file.archive_path, all_bands_file.archive_path, new_bands=1)
-
-            fix_s2_projection(all_bands_file.archive_path)
-
-            mgrs_lat_lon_bbox = mgrs_to_bbox(all_bands_file.mgrs)
-            epsg_code = get_utm_epsg(mgrs_lat_lon_bbox[3], mgrs_lat_lon_bbox[0])
-            proj = osr.SpatialReference()
-            proj.ImportFromEPSG(epsg_code)
-            projection = proj.ExportToWkt()
-
-            all_bands_tiff_file = gdal.Open(all_bands_file.archive_path)
-            high_res_geo_reference = all_bands_tiff_file.GetGeoTransform()
-
-            up_sample_elevation = False
-            mgrs_elevation_outfile = ElevationFile(region, district, rgb_file.mgrs)
-            os.makedirs(os.path.dirname(mgrs_elevation_outfile.archive_path), exist_ok=True)
-            if not os.path.exists(mgrs_elevation_outfile.archive_path):
-                # Clip to bbox so we can convert to meters
-                mgrs_bbox = mgrs_to_bbox(rgb_file.mgrs)
-                print(mgrs_bbox)
-                elevation_api.download_bbox(mgrs_elevation_outfile.archive_path, mgrs_bbox, buffer=5000)
-                up_sample_elevation = True
-
-            # Calculate slope from gradient before up-sampling elevation data
-            mgrs_slope_outfile = SlopeFile(region, district, rgb_file.mgrs)
-            os.makedirs(os.path.dirname(mgrs_slope_outfile.archive_path), exist_ok=True)
-            if not os.path.exists(mgrs_slope_outfile.archive_path):
-                elevation_to_slope(mgrs_elevation_outfile.archive_path, mgrs_slope_outfile.archive_path)
-                elevation_api.lat_lon_to_meters(mgrs_slope_outfile.archive_path)
-                high_res_slope = subsample_geo_tiff(mgrs_slope_outfile.archive_path,
-                                                    all_bands_file.archive_path)
-                numpy_array_to_raster(mgrs_slope_outfile.archive_path, high_res_slope, high_res_geo_reference,
-                                      projection)
-
-            if up_sample_elevation:
-                elevation_api.lat_lon_to_meters(mgrs_elevation_outfile.archive_path)
-                high_res_elevation = subsample_geo_tiff(mgrs_elevation_outfile.archive_path,
-                                                        all_bands_file.archive_path)
-                numpy_array_to_raster(mgrs_elevation_outfile.archive_path, high_res_elevation, high_res_geo_reference,
-                                      projection)
-
-            osm_file = OSMFile(region, district, rgb_file.mgrs)
-            os.makedirs(os.path.dirname(osm_file.archive_path), exist_ok=True)
-
-            getOsm(all_bands_file.archive_path, osm_file.archive_path)
-
-            multivariate_file = MultiVariateCompositeFile(region, district, rgb_file.mgrs)
-            os.makedirs(os.path.dirname(multivariate_file.archive_path), exist_ok=True)
-            combine_bands(all_bands_file.archive_path, multivariate_file.archive_path, new_bands=4)  # 1, 2, 3, 4
-            combine_bands(osm_file.archive_path, multivariate_file.archive_path, new_bands=2)  # 5, 6
-            combine_bands(mgrs_elevation_outfile.archive_path, multivariate_file.archive_path, new_bands=1)  # 7
-            combine_bands(mgrs_slope_outfile.archive_path, multivariate_file.archive_path, new_bands=1)  # 8
+        process_map(
+            mgrs_task,
+            task_args,
+            max_workers=cores
+        )
 
 
 if __name__ == "__main__":

@@ -31,6 +31,38 @@ from definitions import B2P_DIR, REGION_FILE_PATH
 from src.api.util import generate_secrets_file
 
 
+def _base_download_task(task_args: Namespace) -> None:
+    """
+    Downloads data from the LP DAAC servers. Authentication is established using NASA EarthData username and password.
+    Args:
+        task_args (Namespace): Contains attributes required for requesting data from LP DAAC
+            task_args.link (str): URL to datafile on servers
+            task_args.username (str): NASA EarthData username
+            task_args.password (str): NASA EarthData password
+            task_args.dest (str): Path to where the data will be written
+    """
+    link = task_args.link
+
+    pm = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+    pm.add_password(None, "https://urs.earthdata.nasa.gov", task_args.username, task_args.password)
+    cookie_jar = CookieJar()
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPBasicAuthHandler(pm),
+        urllib.request.HTTPCookieProcessor(cookie_jar)
+    )
+    urllib.request.install_opener(opener)
+    myrequest = urllib.request.Request(link)
+    response = urllib.request.urlopen(myrequest)
+    response.begin()
+
+    with open(task_args.dest, 'wb') as fd:
+        while True:
+            chunk = response.read()
+            if chunk:
+                fd.write(chunk)
+            else:
+                break
+
 
 # Functions for elevation parallel data processing
 
@@ -48,34 +80,14 @@ def _elevation_download_task(task_args: Namespace) -> None:
             task_args.top_left_coord (list): List giving coordinate of top left of image [lon, lat] so tif file can be
             geo-referenced
     """
-    dest = os.path.join(task_args['out_dir'], os.path.basename(task_args['link']))
-    task_args['dest'] = dest
-    link = task_args['link']
+    dest = os.path.join(task_args.out_dir, os.path.basename(task_args.link))
+    task_args.dest = dest
+    _base_download_task(task_args)
 
-    pm = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-    pm.add_password(None, "https://urs.earthdata.nasa.gov", task_args['username'], task_args['password'])
-    cookie_jar = CookieJar()
-    opener = urllib.request.build_opener(
-        urllib.request.HTTPBasicAuthHandler(pm),
-        urllib.request.HTTPCookieProcessor(cookie_jar)
-    )
-    urllib.request.install_opener(opener)
-    myrequest = urllib.request.Request(link)
-    response = urllib.request.urlopen(myrequest)
-    response.begin()
-
-    with open(task_args['dest'], 'wb') as fd:
-        while True:
-            chunk = response.read()
-            if chunk:
-                fd.write(chunk)
-            else:
-                break
-
-    _nc_to_tif(task_args['dest'], task_args['top_left_coord'], task_args['out_dir'])
+    _nc_to_tif(task_args.dest, task_args.top_left_coord, task_args.out_dir)
 
     # Just want the .tif file at the end
-    os.remove(task_args['dest'])
+    os.remove(task_args.dest)
 
 
 def _nc_to_tif(nc_path: str, top_left_coord: Tuple[float, float], out_dir: str,
@@ -363,11 +375,9 @@ class Elevation(BaseAPI):
                     )
                 )
             print(task_args)
-            for task in [vars(args) for args in task_args]:
-                _elevation_download_task(task)
-            # with mp.Pool(mp.cpu_count() - 1) as pool:
-            #     for _ in tqdm(pool.imap(_elevation_download_task, [vars(args) for args in task_args]), total=len(task_args)):
-            #         pass
+            with mp.Pool(mp.cpu_count() - 1) as pool:
+                for _ in tqdm(pool.imap(_elevation_download_task, task_args), total=len(task_args)):
+                    pass
 
             return temp_dir
 
@@ -445,6 +455,7 @@ class Elevation(BaseAPI):
             round_max_lat = math.ceil(max_lat)
 
         lon_substrings = self._create_substrings(round_min_lon, round_max_lon, min_lon_ord, max_lon_ord, 3)
+        print(round_min_lat, round_max_lat, min_lat_ord, max_lat_ord)
         lat_substrings = self._create_substrings(round_min_lat, round_max_lat, min_lat_ord, max_lat_ord, 2)
 
         file_names = []

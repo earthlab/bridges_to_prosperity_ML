@@ -31,16 +31,25 @@ from definitions import B2P_DIR, REGION_FILE_PATH
 from src.api.util import generate_secrets_file
 
 
-def _base_download_task(task_args: Namespace) -> None:
+
+# Functions for elevation parallel data processing
+
+
+def _elevation_download_task(task_args: Namespace) -> None:
     """
-    Downloads data from the LP DAAC servers. Authentication is established using NASA EarthData username and password.
+    Downloads SRTMGL1 v003 slope data from LP DAAC servers. Files are downloaded as netCDF files and are thus
+    converted to tif files so file structures are uniform throughout the api
     Args:
-        task_args (Namespace): Contains attributes required for requesting data from LP DAAC
+        task_args (Namespace): Contains attributes required for requesting data from EarthData servers
             task_args.link (str): URL to datafile on servers
+            task_args.out_dir (str): Path to directory where files will be written
             task_args.username (str): NASA EarthData username
             task_args.password (str): NASA EarthData password
-            task_args.dest (str): Path to where the data will be written
+            task_args.top_left_coord (list): List giving coordinate of top left of image [lon, lat] so tif file can be
+            geo-referenced
     """
+    dest = os.path.join(task_args['out_dir'], os.path.basename(task_args['link']))
+    task_args['dest'] = dest
     link = task_args['link']
 
     pm = urllib.request.HTTPPasswordMgrWithDefaultRealm()
@@ -62,27 +71,6 @@ def _base_download_task(task_args: Namespace) -> None:
                 fd.write(chunk)
             else:
                 break
-
-
-# Functions for elevation parallel data processing
-
-
-def _elevation_download_task(task_args: Namespace) -> None:
-    """
-    Downloads SRTMGL1 v003 slope data from LP DAAC servers. Files are downloaded as netCDF files and are thus
-    converted to tif files so file structures are uniform throughout the api
-    Args:
-        task_args (Namespace): Contains attributes required for requesting data from EarthData servers
-            task_args.link (str): URL to datafile on servers
-            task_args.out_dir (str): Path to directory where files will be written
-            task_args.username (str): NASA EarthData username
-            task_args.password (str): NASA EarthData password
-            task_args.top_left_coord (list): List giving coordinate of top left of image [lon, lat] so tif file can be
-            geo-referenced
-    """
-    dest = os.path.join(task_args['out_dir'], os.path.basename(task_args['link']))
-    task_args['dest'] = dest
-    _base_download_task(task_args)
 
     _nc_to_tif(task_args['dest'], task_args['top_left_coord'], task_args['out_dir'])
 

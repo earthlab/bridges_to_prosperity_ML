@@ -111,8 +111,8 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
         composite_dir = os.path.join(COMPOSITE_DIR, region, district)
 
         rgb_composites = OpticalComposite.find_files(composite_dir, ['B02', 'B03', 'B04'], recursive=True)
-        print(composite_dir)
-        print(rgb_composites)
+
+        # TODO: Parallelize this
         for rgb_comp in rgb_composites:
             rgb_file = OpticalComposite.create(rgb_comp)
 
@@ -120,16 +120,9 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
             if os.path.exists(multivariate_file.archive_path):
                 continue
 
-            rgb_tiff_file = gdal.Open(rgb_file.archive_path)
-            print(rgb_tiff_file.GetGeoTransform(), 'rgb_gt')
-
             ir_file = OpticalComposite(region, district, rgb_file.mgrs, ['B08'])
             assert os.path.isfile(ir_file.archive_path), f'IR composite should already exist for {ir_file.archive_path}'
-
-            ir_tiff_file = gdal.Open(ir_file.archive_path)
-            print(ir_tiff_file.GetGeoTransform(), 'ir_gt')
-
-            # TODO: Check if all_bands_file exists
+            print(rgb_file.mgrs)
             all_bands_file = OpticalComposite(region, district, rgb_file.mgrs, ['B02', 'B03', 'B04', 'B08'])
             if not os.path.exists(all_bands_file.archive_path):
                 combine_bands(rgb_file.archive_path, all_bands_file.archive_path, new_bands=3)
@@ -156,7 +149,7 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
             os.makedirs(os.path.dirname(mgrs_slope_outfile.archive_path), exist_ok=True)
             if not os.path.exists(mgrs_slope_outfile.archive_path):
                 elevation_to_slope(mgrs_elevation_outfile.archive_path, mgrs_slope_outfile.archive_path)
-                elevation_api.lat_lon_to_meters(mgrs_elevation_outfile.archive_path)
+                elevation_api.lat_lon_to_meters(mgrs_slope_outfile.archive_path)
                 high_res_slope = subsample_geo_tiff(mgrs_slope_outfile.archive_path,
                                                     all_bands_file.archive_path)
                 numpy_array_to_raster(mgrs_slope_outfile.archive_path, high_res_slope, high_res_geo_reference,

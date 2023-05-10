@@ -409,7 +409,7 @@ def composite_to_tiles(
 
 def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
     low_res = gdal.Open(low_resolution_path)
-
+    print(low_resolution_path)
     # Access the data
     low_res_band = low_res.GetRasterBand(1)
     low_res_data = low_res_band.ReadAsArray()
@@ -447,7 +447,7 @@ def get_geo_locations_from_tif(raster):
     x_origin = geo_transform[0]
     y_origin = geo_transform[3]
 
-    print(x_size, y_size, x_origin, y_origin, 'geotransform')
+    print(x_size, y_size, x_origin, y_origin, 'geotransform', raster.RasterXSize, raster.RasterYSize)
 
     # Get geolocation of each data point
     lats = []

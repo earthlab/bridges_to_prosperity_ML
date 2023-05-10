@@ -52,10 +52,10 @@ def scale(
     if type(x) == float:
         return x / max_rgb
     else:
-        if np.shape[2] == 3:
+        if x.shape[2] == 3:
             return x / max_rgb
         else:  # multivariate case
-            assert np.shape[2] == 8  # B04, B03, B02 (RGB), B08(IR), OSM Water, OSM Boundary, Elevation, Slope
+            assert x.shape[2] == 8  # B04, B03, B02 (RGB), B08(IR), OSM Water, OSM Boundary, Elevation, Slope
             normalized_rgb = np.min(1, np.max(0, x[:, :, 0:2] / max_rgb))
             normalized_ir = np.min(1, np.max(0, x[:, :, 3] / max_rgb))
             assert np.all(x[:, :, 4:5] <= 1) and np.all(

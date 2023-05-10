@@ -197,9 +197,9 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
 
         # Download any s2 data that doesn't exist
         # TODO: Find a way to not look for overlapping tiles if files already exist
-        s2_dir = os.path.join(SENTINEL_2_DIR, region, district)
-        for date in dates:
-            sentinel2_api.download(bbox, 100, s2_dir, date[0], date[1], bands=['B08'])
+        # s2_dir = os.path.join(SENTINEL_2_DIR, region, district)
+        # for date in dates:
+        #     sentinel2_api.download(bbox, 100, s2_dir, date[0], date[1], bands=['B08'])
 
         print('Making ir composites')
         sentinel2_to_composite(slices, cores, bands=['B08'], region=region, districts=[district])

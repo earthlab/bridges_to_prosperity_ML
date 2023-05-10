@@ -116,4 +116,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     download_composites(region=args.region, districts=args.districts,
-                        s3_bucket_name=args.s3_bucket_name, cores=args.cores)
+                        s3_bucket_name=args.s3_bucket_name, cores=args.cores, bands=args.bands)

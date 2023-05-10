@@ -5,7 +5,7 @@ rasterio
 rioxarray
 geojson
 boto3
-pytorch
+torch
 torchvision
 tqdm
 ipython 
@@ -17,3 +17,7 @@ plotly_express
 matplotlib
 pyYAML
 osmnx
+pyproj
+mgrs
+geopy
+netCDF4

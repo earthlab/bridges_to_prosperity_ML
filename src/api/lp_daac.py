@@ -232,7 +232,7 @@ class Elevation(BaseAPI):
                 substrings.append(min_ord + format_str.format(deg))
         else:
             # Only other combo would be min_lon_ord is w and max_lon_ord is e
-            neg_range = np.arange(1, min_deg + 1, 1)
+            neg_range = np.arange(1, min_deg + (1 if min_ord in ['s', 'w'] else 0), 1)
             pos_range = np.arange(0, max_deg, 1)
             for deg in neg_range:
                 substrings.append(min_ord + format_str.format(deg))
@@ -429,11 +429,11 @@ class Elevation(BaseAPI):
             round_min_lon = math.floor(min_lon)
 
         if max_lon < 0:
-            round_max_lon = math.floor(abs(max_lon))
+            round_max_lon = math.ceil(abs(max_lon))
             max_lon_ord = 'w' if round_max_lon != 0 else 'e'
         else:
             max_lon_ord = 'e'
-            round_max_lon = math.ceil(max_lon)
+            round_max_lon = math.floor(max_lon)
 
         # Next latitude range
         if min_lat < 0:
@@ -444,11 +444,11 @@ class Elevation(BaseAPI):
             round_min_lat = math.floor(min_lat)
 
         if max_lat < 0:
-            round_max_lat = math.floor(abs(max_lat))
+            round_max_lat = math.ceil(abs(max_lat))
             max_lat_ord = 's' if round_max_lat != 0 else 'n'
         else:
             max_lat_ord = 'n'
-            round_max_lat = math.ceil(max_lat)
+            round_max_lat = math.floor(max_lat)
 
         print(round_min_lat, round_max_lat, min_lat_ord, max_lat_ord)
         lon_substrings = self._create_substrings(round_min_lon, round_max_lon, min_lon_ord, max_lon_ord, 3)

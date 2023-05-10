@@ -6,6 +6,8 @@ from src.utilities.coords import tiff_to_bbox
 from src.utilities.imaging import get_utm_epsg, mgrs_to_bbox
 
 from file_types import OpticalComposite
+from affine import Affine
+from gdal import osr, ogr
 
 TAGS_WATER = {
     'water': True,
@@ -28,6 +30,25 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
     optical_composite = OpticalComposite.create(s2_tiff)
     mgrs_bbox = mgrs_to_bbox(optical_composite.mgrs)
     bbox = [mgrs_bbox[3], mgrs_bbox[1], mgrs_bbox[2], mgrs_bbox[0]]
+
+    epsg_code = get_utm_epsg(mgrs_bbox[3], mgrs_bbox[0])
+
+    src_crs = osr.SpatialReference()
+    src_crs.ImportFromEPSG(4326)  # Lat / lon
+
+    dst_crs = osr.SpatialReference()
+    dst_crs.ImportFromEPSG(epsg_code)
+
+    point = ogr.Geometry(ogr.wkbPoint)
+    point.AddPoint(mgrs_bbox[1], mgrs_bbox[0])
+    transform = osr.CoordinateTransformation(src_crs, dst_crs)
+    point.Transform(transform)
+
+    top_left_lat = point.GetY() + (10980 * 10)
+    top_left_lon = point.GetX()
+
+    new_transform = Affine(10, 0, top_left_lon, 0, -10, top_left_lat)
+
     print(bbox)
     # Call to ox api to get geometries for specific tags
     if debug: print('Getting water from osm')
@@ -38,7 +59,7 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
     water_trim = water.loc[:,['geometry', 'waterway']].dropna()
     boundary_trim = boundary.loc[:,['geometry', 'boundary']].dropna()
     # convert to crs that matches the sentinel2
-    epsg_code = get_utm_epsg(mgrs_bbox[0], mgrs_bbox[3])
+
     water_trim = water_trim.to_crs(f'epsg:{epsg_code}')
     boundary_trim = boundary_trim.to_crs(f'epsg:{epsg_code}')
     # Turn this into an iterable that will be used later by features 
@@ -59,7 +80,7 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
                 shapes=water_shapes,
                 fill=0,
                 out=dst.read(1),
-                transform=src.transform
+                transform=new_transform
             )
             print(water_arr)
             if debug: print('Writing water to hypercube tiff')
@@ -70,6 +91,6 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
                 shapes=boundary_shapes,
                 fill=0,
                 out=dst.read(2),
-                transform=src.transform
+                transform=new_transform
             )
             dst.write_band(2, boundary_arr)

@@ -7,7 +7,7 @@ from src.utilities.imaging import get_utm_epsg, mgrs_to_bbox
 
 from file_types import OpticalComposite
 from affine import Affine
-from gdal import osr, ogr
+from osgeo import osr, ogr
 
 TAGS_WATER = {
     'water': True,

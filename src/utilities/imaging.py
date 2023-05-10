@@ -45,7 +45,8 @@ MIN_ELEV = 0  # meters
 
 def scale(
         x: Union[float, np.array],
-        max_rgb: float = MAX_IR_VAL,
+        max_rgb: float = MAX_RGB_VAL,
+        max_ir: float = MAX_IR_VAL,
         min_elev: float = MIN_ELEV,
         max_elev: float = MAX_ELEV
 ) -> Union[float, np.array]:
@@ -56,12 +57,12 @@ def scale(
             return x / max_rgb
         else:  # multivariate case
             assert x.shape[2] == 8  # B04, B03, B02 (RGB), B08(IR), OSM Water, OSM Boundary, Elevation, Slope
-            normalized_rgb = np.min(1, np.max(0, x[:, :, 0:3] / max_rgb))
-            normalized_ir = np.min(1, np.max(0, x[:, :, 3] / max_rgb))
+            normalized_rgb = np.clip(x[:, :, 0:3] / max_rgb, 0, 1)
+            normalized_ir = np.clip(x[:, :, 3] / max_ir, 0, 1)
             assert np.all(x[:, :, 4:6] <= 1) and np.all(
                 x[:, :, 4:6] >= 0), 'OSM water and boundary should be binary images (only 0s and 1s)'
-            normalized_elevation = np.min(1, np.max(0, (x[:, :, 6] - min_elev) / (max_elev - min_elev)))  # in meter
-            normalied_slope = np.min(1, np.max(0, x[:, :, 7] / 90))  # in deg
+            normalized_elevation = np.clip((x[:, :, 6] - min_elev) / (max_elev - min_elev), 0, 1)  # in meter
+            normalied_slope = np.clip(x[:, :, 7] / 90, 0, 1)  # in deg
         return np.cat([normalized_rgb, normalized_ir, x[:, :, 4:6], normalized_elevation, normalied_slope], dims=2)
 
 

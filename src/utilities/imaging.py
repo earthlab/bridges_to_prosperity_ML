@@ -23,7 +23,7 @@ from geopy.distance import distance
 import pyproj
 
 from src.utilities.coords import tiff_to_bbox, bridge_in_bbox
-from definitions import SENTINEL_2_DIR, COMPOSITE_DIR
+from definitions import SENTINEL_2_DIR, COMPOSITE_DIR, TILE_DIR
 from file_types import OpticalComposite, MultiVariateComposite, TileGeoLoc, Tile, PyTorch, Sentinel2Tile
 
 BANDS_TO_IX = {
@@ -360,6 +360,7 @@ def composite_to_tiles(
         tqdm_update_rate = int(round(numTiles / 100))
     else:
         assert type(tqdm_update_rate) == int
+    os.makedirs(os.path.join(TILE_DIR, composite.region, composite.district, composite.mgrs), exist_ok=True)
     with tqdm(
             position=tqdm_pos,
             total=numTiles,

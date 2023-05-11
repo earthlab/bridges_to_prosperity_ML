@@ -205,7 +205,7 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
         #     sentinel2_api.download(bbox, 100, s2_dir, date[0], date[1], bands=['B08'])
 
         print('Making ir composites')
-        sentinel2_to_composite(slices, cores, bands=['B08'], region=region, districts=[district])
+        #sentinel2_to_composite(slices, cores, bands=['B08'], region=region, districts=[district])
 
         composite_dir = os.path.join(COMPOSITE_DIR, region, district)
 

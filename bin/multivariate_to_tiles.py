@@ -33,7 +33,7 @@ def create_tiles(args):
     return df
 
 
-def multivariate_to_tiles(no_truth: bool, cores: int, region: str, districts: List[str] = None):
+def multivariate_to_tiles(no_truth: bool, cores: int, region: str, districts: List[str] = None, mgrs: str = None):
     bridge_locations = None if no_truth else get_bridge_locations()
     if districts is None:
         with open(REGION_FILE_PATH, 'r') as f:
@@ -42,6 +42,8 @@ def multivariate_to_tiles(no_truth: bool, cores: int, region: str, districts: Li
 
     for district in districts:
         multivariate_dir = os.path.join(MULTIVARIATE_DIR, region, district)
+        if mgrs is not None:
+            multivariate_dir = os.path.join(multivariate_dir, mgrs)
         composites = MultiVariateComposite.find_files(multivariate_dir, recursive=True)
         if args.cores == 1:
             create_tiles((composites, bridge_locations, 1))
@@ -84,6 +86,13 @@ if __name__ == '__main__':
         help='Name of the composite district (Ex. Uganda/Ibanda)'
     )
     parser.add_argument(
+        '--mgrs',
+        '-m',
+        type=str,
+        required=False,
+        help='Name of the mgrs tiles to make tiles for'
+    )
+    parser.add_argument(
         '--no_truth',
         '-nt',
         action='store_true',
@@ -108,4 +117,5 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    multivariate_to_tiles(no_truth=args.no_truth, cores=args.cores, region=args.region, districts=args.districts)
+    multivariate_to_tiles(no_truth=args.no_truth, cores=args.cores, region=args.region, districts=args.districts,
+                          mgrs=args.mgrs)

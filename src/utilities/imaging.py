@@ -364,8 +364,7 @@ def composite_to_tiles(
     ysteps = np.arange(0, rf.RasterYSize, nypix).astype(np.int64).tolist()
 
     if bridge_locations is not None:
-        # bbox = tiff_to_bbox(composite.archive_path)
-        bbox = mgrs_to_bbox_for_polygon(composite.mgrs)
+        bbox = tiff_to_bbox(composite.archive_path)
         this_bridge_locs = []
         p = polygon.Polygon(bbox)
         for loc in bridge_locations:

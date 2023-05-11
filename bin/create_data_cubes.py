@@ -165,7 +165,7 @@ def mgrs_task(args: Namespace):
 
 
 def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORES, slices: int = 6,
-                      region: List[str] = None, districts: List[str] = None):
+                      region: List[str] = None, districts: List[str] = None, mgrs: List[str] = None):
     debug = True
 
     with open(REGION_FILE_PATH, 'r') as f:
@@ -195,7 +195,7 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
         dates = region_info[region]['dates']
 
         # Load composites from S3
-        download_composites(region, [district], s3_bucket_name, cores)
+        download_composites(region, [district], s3_bucket_name, cores, mgrs=mgrs)
 
         # Download any s2 data that doesn't exist
         # TODO: Find a way to not look for overlapping tiles if files already exist
@@ -239,6 +239,14 @@ if __name__ == "__main__":
         required=False,
         help='Name of the composite district (Ex. Fafan Ibanda)'
     )
+    parser.add_argument(
+        '--mgrs',
+        '-m',
+        type=str,
+        nargs='+',
+        required=False,
+        help='Name of the mgrs tiles to make tiles for'
+    )
     parser.add_argument('--s3_bucket_name', '-b', required=False, default=CONFIG.AWS.BUCKET, type=str,
                         help='Name of s3 bucket to search for composites in. Default is from project config, which is'
                              f' currently set to {CONFIG.AWS.BUCKET}')
@@ -249,4 +257,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     create_date_cubes(s3_bucket_name=args.s3_bucket_name, cores=args.cores, slices=args.slices, region=args.region,
-                      districts=args.districts)
+                      districts=args.districts, mgrs=args.mgrs)

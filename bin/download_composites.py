@@ -58,7 +58,7 @@ def get_requested_locations(region: str, districts: List[str]) -> List[str]:
 
 
 def download_composites(region: str = None, districts: List[str] = None, s3_bucket_name: str = CONFIG.AWS.BUCKET,
-                        cores: int = mp.cpu_count() - 1, bands: List[str] = None):
+                        cores: int = mp.cpu_count() - 1, bands: List[str] = None, mgrs: List[str] = None):
     s3 = initialize_s3_bucket(s3_bucket_name)
 
     if bands is not None:
@@ -73,6 +73,9 @@ def download_composites(region: str = None, districts: List[str] = None, s3_buck
             if s3_composite:
                 if bands is not None:
                     if s3_composite.bands != bands:
+                        continue
+                if mgrs is not None:
+                    if s3_composite.mgrs not in mgrs:
                         continue
                 destination = s3_composite.archive_path
                 location_info.append((obj.key, obj.size, destination))

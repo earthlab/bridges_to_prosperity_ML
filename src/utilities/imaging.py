@@ -60,7 +60,7 @@ def scale(
             normalized_rgb = np.clip(x[:, :, 0:3] / max_rgb, 0, 1)
             normalized_ir = np.clip(x[:, :, 3] / max_ir, 0, 1)
             normalized_osm = x[:, :, 4:6]
-            assert np.all(normalized_osm <= 1) and np.all(normalized_osm >= 0),\
+            assert np.all(normalized_osm <= 1) and np.all(normalized_osm >= 0), \
                 'OSM water and boundary should be binary images (only 0s and 1s)'
             normalized_elevation = np.clip((x[:, :, 6] - min_elev) / (max_elev - min_elev), 0, 1)  # in meter
             normalized_slope = np.clip(x[:, :, 7] / 90, 0, 1)  # in deg
@@ -96,10 +96,10 @@ def mgrs_to_bbox_for_polygon(mgrs_string: str):
     # Calculate the bounding box
     sw_point = Point(latitude=lat, longitude=lon)
     se_point = distance(kilometers=109.8).destination(sw_point, 90)
-    ne_point = distance(kilometers=109.8).destination(sw_point, 0)
+    ne_point = distance(kilometers=109.8).destination(se_point, 180)
     nw_point = distance(kilometers=109.8).destination(ne_point, 270)
-    print(sw_point.longitude, sw_point.latitude, se_point.longitude, se_point.latitude, ne_point.longitude, ne_point.latitude, nw_point.longitude, nw_point.latitude)
-    #eturn list(bounding_box)
+    return ((nw_point.longitude, nw_point.latitude), (ne_point.longitude, ne_point.latitude),
+            (se_point.longitude, se_point.latitude), (sw_point.longitude, sw_point.latitude))
 
 
 def get_img_from_file(img_path, g_ncols, dtype, row_bound=None):
@@ -364,8 +364,8 @@ def composite_to_tiles(
     ysteps = np.arange(0, rf.RasterYSize, nypix).astype(np.int64).tolist()
 
     if bridge_locations is not None:
-        #bbox = tiff_to_bbox(composite.archive_path)
-        bbox = mgrs_to_bbox(composite.mgrs)
+        # bbox = tiff_to_bbox(composite.archive_path)
+        bbox = mgrs_to_bbox_for_polygon(composite.mgrs)
         this_bridge_locs = []
         p = polygon.Polygon(bbox)
         for loc in bridge_locations:

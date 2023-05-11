@@ -493,9 +493,17 @@ class MultiVariateComposite(FileType):
         return os.path.join(MULTIVARIATE_DIR, self.region, self.district, self.name)
 
     @staticmethod
-    def find_files(in_dir: str, recursive: bool = False):
+    def find_files(in_dir: str, mgrs: str = None, recursive: bool = False):
         files = glob.glob(in_dir + '/**/*', recursive=recursive)
-        matching_files = [f for f in files if re.match(MultiVariateComposite.base_regex, os.path.basename(f)) is not None]
+        if mgrs is not None:
+            matching_files = []
+            for f in files:
+                match = re.match(MultiVariateComposite.base_regex, os.path.basename(f))
+                if match and match.groupdict()['mgrs'] == mgrs:
+                    matching_files.append(f)
+        else:
+            matching_files = [f for f in files if re.match(MultiVariateComposite.base_regex,
+                                                           os.path.basename(f)) is not None]
 
         return matching_files
 

@@ -42,9 +42,7 @@ def multivariate_to_tiles(no_truth: bool, cores: int, region: str, districts: Li
 
     for district in districts:
         multivariate_dir = os.path.join(MULTIVARIATE_DIR, region, district)
-        if mgrs is not None:
-            multivariate_dir = os.path.join(multivariate_dir, mgrs)
-        composites = MultiVariateComposite.find_files(multivariate_dir, recursive=True)
+        composites = MultiVariateComposite.find_files(multivariate_dir, mgrs=mgrs, recursive=True)
         if args.cores == 1:
             create_tiles((composites, bridge_locations, 1))
         else:

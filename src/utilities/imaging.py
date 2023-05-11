@@ -90,6 +90,19 @@ def mgrs_to_bbox(mgrs_string: str):
     return list(bounding_box)
 
 
+def mgrs_to_bbox_for_polygon(mgrs_string: str):
+    m = mgrs.MGRS()
+    lat, lon = m.toLatLon(mgrs_string)
+    # Calculate the bounding box
+    sw_point = Point(latitude=lat, longitude=lon)
+    se_point = distance(kilometers=109.8).destination(sw_point, 0)
+    ne_point = distance(kilometers=109.8).destination(se_point, 90)
+    nw_point = distance(kilometers=109.8).destination(ne_point, 0)
+    print(sw_point, se_point, ne_point, nw_point)
+    #bounding_box = (sw_point.longitude, sw_point.latitude, ne_point.longitude, ne_point.latitude)
+    #eturn list(bounding_box)
+
+
 def get_img_from_file(img_path, g_ncols, dtype, row_bound=None):
     img = rasterio.open(img_path, driver='JP2OpenJPEG')
     ncols, nrows = img.meta['width'], img.meta['height']
@@ -352,7 +365,8 @@ def composite_to_tiles(
     ysteps = np.arange(0, rf.RasterYSize, nypix).astype(np.int64).tolist()
 
     if bridge_locations is not None:
-        bbox = tiff_to_bbox(composite.archive_path)
+        #bbox = tiff_to_bbox(composite.archive_path)
+        bbox = mgrs_to_bbox(composite.mgrs)
         this_bridge_locs = []
         p = polygon.Polygon(bbox)
         for loc in bridge_locations:

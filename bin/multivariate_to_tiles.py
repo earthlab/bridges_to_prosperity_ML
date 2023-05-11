@@ -33,7 +33,7 @@ def create_tiles(args):
     return df
 
 
-def multivariate_to_tiles(no_truth: bool, cores: int, region: str, districts: List[str] = None, mgrs: str = None):
+def multivariate_to_tiles(no_truth: bool, cores: int, region: str, districts: List[str] = None, mgrs: List[str] = None):
     bridge_locations = None if no_truth else get_bridge_locations()
     if districts is None:
         with open(REGION_FILE_PATH, 'r') as f:
@@ -87,6 +87,7 @@ if __name__ == '__main__':
         '--mgrs',
         '-m',
         type=str,
+        nargs='+',
         required=False,
         help='Name of the mgrs tiles to make tiles for'
     )

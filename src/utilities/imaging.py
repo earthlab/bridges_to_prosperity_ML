@@ -98,8 +98,7 @@ def mgrs_to_bbox_for_polygon(mgrs_string: str):
     se_point = distance(kilometers=109.8).destination(sw_point, 0)
     ne_point = distance(kilometers=109.8).destination(se_point, 90)
     nw_point = distance(kilometers=109.8).destination(ne_point, 0)
-    print(sw_point, se_point, ne_point, nw_point)
-    #bounding_box = (sw_point.longitude, sw_point.latitude, ne_point.longitude, ne_point.latitude)
+    print(sw_point.longitude, sw_point.latitude, se_point.longitude, se_point.latitude, ne_point.longitude, ne_point.latitude, nw_point.longitude, nw_point.latitude)
     #eturn list(bounding_box)
 
 

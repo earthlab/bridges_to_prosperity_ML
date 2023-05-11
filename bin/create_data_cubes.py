@@ -66,10 +66,12 @@ def combine_bands(source_file: str, target_file: str, new_bands: int):
                     dst.write_band(i + 1, src_file.read(i+1))
 
 
-def fix_s2_projection(input_file: str):
+def fix_s2_projection(input_file: str, mgrs: str = None):
     tiff_file = gdal.Open(input_file, gdal.GA_Update)
-    optical_composite = OpticalComposite.create(input_file)
-    mgrs_bbox = mgrs_to_bbox(optical_composite.mgrs)
+    if mgrs is None:
+        optical_composite = OpticalComposite.create(input_file)
+        mgrs = optical_composite.mgrs
+    mgrs_bbox = mgrs_to_bbox(mgrs)
 
     epsg_code = get_utm_epsg(mgrs_bbox[3], mgrs_bbox[0])
 

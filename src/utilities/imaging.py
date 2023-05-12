@@ -21,6 +21,7 @@ import mgrs
 from geopy import Point
 from geopy.distance import distance
 import pyproj
+from pyproj import CRS
 
 from src.utilities.coords import tiff_to_bbox, bridge_in_bbox
 from definitions import SENTINEL_2_DIR, COMPOSITE_DIR, TILE_DIR
@@ -430,8 +431,10 @@ def composite_to_tiles(
     return df
 
 
-def transform_point(src_epsg, dest_epsg, x, y):
-    transformer = pyproj.Transformer.from_crs(src_epsg, dest_epsg, always_xy=True)
+def transform_point(src_wkt, dst_wkt, x, y):
+    src_crs = CRS.from_wkt(src_wkt)
+    dst_crs = CRS.from_wkt(dst_wkt)
+    transformer = pyproj.Transformer.from_crs(src_crs, dst_crs, always_xy=True)
     transformed_point = transformer.transform(x, y)
     return transformed_point
 
@@ -446,14 +449,14 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
     low_res_data = low_res_band.ReadAsArray()
 
     low_res_geo_transform = low_res.GetGeoTransform()
-    low_res_epsg = get_utm_epsg(low_res_geo_transform[3], low_res_geo_transform[0])
+    low_res_projection = low_res.GetProjection()
 
     high_res_geo_transform = high_res.GetGeoTransform()
-    high_res_epsg = get_utm_epsg(high_res_geo_transform[3], high_res_geo_transform[0])
+    high_res_projection = high_res.GetProjection()
 
-    if low_res_epsg != high_res_epsg:
+    if low_res_projection != high_res_projection:
 
-        dst_point = transform_point(f'EPSG:{low_res_epsg}', f'EPSG{high_res_epsg}', low_res_geo_transform[0],
+        dst_point = transform_point(low_res_projection, high_res_projection, low_res_geo_transform[0],
                                     low_res_geo_transform[3])
         low_res_geo_transform = [dst_point[0], low_res_geo_transform[1], 0, dst_point[1], 0, low_res_geo_transform[5]]
 

@@ -494,8 +494,6 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
 
 def get_geo_locations_from_tif(geo_transform: List[float], x_size: int, y_size: int):
     # Get geolocation information
-    x_size = geo_transform[1]
-    y_size = geo_transform[5]
     x_origin = geo_transform[0]
     y_origin = geo_transform[3]
 

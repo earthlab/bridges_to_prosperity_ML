@@ -494,19 +494,21 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
 
 def get_geo_locations_from_tif(geo_transform: List[float], x_size: int, y_size: int):
     # Get geolocation information
+    dx = geo_transform[1]
+    dy = geo_transform[5]
     x_origin = geo_transform[0]
     y_origin = geo_transform[3]
 
-    print(x_size, y_size, x_origin, y_origin, 'geotransform', x_size, y_size)
+    print(dx, dy, x_origin, y_origin, 'geotransform', x_size, y_size)
 
     # Get geolocation of each data point
     lats = []
     for row in range(y_size):
-        lats.append(y_origin + (row * y_size))
+        lats.append(y_origin + (row * dy))
 
     lons = []
     for col in range(x_size):
-        lons.append(x_origin + (col * x_size))
+        lons.append(x_origin + (col * dx))
 
     return lons, lats
 

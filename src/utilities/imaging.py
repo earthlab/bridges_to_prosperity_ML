@@ -439,10 +439,10 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
     low_res_band = low_res.GetRasterBand(1)
     low_res_data = low_res_band.ReadAsArray()
 
-    low_res_geo_transform = low_res.GetProjection()
+    low_res_geo_transform = low_res.GetGeoTransform()
     low_res_epsg = get_utm_epsg(low_res_geo_transform[3], low_res_geo_transform[0])
 
-    high_res_geo_transform = high_res.GetProjection()
+    high_res_geo_transform = high_res.GetGeoTransform()
     high_res_epsg = get_utm_epsg(high_res_geo_transform[3], high_res_geo_transform[0])
 
     if low_res_epsg != high_res_epsg:

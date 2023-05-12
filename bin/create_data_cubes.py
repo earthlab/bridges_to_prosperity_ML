@@ -199,7 +199,6 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
         composite_dir = os.path.join(COMPOSITE_DIR, region, district)
         rgb_composites = OpticalComposite.find_files(composite_dir, ['B02', 'B03', 'B04'], recursive=True)
 
-        # TODO: Parallelize this
         task_args = []
         for rgb_comp in rgb_composites:
             task_args.append(Namespace(rgb_comp=rgb_comp, region=region, district=district))

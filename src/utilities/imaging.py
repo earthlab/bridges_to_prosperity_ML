@@ -430,6 +430,12 @@ def composite_to_tiles(
     return df
 
 
+def transform_point(src_epsg, dest_epsg, x, y):
+    transformer = pyproj.Transformer.from_crs(src_epsg, dest_epsg, always_xy=True)
+    transformed_point = transformer.transform(x, y)
+    return transformed_point
+
+
 def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
     low_res = gdal.Open(low_resolution_path)
     high_res = gdal.Open(high_resolution_path)
@@ -446,15 +452,10 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
     high_res_epsg = get_utm_epsg(high_res_geo_transform[3], high_res_geo_transform[0])
 
     if low_res_epsg != high_res_epsg:
-        src_ref = osr.SpatialReference()
-        src_ref.ImportFromEPSG(low_res_epsg)
-        dst_ref = osr.SpatialReference()
-        dst_ref.ImportFromEPSG(high_res_epsg)
-        point = ogr.Geometry(ogr.wkbPoint)
-        point.AddPoint(low_res_geo_transform[3], low_res_geo_transform[0])
-        transform = osr.CoordinateTransformation(src_ref, dst_ref)
-        point.Transform(transform)
-        low_res_geo_transform = [point.GetX(), low_res_geo_transform[0], 0, point.GetY(), 0, low_res_geo_transform[5]]
+
+        dst_point = transform_point(f'EPSG:{low_res_epsg}', f'EPSG{high_res_epsg}', low_res_geo_transform[0],
+                                    low_res_geo_transform[3])
+        low_res_geo_transform = [dst_point[0], low_res_geo_transform[1], 0, dst_point[1], 0, low_res_geo_transform[5]]
 
     low_res_lons, low_res_lats = get_geo_locations_from_tif(low_res_geo_transform, low_res.RasterXSize,
                                                             low_res.RasterYSize)

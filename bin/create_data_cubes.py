@@ -81,6 +81,7 @@ def fix_s2_projection(input_file: str, mgrs: str = None):
 
     new_geo_transform = [top_left_lon, 10, 0, top_left_lat, 0, -10]
     tiff_file.SetGeoTransform(new_geo_transform)
+    tiff_file.SetProjection(dst_crs.ExportToWkt())
     tiff_file = None
 
 

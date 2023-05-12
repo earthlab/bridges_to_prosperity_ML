@@ -434,10 +434,11 @@ def composite_to_tiles(
 def transform_point(src_wkt, dst_wkt, x, y):
     src_crs = CRS.from_wkt(src_wkt)
     dst_crs = CRS.from_wkt(dst_wkt)
+    print(x, y)
     # Convert source UTM coordinates to latitude and longitude
     transformer_latlon = pyproj.Transformer.from_crs(src_crs, CRS.from_epsg(4326), always_xy=True)
     lon, lat = transformer_latlon.transform(x, y)
-
+    print(lon, lat, 'latlontransform')
     # Convert latitude and longitude to destination UTM zone
     transformer_dest = pyproj.Transformer.from_crs(CRS.from_epsg(4326), dst_crs, always_xy=True)
     transformed_point = transformer_dest.transform(lon, lat)

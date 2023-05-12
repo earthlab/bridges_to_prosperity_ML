@@ -2,7 +2,7 @@ import os
 import shutil
 import warnings
 from glob import glob
-from typing import Union, Tuple
+from typing import Union, List
 import traceback
 
 import geopandas as gpd
@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import rasterio
 import torch
-from osgeo import gdal, osr
+from osgeo import gdal, osr, ogr
 from rasterio import features
 from rasterio.windows import Window
 from shapely.geometry import polygon
@@ -432,11 +432,32 @@ def composite_to_tiles(
 
 def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
     low_res = gdal.Open(low_resolution_path)
+    high_res = gdal.Open(high_resolution_path)
+
     print(low_resolution_path)
     # Access the data
     low_res_band = low_res.GetRasterBand(1)
     low_res_data = low_res_band.ReadAsArray()
-    low_res_lons, low_res_lats = get_geo_locations_from_tif(low_res)
+
+    low_res_geo_transform = low_res.GetProjection()
+    low_res_epsg = get_utm_epsg(low_res_geo_transform[3], low_res_geo_transform[0])
+
+    high_res_geo_transform = high_res.GetProjection()
+    high_res_epsg = get_utm_epsg(high_res_geo_transform[3], high_res_geo_transform[0])
+
+    if low_res_epsg != high_res_epsg:
+        src_ref = osr.SpatialReference()
+        src_ref.ImportFromEPSG(low_res_epsg)
+        dst_ref = osr.SpatialReference()
+        dst_ref.ImportFromEPSG(high_res_epsg)
+        point = ogr.Geometry(ogr.wkbPoint)
+        point.AddPoint(low_res_geo_transform[3], low_res_geo_transform[0])
+        transform = osr.CoordinateTransformation(src_ref, dst_ref)
+        point.Transform(transform)
+        low_res_geo_transform = [point.GetX(), low_res_geo_transform[0], 0, point.GetY(), 0, low_res_geo_transform[5]]
+
+    low_res_lons, low_res_lats = get_geo_locations_from_tif(low_res_geo_transform, low_res.RasterXSize,
+                                                            low_res.RasterYSize)
 
     def lookup_nearest_lon(lon: int):
         yi = np.abs(np.array(low_res_lons) - lon).argmin()
@@ -446,9 +467,8 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
         yi = np.abs(np.array(low_res_lats) - lat).argmin()
         return yi
 
-    high_res = gdal.Open(high_resolution_path)
-
-    high_res_lons, high_res_lats = get_geo_locations_from_tif(high_res)
+    high_res_lons, high_res_lats = get_geo_locations_from_tif(high_res_geo_transform, high_res.RasterXSize,
+                                                              high_res.RasterYSize)
 
     high_res_data = np.zeros((len(high_res_lats), len(high_res_lons)))
 
@@ -462,23 +482,22 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
     return high_res_data
 
 
-def get_geo_locations_from_tif(raster):
+def get_geo_locations_from_tif(geo_transform: List[float], x_size: int, y_size: int):
     # Get geolocation information
-    geo_transform = raster.GetGeoTransform()
     x_size = geo_transform[1]
     y_size = geo_transform[5]
     x_origin = geo_transform[0]
     y_origin = geo_transform[3]
 
-    print(x_size, y_size, x_origin, y_origin, 'geotransform', raster.RasterXSize, raster.RasterYSize)
+    print(x_size, y_size, x_origin, y_origin, 'geotransform', x_size, y_size)
 
     # Get geolocation of each data point
     lats = []
-    for row in range(raster.RasterYSize):
+    for row in range(y_size):
         lats.append(y_origin + (row * y_size))
 
     lons = []
-    for col in range(raster.RasterXSize):
+    for col in range(x_size):
         lons.append(x_origin + (col * x_size))
 
     return lons, lats

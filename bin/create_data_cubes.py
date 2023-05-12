@@ -1,31 +1,20 @@
 import argparse
 import multiprocessing as mp
 import os
-import random
-from glob import glob
-from typing import List, Tuple, Union
+from typing import List
 from argparse import Namespace
 
-import numpy as np
-import pandas as pd
 import rasterio
 import yaml
-from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 from osgeo import gdal, osr, ogr
 from PIL import Image
 
-from bin.composites_to_tiles import create_tiles
-from definitions import REGION_FILE_PATH, COMPOSITE_DIR, TILE_DIR, TRUTH_DIR, SENTINEL_2_DIR, ELEVATION_DIR, SLOPE_DIR,\
-    S3_COMPOSITE_DIR
-from src.api.sentinel2 import initialize_s3_bucket
+from definitions import REGION_FILE_PATH, COMPOSITE_DIR, SENTINEL_2_DIR
 from src.utilities.imaging import numpy_array_to_raster, mgrs_to_bbox, get_utm_epsg
 from src.utilities.config_reader import CONFIG
 from src.utilities.imaging import elevation_to_slope, subsample_geo_tiff
-from src.utilities.coords import get_bridge_locations
-from bin.download_sentinel2 import download_sentinel2
-from bin.sentinel2_to_composite import sentinel2_to_composite
-from bin.download_composites import download_composites, get_requested_locations
+from bin.download_composites import download_composites
 from src.api.sentinel2 import SinergiseSentinelAPI
 from src.api.lp_daac import Elevation as ElevationAPI
 from src.api.osm import getOsm

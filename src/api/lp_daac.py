@@ -332,7 +332,7 @@ class Elevation(BaseAPI):
         point.Transform(transform)
         new_geo_transform = [point.GetX(), 30.87, 0, point.GetY(), 0, -30.87]
         input_tiff_file.SetGeoTransform(new_geo_transform)
-        input_tiff_file.SetProjection(dst_crs)
+        input_tiff_file.SetProjection(dst_crs.ExportToWkt())
         input_tiff_file = None
 
     def _download_bbox(self, bbox: List[float], buffer: float = 0) -> str:

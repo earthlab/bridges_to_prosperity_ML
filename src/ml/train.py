@@ -271,7 +271,7 @@ def main_worker(gpu, ngpus_per_node, args):
             save_checkpoint(
                 {
                     'epoch': epoch + 1,
-                    'arch': args.arch,
+                    'arch': args.architecture,
                     'state_dict': model.state_dict(),  # this was full of NaN with all the training data
                     'best_acc1': BEST_ACC1,
                     'total_acc': acc1,

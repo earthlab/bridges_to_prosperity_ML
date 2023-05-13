@@ -92,9 +92,9 @@ def mgrs_task(args: Namespace):
     region = args.region
     district = args.district
 
-    #multivariate_file = MultiVariateCompositeFile(region, district, rgb_file.mgrs)
-    # if os.path.exists(multivariate_file.archive_path):
-    #     return
+    multivariate_file = MultiVariateCompositeFile(region, district, rgb_file.mgrs)
+    if os.path.exists(multivariate_file.archive_path):
+        return
 
     ir_file = OpticalComposite(region, district, rgb_file.mgrs, ['B08'])
     assert os.path.isfile(ir_file.archive_path), f'IR composite should already exist for {ir_file.archive_path}'
@@ -185,7 +185,6 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
         download_composites(region, [district], s3_bucket_name, cores, mgrs=mgrs)
 
         # Download any s2 data that doesn't exist
-        # TODO: Find a way to not look for overlapping tiles if files already exist
         #s2_dir = os.path.join(SENTINEL_2_DIR, region, district)
         #os.makedirs(s2_dir, exist_ok=True)
         #for date in dates:
@@ -199,11 +198,15 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
         task_args = []
         for rgb_comp in rgb_composites:
             task_args.append(Namespace(rgb_comp=rgb_comp, region=region, district=district))
-        process_map(
-            mgrs_task,
-            task_args,
-            max_workers=cores
-        )
+
+        for arg in task_args:
+            mgrs_task(arg)
+
+        # process_map(
+        #     mgrs_task,
+        #     task_args,
+        #     max_workers=cores
+        # )
 
 
 if __name__ == "__main__":

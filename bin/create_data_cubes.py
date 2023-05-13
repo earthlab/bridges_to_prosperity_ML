@@ -19,6 +19,7 @@ from bin.sentinel2_to_composite import sentinel2_to_composite
 from src.api.sentinel2 import SinergiseSentinelAPI
 from src.api.lp_daac import Elevation as ElevationAPI
 from src.api.osm import getOsm
+from src.utilities.coords import tiff_to_bbox
 
 from file_types import OpticalComposite, Elevation as ElevationFile, Slope as SlopeFile, OSM as OSMFile,\
     MultiVariateComposite as MultiVariateCompositeFile
@@ -92,8 +93,8 @@ def mgrs_task(args: Namespace):
     district = args.district
 
     multivariate_file = MultiVariateCompositeFile(region, district, rgb_file.mgrs)
-    if os.path.exists(multivariate_file.archive_path):
-        return
+    # if os.path.exists(multivariate_file.archive_path):
+    #     return
 
     ir_file = OpticalComposite(region, district, rgb_file.mgrs, ['B08'])
     assert os.path.isfile(ir_file.archive_path), f'IR composite should already exist for {ir_file.archive_path}'
@@ -103,13 +104,8 @@ def mgrs_task(args: Namespace):
         combine_bands(rgb_file.archive_path, all_bands_file.archive_path, new_bands=3)
         combine_bands(ir_file.archive_path, all_bands_file.archive_path, new_bands=1)
 
-    # fix_s2_projection(all_bands_file.archive_path)
-    #
-    # mgrs_lat_lon_bbox = mgrs_to_bbox(all_bands_file.mgrs)
-    # epsg_code = get_utm_epsg(mgrs_lat_lon_bbox[3], mgrs_lat_lon_bbox[0])
-    # proj = osr.SpatialReference()
-    # proj.ImportFromEPSG(epsg_code)
-    # projection = proj.ExportToWkt()
+    multivariate_tiff = gdal.Open(multivariate_file.archive_path)
+    projection = multivariate_tiff.GetProjection()
 
     all_bands_tiff_file = gdal.Open(all_bands_file.archive_path)
     high_res_geo_reference = all_bands_tiff_file.GetGeoTransform()
@@ -119,8 +115,8 @@ def mgrs_task(args: Namespace):
     os.makedirs(os.path.dirname(mgrs_elevation_outfile.archive_path), exist_ok=True)
     if not os.path.exists(mgrs_elevation_outfile.archive_path):
         # Clip to bbox so we can convert to meters
-        mgrs_bbox = mgrs_to_bbox(rgb_file.mgrs)
-        print(mgrs_bbox)
+        bbox = tiff_to_bbox(rgb_file.archive_path)
+        mgrs_bbox = [bbox[3][1], bbox[3][0], bbox[1][1], bbox[1][0]]
         elevation_api.download_bbox(mgrs_elevation_outfile.archive_path, mgrs_bbox, buffer=5000)
         up_sample_elevation = True
 

@@ -7,7 +7,6 @@ from src.utilities.imaging import get_utm_epsg, mgrs_to_bbox
 
 from file_types import OpticalComposite
 from affine import Affine
-from osgeo import osr, ogr
 
 TAGS_WATER = {
     'water': True,
@@ -26,29 +25,9 @@ TAGS_BOUNDARY = {
 def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
     assert os.path.isfile(s2_tiff), f'{s2_tiff} DNE'
     # the bounding box that shapely uses is a set of 4 (x,y) pairs, ox wants ymax, ymin, xmax, xmin
-    #(tl,tr,br,bl) = tiff_to_bbox(s2_tiff)
-    #bbox = [tl[1], br[1], tl[0], br[0]]
-    optical_composite = OpticalComposite.create(s2_tiff)
-    mgrs_bbox = mgrs_to_bbox(optical_composite.mgrs)
-    bbox = [mgrs_bbox[3], mgrs_bbox[1], mgrs_bbox[2], mgrs_bbox[0]]
-
-    epsg_code = get_utm_epsg(mgrs_bbox[3], mgrs_bbox[0])
-
-    src_crs = osr.SpatialReference()
-    src_crs.ImportFromEPSG(4326)  # Lat / lon
-
-    dst_crs = osr.SpatialReference()
-    dst_crs.ImportFromEPSG(epsg_code)
-
-    point = ogr.Geometry(ogr.wkbPoint)
-    point.AddPoint(mgrs_bbox[1], mgrs_bbox[0])
-    transform = osr.CoordinateTransformation(src_crs, dst_crs)
-    point.Transform(transform)
-
-    top_left_lat = point.GetY() + (10980 * 10)
-    top_left_lon = point.GetX()
-
-    new_transform = Affine(10, 0, top_left_lon, 0, -10, top_left_lat)
+    (tl,tr,br,bl) = tiff_to_bbox(s2_tiff)
+    bbox = [tl[1], br[1], br[0], tl[0]]
+    epsg_code = get_utm_epsg(tl[1], tl[0])
 
     print(bbox)
     # Call to ox api to get geometries for specific tags
@@ -82,7 +61,7 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
                 shapes=water_shapes,
                 fill=0,
                 out=dst.read(1),
-                transform=new_transform
+                transform=src.transform
             )
             print(water_arr)
             if debug: print('Writing water to hypercube tiff')
@@ -93,7 +72,7 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
                 shapes=boundary_shapes,
                 fill=0,
                 out=dst.read(2),
-                transform=new_transform
+                transform=src.transform
             )
             dst.write_band(2, boundary_arr)
             print('boundary set', set(boundary_arr.flatten()))

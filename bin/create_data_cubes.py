@@ -57,33 +57,33 @@ def combine_bands(source_file: str, target_file: str, new_bands: int):
                     dst.write_band(i + 1, src_file.read(i+1))
 
 
-def fix_s2_projection(input_file: str, mgrs: str = None):
-    tiff_file = gdal.Open(input_file, gdal.GA_Update)
-    if mgrs is None:
-        optical_composite = OpticalComposite.create(input_file)
-        mgrs = optical_composite.mgrs
-    mgrs_bbox = mgrs_to_bbox(mgrs)
-
-    epsg_code = get_utm_epsg(mgrs_bbox[3], mgrs_bbox[0])
-
-    src_crs = osr.SpatialReference()
-    src_crs.ImportFromEPSG(4326)  # Lat / lon
-
-    dst_crs = osr.SpatialReference()
-    dst_crs.ImportFromEPSG(epsg_code)
-
-    point = ogr.Geometry(ogr.wkbPoint)
-    point.AddPoint(mgrs_bbox[1], mgrs_bbox[0])
-    transform = osr.CoordinateTransformation(src_crs, dst_crs)
-    point.Transform(transform)
-
-    top_left_lat = point.GetY() + (10980 * 10)
-    top_left_lon = point.GetX()
-
-    new_geo_transform = [top_left_lon, 10, 0, top_left_lat, 0, -10]
-    tiff_file.SetGeoTransform(new_geo_transform)
-    tiff_file.SetProjection(dst_crs.ExportToWkt())
-    tiff_file = None
+# def fix_s2_projection(input_file: str, mgrs: str = None):
+#     tiff_file = gdal.Open(input_file, gdal.GA_Update)
+#     if mgrs is None:
+#         optical_composite = OpticalComposite.create(input_file)
+#         mgrs = optical_composite.mgrs
+#     mgrs_bbox = mgrs_to_bbox(mgrs)
+#
+#     epsg_code = get_utm_epsg(mgrs_bbox[3], mgrs_bbox[0])
+#
+#     src_crs = osr.SpatialReference()
+#     src_crs.ImportFromEPSG(4326)  # Lat / lon
+#
+#     dst_crs = osr.SpatialReference()
+#     dst_crs.ImportFromEPSG(epsg_code)
+#
+#     point = ogr.Geometry(ogr.wkbPoint)
+#     point.AddPoint(mgrs_bbox[1], mgrs_bbox[0])
+#     transform = osr.CoordinateTransformation(src_crs, dst_crs)
+#     point.Transform(transform)
+#
+#     top_left_lat = point.GetY() + (10980 * 10)
+#     top_left_lon = point.GetX()
+#
+#     new_geo_transform = [top_left_lon, 10, 0, top_left_lat, 0, -10]
+#     tiff_file.SetGeoTransform(new_geo_transform)
+#     tiff_file.SetProjection(dst_crs.ExportToWkt())
+#     tiff_file = None
 
 
 def mgrs_task(args: Namespace):
@@ -199,12 +199,13 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
         task_args = []
         for rgb_comp in rgb_composites:
             task_args.append(Namespace(rgb_comp=rgb_comp, region=region, district=district))
-
-        process_map(
-            mgrs_task,
-            task_args,
-            max_workers=cores
-        )
+        for arg in task_args:
+            mgrs_task(arg)
+        # process_map(
+        #     mgrs_task,
+        #     task_args,
+        #     max_workers=cores
+        # )
 
 
 if __name__ == "__main__":

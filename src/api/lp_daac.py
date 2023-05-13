@@ -322,7 +322,7 @@ class Elevation(BaseAPI):
 
         geo_transform = input_tiff_file.GetGeoTransform()
         print(geo_transform, 'gglatlon')
-        dst_epsg = rasterio.CRS.from_wkt(input_tiff_file.GetProjection()).to_epsg()
+        dst_epsg = get_utm_epsg(geo_transform[3], geo_transform[0])
         dst_crs = osr.SpatialReference()
         dst_crs.ImportFromEPSG(dst_epsg)
 

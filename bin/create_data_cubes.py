@@ -92,7 +92,7 @@ def mgrs_task(args: Namespace):
     region = args.region
     district = args.district
 
-    multivariate_file = MultiVariateCompositeFile(region, district, rgb_file.mgrs)
+    #multivariate_file = MultiVariateCompositeFile(region, district, rgb_file.mgrs)
     # if os.path.exists(multivariate_file.archive_path):
     #     return
 
@@ -104,7 +104,7 @@ def mgrs_task(args: Namespace):
         combine_bands(rgb_file.archive_path, all_bands_file.archive_path, new_bands=3)
         combine_bands(ir_file.archive_path, all_bands_file.archive_path, new_bands=1)
 
-    multivariate_tiff = gdal.Open(multivariate_file.archive_path)
+    multivariate_tiff = gdal.Open(rgb_file.archive_path)
     projection = multivariate_tiff.GetProjection()
 
     all_bands_tiff_file = gdal.Open(all_bands_file.archive_path)
@@ -199,13 +199,11 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
         task_args = []
         for rgb_comp in rgb_composites:
             task_args.append(Namespace(rgb_comp=rgb_comp, region=region, district=district))
-        for arg in task_args:
-            mgrs_task(arg)
-        # process_map(
-        #     mgrs_task,
-        #     task_args,
-        #     max_workers=cores
-        # )
+        process_map(
+            mgrs_task,
+            task_args,
+            max_workers=cores
+        )
 
 
 if __name__ == "__main__":

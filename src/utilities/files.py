@@ -80,7 +80,7 @@ def concat_geoloc(indir):
     dfs = []
     for mgrs_dir in os.listdir(indir):
         df = pd.read_csv(os.path.join(indir, mgrs_dir, 'multivariate_geoloc.csv'))
-        dfs.append(dfs)
+        dfs.append(df)
     dfss = pd.concat(dfs, ignore_index=True)
     filtered_df = dfss.drop_duplicates(subset='bbox')
     dfss.to_csv(os.path.join(indir, TileMatch().name))

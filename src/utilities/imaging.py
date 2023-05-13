@@ -621,3 +621,14 @@ def validate_tiff_to_bbox(indir: str):
                     #and abs(util_bbox[1][0] - mgrs_bbox[3]) < 0.001 and abs(util_bbox[1][1] - mgrs_bbox[2]) < 0.001
             ):
                 print(f"Didn't pass: {file}, mgrs: {mgrs_bbox}, util: {util_bbox}")
+
+
+def find_trans_utm(indir: str):
+    for file in os.listdir(indir):
+        ft = MultiVariateComposite.create(file)
+        if ft is not None:
+            mgrs_bbox = mgrs_to_bbox(ft.mgrs)
+            utm_bl = get_utm_epsg(mgrs_bbox[1], mgrs_bbox[0])
+            utm_tr = get_utm_epsg(mgrs_bbox[3], mgrs_bbox[0])
+            if utm_tr != utm_bl:
+                print(file)

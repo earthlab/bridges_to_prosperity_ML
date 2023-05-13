@@ -184,11 +184,12 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
     for band in tqdm(bands, desc=f'Processing {coord}', leave=True, position=1, total=len(bands), disable=pbar):
         band_files = Sentinel2Tile.find_files(s2_dir, [band], recursive=True)
         assert len(band_files) > 1, f'{s2_dir}'
+
+        # TODO: Keep looping here until crs and transform are found
         with rasterio.open(band_files[0], 'r', driver='JP2OpenJPEG') as rf:
             g_nrows, g_ncols = rf.meta['width'], rf.meta['height']
             if rf.crs is None:
-                bbox = mgrs_to_bbox(coord)
-                crs = rasterio.crs.CRS().from_wkt(wkt=resolve_crs(bbox[3], bbox[0]).ExportToWkt())
+                crs = rf.crs
             else:
                 crs = rf.crs
             transform = rf.transform

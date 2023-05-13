@@ -103,13 +103,13 @@ def mgrs_task(args: Namespace):
         combine_bands(rgb_file.archive_path, all_bands_file.archive_path, new_bands=3)
         combine_bands(ir_file.archive_path, all_bands_file.archive_path, new_bands=1)
 
-    fix_s2_projection(all_bands_file.archive_path)
-
-    mgrs_lat_lon_bbox = mgrs_to_bbox(all_bands_file.mgrs)
-    epsg_code = get_utm_epsg(mgrs_lat_lon_bbox[3], mgrs_lat_lon_bbox[0])
-    proj = osr.SpatialReference()
-    proj.ImportFromEPSG(epsg_code)
-    projection = proj.ExportToWkt()
+    # fix_s2_projection(all_bands_file.archive_path)
+    #
+    # mgrs_lat_lon_bbox = mgrs_to_bbox(all_bands_file.mgrs)
+    # epsg_code = get_utm_epsg(mgrs_lat_lon_bbox[3], mgrs_lat_lon_bbox[0])
+    # proj = osr.SpatialReference()
+    # proj.ImportFromEPSG(epsg_code)
+    # projection = proj.ExportToWkt()
 
     all_bands_tiff_file = gdal.Open(all_bands_file.archive_path)
     high_res_geo_reference = all_bands_tiff_file.GetGeoTransform()

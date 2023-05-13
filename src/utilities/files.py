@@ -107,6 +107,7 @@ def fix_lookup(indir: str):
 
 
 def fix_projection(indir: str, fix):
+    i = 0
     for file in os.listdir(indir):
         f = OpticalComposite.create(file)
         if f is not None:
@@ -120,3 +121,5 @@ def fix_projection(indir: str, fix):
             c.ImportFromEPSG(crs)
             g.SetProjection(c.ExportToWkt())
             g = None
+            i += 1
+    print(f'Fixed {i} files')

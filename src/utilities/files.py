@@ -1,4 +1,5 @@
 import os
+import json
 from typing import List
 
 from geopandas import GeoDataFrame
@@ -8,6 +9,9 @@ from src.utilities.imaging import fix_crs
 from file_types import OpticalComposite, TileMatch
 import shutil
 from src.api.sentinel2 import initialize_s3_bucket
+from definitions import B2P_DIR
+import rasterio
+from osgeo import gdal, osr
 
 
 def find_directories(root_dir: str, file_extension: str) -> List[str]:
@@ -84,3 +88,35 @@ def concat_geoloc(indir):
     dfss = pd.concat(dfs, ignore_index=True)
     filtered_df = dfss.drop_duplicates(subset='bbox')
     dfss.to_csv(os.path.join(indir, TileMatch().name))
+
+
+def fix_lookup(indir: str):
+    fix = {}
+    for dir in os.listdir(indir):
+        mgrs = dir
+        for date_dir in os.listdir(os.path.join(indir, dir)):
+            for file in os.listdir(os.path.join(indir, dir, date_dir)):
+                if file.endswith('.jp2'):
+                    with rasterio.open(os.path.join(indir, dir, date_dir, file), 'r', driver='JP2OpenJPEG') as rf:
+                        crs = rf.crs
+                        transform = rf.transform
+                        fix[mgrs] = {'tran': [transform[2], transform[0], transform[1],
+                                              transform[5], transform[3], transform[4]],
+                                     'crs': int(str(crs).split(':')[1])}
+    return fix
+
+
+def fix_projection(indir: str, fix):
+    for file in os.listdir(indir):
+        f = OpticalComposite.create(file)
+        if f is not None:
+            mgrs = f.mgrs
+            tran = fix[mgrs]['tran']
+            crs = fix[mgrs]['crs']
+
+            g = gdal.Open(os.path.join(indir, file))
+            g.SetGeoTransform(tran)
+            c = osr.SpatialReference()
+            c.ImportFromEPSG(crs)
+            g.SetProjection(c)
+            g = None

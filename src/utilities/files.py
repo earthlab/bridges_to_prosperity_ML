@@ -118,5 +118,5 @@ def fix_projection(indir: str, fix):
             g.SetGeoTransform(tran)
             c = osr.SpatialReference()
             c.ImportFromEPSG(crs)
-            g.SetProjection(c)
+            g.SetProjection(c.ExportToWkt())
             g = None

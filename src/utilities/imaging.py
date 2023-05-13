@@ -260,8 +260,6 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
                         )
                     os.remove(slice_file_path)
 
-        shutil.rmtree(slice_dir)
-
     # Combine Bands
     n_bands = len(bands)
     with rasterio.open(
@@ -281,6 +279,8 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
             with rasterio.open(band_path, 'r', driver='GTiff') as rf:
                 wf.write(rf.read(1), indexes=j)
             os.remove(band_path)
+
+    shutil.rmtree(slice_dir)
 
     return optical_composite_file.archive_path
 

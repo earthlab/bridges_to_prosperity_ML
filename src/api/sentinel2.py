@@ -355,8 +355,8 @@ class SinergiseSentinelAPI:
             for _ in tqdm.tqdm(pool.imap_unordered(_download_task, args), total=len(args)):
                 pass
 
-    @staticmethod
-    def _lookup_mgrs(bbox: List[float]) -> Union[List[str], None]:
+    def _lookup_mgrs(self, bbox: List[float]) -> Union[List[str], None]:
+        self._create_mgrs_index()
         with open(MGRS_INDEX_FILE, 'r') as f:
             mgrs_index = json.load(f)
 
@@ -364,12 +364,8 @@ class SinergiseSentinelAPI:
             return mgrs_index[bbox]
         return None
 
-    @staticmethod
-    def _write_mgrs_index(bbox: List[float], mgrs: List[str]) -> None:
-        if not os.path.exists(MGRS_INDEX_FILE):
-            with open(MGRS_INDEX_FILE, 'w+') as f:
-                json.dump({}, f)
-
+    def _write_mgrs_index(self, bbox: List[float], mgrs: List[str]) -> None:
+        self._create_mgrs_index()
         with open(MGRS_INDEX_FILE, 'r') as f:
             mgrs_index = json.load(f)
 
@@ -377,6 +373,12 @@ class SinergiseSentinelAPI:
 
         with open(MGRS_INDEX_FILE, 'w') as f:
             json.dump(mgrs_index, f)
+
+    @staticmethod
+    def _create_mgrs_index():
+        if not os.path.exists(MGRS_INDEX_FILE):
+            with open(MGRS_INDEX_FILE, 'w+') as f:
+                json.dump({}, f)
 
     def _find_available_files(self, bounds: List[float], start_date: str, end_date: str,
                               bands: List[str]) -> List[Tuple[str, str]]:

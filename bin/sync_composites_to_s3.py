@@ -14,11 +14,12 @@ from definitions import COMPOSITE_DIR, S3_COMPOSITE_DIR
 from src.api.sentinel2 import initialize_s3_bucket
 from src.utilities.config_reader import CONFIG
 
-from file_types import OpticalComposite
+from file_types import OpticalComposite, MultiVariateComposite
 
 
 def sync_s3(root_composite_dir: str, s3_bucket_name: str, s3_directory: str, bands: List[str] = None):
     comp_files = OpticalComposite.find_files(root_composite_dir, bands=bands, recursive=True)
+    comp_files += MultiVariateComposite.find_files(root_composite_dir, recursive=True)
     s3 = initialize_s3_bucket(s3_bucket_name)
 
     for filename in tqdm(comp_files, leave=True, position=0):

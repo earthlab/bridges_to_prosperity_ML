@@ -4,8 +4,6 @@ import rasterio
 from rasterio import features
 from src.utilities.coords import tiff_to_bbox
 from src.utilities.imaging import get_utm_epsg
-import re
-from osgeo import gdal
 
 TAGS_WATER = {
     'water': True,
@@ -21,30 +19,13 @@ TAGS_BOUNDARY = {
 """
 
 
-def get_epsg_from_projection(projection):
-    # Regular expression pattern to match EPSG code
-    pattern = re.compile(r'EPSG:(\d+)', re.IGNORECASE)
-
-    # Search for the EPSG code in the projection string
-    match = re.search(pattern, projection)
-
-    if match:
-        # Return the EPSG code
-        return match.group(1)
-
-    # If no EPSG code is found, return None or raise an exception, based on your needs
-    return None
-
-
 def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
     assert os.path.isfile(s2_tiff), f'{s2_tiff} DNE'
     # the bounding box that shapely uses is a set of 4 (x,y) pairs, ox wants ymax, ymin, xmax, xmin
     (tl,tr,br,bl) = tiff_to_bbox(s2_tiff)
-    bbox = [tl[1], br[1], br[0], tl[0]]
+    bbox = [tl[0], br[0], br[1], tl[1]]
+    epsg_code = get_utm_epsg(tl[1], tl[0])
 
-    s2_tiff_file = gdal.Open(s2_tiff)
-    epsg_code = get_epsg_from_projection(s2_tiff_file.GetProjection())
-    print(epsg_code)
     print(bbox)
     # Call to ox api to get geometries for specific tags
     if debug: print('Getting water from osm')

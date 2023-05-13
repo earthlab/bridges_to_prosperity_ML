@@ -24,6 +24,9 @@ CORES = mp.cpu_count() - 1
 def create_dset_csv(matched_df: pd.DataFrame, ratio: float, tile_dir: str = TILE_DIR) -> None:
     assert 1 > ratio > 0
 
+    # TODO: Need to make sure redundant bridge tiles are handled correctly. Should just filter out any redundancies in
+    #  memory here first. Also make sure there are no redundant bbox in negative training data
+
     # create training sets and validation sets
     # Separate the training and validation into separate files
     b_ix = matched_df.index[matched_df['is_bridge']].tolist()

@@ -607,3 +607,15 @@ def fix_crs(in_dir: str):
             tiff_file.SetProjection(crs.ExportToWkt())
             print(int(pyproj.Proj(crs.ExportToWkt()).crs.to_epsg()))
             tiff_file = None
+
+
+def validate_tiff_to_bbox(indir: str):
+    for file in os.listdir(indir):
+        ft = MultiVariateComposite.create(file)
+        if ft is not None:
+            mgrs_bbox = mgrs_to_bbox(ft.mgrs)
+            util_bbox = tiff_to_bbox(os.path.join(indir, file))
+            if not (abs(util_bbox[3][0] - mgrs_bbox[1]) < 0.001 and abs(util_bbox[3][1] - mgrs_bbox[0]) < 0.001 and
+                abs(util_bbox[1][0] - mgrs_bbox[3]) < 0.001 and abs(util_bbox[1][1] - mgrs_bbox[2]) < 0.001
+            ):
+                print(f"Didn't pass: {file}, mgrs: {mgrs_bbox}, util: {util_bbox}")

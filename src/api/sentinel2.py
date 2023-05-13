@@ -360,8 +360,8 @@ class SinergiseSentinelAPI:
         with open(MGRS_INDEX_FILE, 'r') as f:
             mgrs_index = json.load(f)
 
-        if bbox in mgrs_index:
-            return mgrs_index[bbox]
+        if tuple(bbox) in mgrs_index:
+            return mgrs_index[tuple(bbox)]
         return None
 
     def _write_mgrs_index(self, bbox: List[float], mgrs: List[str]) -> None:
@@ -369,7 +369,7 @@ class SinergiseSentinelAPI:
         with open(MGRS_INDEX_FILE, 'r') as f:
             mgrs_index = json.load(f)
 
-        mgrs_index[bbox] = mgrs
+        mgrs_index[tuple(bbox)] = mgrs
 
         with open(MGRS_INDEX_FILE, 'w') as f:
             json.dump(mgrs_index, f)

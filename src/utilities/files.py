@@ -55,7 +55,7 @@ def fix_file_name_and_crs(in_dir: str, region: str, district: str):
                                                  bands=['B02', 'B03', 'B04'])
             shutil.copy(os.path.join(in_dir, file), optical_composite.archive_path)
 
-    #fix_crs(in_dir)
+    fix_crs(in_dir)
     bucket = initialize_s3_bucket()
     for file in os.listdir(in_dir):
         optical_composite = OpticalComposite.create(file)
@@ -63,3 +63,15 @@ def fix_file_name_and_crs(in_dir: str, region: str, district: str):
             bucket.upload_file(Key=os.path.join('composites', optical_composite.region, optical_composite.district,
                                                 optical_composite.name),
                                Filename=os.path.join(in_dir, file))
+
+
+def filter_and_write_csv(input_file, output_file, column_name):
+    # Read the CSV file into a pandas DataFrame
+    df = pd.read_csv(input_file)
+
+    # Filter the DataFrame to remove duplicate values in the specified column
+    filtered_df = df.drop_duplicates(subset=column_name)
+
+    # Write the filtered DataFrame to a new CSV file
+    filtered_df.to_csv(output_file, index=False)
+

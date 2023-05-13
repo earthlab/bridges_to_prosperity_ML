@@ -15,6 +15,7 @@ from src.utilities.imaging import numpy_array_to_raster, mgrs_to_bbox, get_utm_e
 from src.utilities.config_reader import CONFIG
 from src.utilities.imaging import elevation_to_slope, subsample_geo_tiff
 from bin.download_composites import download_composites
+from bin.sentinel2_to_composite import sentinel2_to_composite
 from src.api.sentinel2 import SinergiseSentinelAPI
 from src.api.lp_daac import Elevation as ElevationAPI
 from src.api.osm import getOsm
@@ -80,6 +81,7 @@ def fix_s2_projection(input_file: str, mgrs: str = None):
 
     new_geo_transform = [top_left_lon, 10, 0, top_left_lat, 0, -10]
     tiff_file.SetGeoTransform(new_geo_transform)
+    tiff_file.SetProjection(dst_crs.ExportToWkt())
     tiff_file = None
 
 
@@ -188,19 +190,16 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
 
         # Download any s2 data that doesn't exist
         # TODO: Find a way to not look for overlapping tiles if files already exist
-        s2_dir = os.path.join(SENTINEL_2_DIR, region, district)
-        os.makedirs(s2_dir, exist_ok=True)
-        # for date in dates:
-        #     sentinel2_api.download(bbox, 100, s2_dir, date[0], date[1], bands=['B08'])
+        #s2_dir = os.path.join(SENTINEL_2_DIR, region, district)
+        #os.makedirs(s2_dir, exist_ok=True)
+        #for date in dates:
+        #    sentinel2_api.download(bbox, 100, s2_dir, date[0], date[1], bands=['B08'])
 
-        print('Making ir composites')
         #sentinel2_to_composite(slices, cores, bands=['B08'], region=region, districts=[district])
 
         composite_dir = os.path.join(COMPOSITE_DIR, region, district)
-
         rgb_composites = OpticalComposite.find_files(composite_dir, ['B02', 'B03', 'B04'], recursive=True)
 
-        # TODO: Parallelize this
         task_args = []
         for rgb_comp in rgb_composites:
             task_args.append(Namespace(rgb_comp=rgb_comp, region=region, district=district))

@@ -260,8 +260,6 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
                         )
                     os.remove(slice_file_path)
 
-            shutil.rmtree(slice_dir)
-
     # Combine Bands
     n_bands = len(bands)
     with rasterio.open(
@@ -281,6 +279,8 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
             with rasterio.open(band_path, 'r', driver='GTiff') as rf:
                 wf.write(rf.read(1), indexes=j)
             os.remove(band_path)
+
+    shutil.rmtree(slice_dir)
 
     return optical_composite_file.archive_path
 
@@ -494,19 +494,21 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
 
 def get_geo_locations_from_tif(geo_transform: List[float], x_size: int, y_size: int):
     # Get geolocation information
+    dx = geo_transform[1]
+    dy = geo_transform[5]
     x_origin = geo_transform[0]
     y_origin = geo_transform[3]
 
-    print(x_size, y_size, x_origin, y_origin, 'geotransform', x_size, y_size)
+    print(dx, dy, x_origin, y_origin, 'geotransform', x_size, y_size)
 
     # Get geolocation of each data point
     lats = []
     for row in range(y_size):
-        lats.append(y_origin + (row * y_size))
+        lats.append(y_origin + (row * dy))
 
     lons = []
     for col in range(x_size):
-        lons.append(x_origin + (col * x_size))
+        lons.append(x_origin + (col * dx))
 
     return lons, lats
 

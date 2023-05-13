@@ -363,6 +363,7 @@ class Elevation(BaseAPI):
             print(file_names)
             task_args = []
             for file_name in file_names:
+                print((os.path.join(self.BASE_URL, file_name)))
                 task_args.append(
                     Namespace(
                         link=(os.path.join(self.BASE_URL, file_name)),

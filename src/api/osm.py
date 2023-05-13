@@ -3,7 +3,7 @@ import osmnx as ox
 import rasterio
 from rasterio import features
 from src.utilities.coords import tiff_to_bbox
-from src.utilities.imaging import get_utm_epsg
+from osgeo import gdal
 
 TAGS_WATER = {
     'water': True,
@@ -24,7 +24,8 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
     # the bounding box that shapely uses is a set of 4 (x,y) pairs, ox wants ymax, ymin, xmax, xmin
     (tl,tr,br,bl) = tiff_to_bbox(s2_tiff)
     bbox = [tl[0], br[0], br[1], tl[1]]
-    epsg_code = get_utm_epsg(tl[0], tl[1])
+    s2_tiff_file = gdal.Open(s2_tiff)
+    epsg_code = rasterio.CRS.from_wkt(s2_tiff_file.GetProjection()).to_epsg()
 
     print(bbox)
     # Call to ox api to get geometries for specific tags

@@ -260,7 +260,7 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
                         )
                     os.remove(slice_file_path)
 
-            shutil.rmtree(slice_dir)
+        shutil.rmtree(slice_dir)
 
     # Combine Bands
     n_bands = len(bands)

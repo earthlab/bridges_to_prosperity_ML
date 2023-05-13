@@ -6,6 +6,7 @@ from argparse import ArgumentParser
 from definitions import SENTINEL_2_DIR
 from src.api.sentinel2 import SinergiseSentinelAPI
 
+
 # TODO: Add bands parameter
 def download_sentinel2(output_dir, bounds, start_date, end_date, buffer):
     api = SinergiseSentinelAPI()

@@ -13,6 +13,7 @@ MULTIVARIATE_DIR = os.path.join(B2P_DIR, 'data', 'multivariate')
 TORCH_DIR = os.path.join(B2P_DIR, 'data', 'torch')
 OSM_DIR = os.path.join(B2P_DIR, 'data', 'osm')
 SECRETS_FILE_PATH = os.path.join(B2P_DIR, 'secrets.yaml')
+MGRS_INDEX_FILE = os.path.join(B2P_DIR, 'data', 'mgrs_index.json')
 
 # S3
 S3_COMPOSITE_DIR = 'composites'

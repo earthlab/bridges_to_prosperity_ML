@@ -1,4 +1,6 @@
 import getpass
+import json
+
 import botocore
 import multiprocessing as mp
 import os
@@ -7,12 +9,14 @@ import re
 import subprocess as sp
 from argparse import Namespace
 from datetime import datetime, timedelta
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import boto3
 import geojson
 import tqdm
 from shapely.geometry import Polygon
+
+from definitions import MGRS_INDEX_FILE
 from src.utilities.config_reader import CONFIG
 
 from file_types import Sentinel2Tile, Sentinel2Cloud
@@ -351,6 +355,29 @@ class SinergiseSentinelAPI:
             for _ in tqdm.tqdm(pool.imap_unordered(_download_task, args), total=len(args)):
                 pass
 
+    @staticmethod
+    def _lookup_mgrs(bbox: List[float]) -> Union[List[str], None]:
+        with open(MGRS_INDEX_FILE, 'r') as f:
+            mgrs_index = json.load(f)
+
+        if bbox in mgrs_index:
+            return mgrs_index[bbox]
+        return None
+
+    @staticmethod
+    def _write_mgrs_index(bbox: List[float], mgrs: List[str]) -> None:
+        if not os.path.exists(MGRS_INDEX_FILE):
+            with open(MGRS_INDEX_FILE, 'w+') as f:
+                json.dump({}, f)
+
+        with open(MGRS_INDEX_FILE, 'r') as f:
+            mgrs_index = json.load(f)
+
+        mgrs_index[bbox] = mgrs
+
+        with open(MGRS_INDEX_FILE, 'w') as f:
+            json.dump(mgrs_index, f)
+
     def _find_available_files(self, bounds: List[float], start_date: str, end_date: str,
                               bands: List[str]) -> List[Tuple[str, str]]:
         """
@@ -370,7 +397,10 @@ class SinergiseSentinelAPI:
             ref_date = ref_date + timedelta(days=1)
 
         info = []
-        mgrs_grids = self._find_overlapping_mgrs(bounds)
+        mgrs_grids = self._lookup_mgrs(bbox=bounds)
+        if mgrs_grids is None:
+            mgrs_grids = self._find_overlapping_mgrs(bounds)
+            self._write_mgrs_index(bounds, mgrs_grids)
 
         for grid_string in mgrs_grids:
             utm_code = grid_string[:2]

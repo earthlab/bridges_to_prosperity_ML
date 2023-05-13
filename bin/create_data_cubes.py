@@ -199,14 +199,14 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
         for rgb_comp in rgb_composites:
             task_args.append(Namespace(rgb_comp=rgb_comp, region=region, district=district))
 
-        for arg in task_args:
-            mgrs_task(arg)
+        # for arg in task_args:
+        #     mgrs_task(arg)
 
-        # process_map(
-        #     mgrs_task,
-        #     task_args,
-        #     max_workers=cores
-        # )
+        process_map(
+            mgrs_task,
+            task_args,
+            max_workers=cores
+        )
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ from geopandas import GeoDataFrame
 from shapely.geometry import Polygon
 import pandas as pd
 from src.utilities.imaging import fix_crs
-from file_types import OpticalComposite
+from file_types import OpticalComposite, TileMatch
 import shutil
 from src.api.sentinel2 import initialize_s3_bucket
 
@@ -75,3 +75,12 @@ def filter_and_write_csv(input_file, output_file, column_name):
     # Write the filtered DataFrame to a new CSV file
     filtered_df.to_csv(output_file, index=False)
 
+
+def concat_geoloc(indir):
+    dfs = []
+    for mgrs_dir in os.listdir(indir):
+        df = pd.read_csv(os.path.join(indir, mgrs_dir, 'multivariate_geoloc.csv'))
+        dfs.append(dfs)
+    dfss = pd.concat(dfs, ignore_index=True)
+    filtered_df = dfss.drop_duplicates(subset='bbox')
+    dfss.to_csv(os.path.join(indir, TileMatch().name))

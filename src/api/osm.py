@@ -24,7 +24,7 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
     # the bounding box that shapely uses is a set of 4 (x,y) pairs, ox wants ymax, ymin, xmax, xmin
     (tl,tr,br,bl) = tiff_to_bbox(s2_tiff)
     bbox = [tl[0], br[0], br[1], tl[1]]
-    epsg_code = get_utm_epsg(tl[1], tl[0])
+    epsg_code = get_utm_epsg(tl[0], tl[1])
 
     print(bbox)
     # Call to ox api to get geometries for specific tags

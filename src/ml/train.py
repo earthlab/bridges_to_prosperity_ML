@@ -350,7 +350,7 @@ def validate(val_loader, model, criterion, args):
                     target = target.to('mps')
                 if torch.cuda.is_available():
                     target = target.cuda(args.gpu, non_blocking=True)
-
+                images = images.float()
                 # compute output
                 output = model(images)
                 loss = criterion(output, target)

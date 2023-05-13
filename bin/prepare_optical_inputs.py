@@ -30,7 +30,7 @@ def create_dset_csv(matched_df: pd.DataFrame, ratio: float, tile_dir: str = TILE
     # create training sets and validation sets
     # Separate the training and validation into separate files
     b_ix = matched_df.index[matched_df['is_bridge']].tolist()
-    nb_ix = matched_df.index[not matched_df['is_bridge']].tolist()
+    nb_ix = matched_df.index[~matched_df['is_bridge']].tolist()
     b_train_ix = random.sample(b_ix, int(round(ratio * len(b_ix))))
     nb_train_ix = random.sample(nb_ix, int(round(ratio * len(nb_ix))))
     b_val_ix = np.setdiff1d(b_ix, b_train_ix)

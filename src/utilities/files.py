@@ -98,7 +98,8 @@ def concat_geoloc(indirs: List[str], outdir):
         if t:
             if filtered_df['bridge_loc'][i] in bridge_dup:
                 rows_to_delete.append(i)
-            bridge_dup.append(filtered_df['bridge_loc'][i])
+            else:
+                bridge_dup.append(filtered_df['bridge_loc'][i])
 
     filtered_df.drop(rows_to_delete)
 

@@ -80,14 +80,27 @@ def filter_and_write_csv(input_file, output_file, column_name):
     filtered_df.to_csv(output_file, index=False)
 
 
-def concat_geoloc(indir):
+def concat_geoloc(infiles: List[str], outdir):
     dfs = []
-    for mgrs_dir in os.listdir(indir):
-        df = pd.read_csv(os.path.join(indir, mgrs_dir, 'multivariate_geoloc.csv'))
+    for file in infiles:
+        df = pd.read_csv(file)
         dfs.append(df)
     dfss = pd.concat(dfs, ignore_index=True)
     filtered_df = dfss.drop_duplicates(subset='bbox')
-    dfss.to_csv(os.path.join(indir, TileMatch().name))
+
+    rows_to_delete = []
+    bridge_dup = []
+    for i, t in enumerate(filtered_df['is_bridge']):
+        if t:
+            if filtered_df['bridge_loc'][i] in bridge_dup:
+                rows_to_delete.append(i)
+            bridge_dup.append(filtered_df['bridge_loc'][i])
+
+    filtered_df.drop(rows_to_delete)
+
+    filtered_df.to_csv(os.path.join(outdir, TileMatch().name))
+
+    print(len([r for r in filtered_df['is_bridge'] if r]))
 
 
 def fix_lookup(indir: str):

@@ -89,6 +89,9 @@ def concat_geoloc(indirs: List[str], outdir):
     dfss = pd.concat(dfs, ignore_index=True)
     filtered_df = dfss.drop_duplicates(subset='bbox')
 
+    filtered_df.to_csv(os.path.join(outdir, 'unique_bbox_tile_match.csv'))
+    filtered_df = pd.read_csv(os.path.join(outdir, 'unique_bbox_tile_match.csv'))
+
     rows_to_delete = []
     bridge_dup = []
     for i, t in enumerate(filtered_df['is_bridge']):

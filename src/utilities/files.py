@@ -80,11 +80,12 @@ def filter_and_write_csv(input_file, output_file, column_name):
     filtered_df.to_csv(output_file, index=False)
 
 
-def concat_geoloc(infiles: List[str], outdir):
+def concat_geoloc(indirs: List[str], outdir):
     dfs = []
-    for file in infiles:
-        df = pd.read_csv(file)
-        dfs.append(df)
+    for dir in indirs:
+        for mgrs in os.listdir(dir):
+                df = pd.read_csv(os.path.join(dir, mgrs, 'multivariate_geoloc.csv'))
+                dfs.append(df)
     dfss = pd.concat(dfs, ignore_index=True)
     filtered_df = dfss.drop_duplicates(subset='bbox')
 

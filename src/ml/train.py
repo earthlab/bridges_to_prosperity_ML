@@ -120,9 +120,9 @@ def main_worker(gpu, ngpus_per_node, args):
     else:
         print("=> creating model '{}'".format(args.architecture))
         model = torchvision.models.__dict__[args.architecture]()
-        # num_channels = 8
-        # model.conv1 = torch.nn.Conv2d(num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        # torch.nn.init.kaiming_normal_(model.conv1.weight, mode='fan_out', nonlinearity='relu')
+        num_channels = 8
+        model.conv1 = torch.nn.Conv2d(num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        torch.nn.init.kaiming_normal_(model.conv1.weight, mode='fan_out', nonlinearity='relu')
 
     if not torch.cuda.is_available() and not torch.backends.mps.is_available():
         print('using CPU, this will be slow')
@@ -311,7 +311,8 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
         print(type(images))
-        images = images.float()[:, :3, :, :]
+        images = images.float()
+        #[:, :3, :, :]
 
         # compute output
         output = model(images)
@@ -350,7 +351,8 @@ def validate(val_loader, model, criterion, args):
                     target = target.to('mps')
                 if torch.cuda.is_available():
                     target = target.cuda(args.gpu, non_blocking=True)
-                images = images.float()[:, :3, :, :]
+                images = images.float()
+                #[:, :3, :, :]
                 # compute output
                 output = model(images)
                 loss = criterion(output, target)

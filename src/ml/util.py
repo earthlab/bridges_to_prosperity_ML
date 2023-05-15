@@ -42,6 +42,7 @@ class BaseB2PDataset(torch.utils.data.Dataset):
 
         # Set info for iteration
         self.__curr = 0
+        self.__term = None
 
     def _calc_item(self, idx):
         if torch.is_tensor(idx):

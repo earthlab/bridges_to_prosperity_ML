@@ -91,6 +91,7 @@ def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: 
             )
             res_df.loc[ix, 'tile'] = tile
             res_df.loc[ix, 'bbox'] = bbox
+            print(target)
             if target:
                 res_df.loc[ix, 'target'] = target
             res_df.loc[ix, 'pred'] = pred.cpu().numpy()

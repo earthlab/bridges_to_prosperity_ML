@@ -40,6 +40,10 @@ def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: 
     else:
         assert False, "Shouldn't happen"
 
+    num_channels = 8
+    model.conv1 = torch.nn.Conv2d(num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
+    torch.nn.init.kaiming_normal_(model.conv1.weight, mode='fan_out', nonlinearity='relu')
+
     model.load_state_dict(checkpoint['state_dict'], strict=False)
 
     dset = B2PTruthDataset(tile_csv_path) if truth_data else B2PNoTruthDataset(tile_csv_path)

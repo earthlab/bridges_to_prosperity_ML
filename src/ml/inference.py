@@ -75,7 +75,7 @@ def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: 
         for i, (data, target, tile, bbox) in enumerate(dloader):
             data_time.update(time.time() - end)
             # move data to the same device as model
-            data.double()
+            data = data.double()
             output = model(data)
             probs = torch.softmax(output, dim=1)
             conf, pred = torch.max(probs, 1)

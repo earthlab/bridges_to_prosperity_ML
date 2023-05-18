@@ -17,3 +17,15 @@ MGRS_INDEX_FILE = os.path.join(B2P_DIR, 'data', 'mgrs_index.json')
 
 # S3
 S3_COMPOSITE_DIR = 'composites'
+
+# Order of data cube layers
+LAYER_TO_IX = [
+    'red',
+    'blue',
+    'green',
+    'nir',
+    'osm-water',
+    'osm-boundary',
+    'elevation',
+    'slope'
+]

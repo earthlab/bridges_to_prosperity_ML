@@ -12,6 +12,7 @@ import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.transforms as transforms
+from definitions import LAYER_TO_IX
 
 TFORM = transforms.Compose(
     [
@@ -26,7 +27,7 @@ class BaseB2PDataset(torch.utils.data.Dataset):
     # Make it so np doesn't yell about using str
     warnings.simplefilter(action='ignore', category=FutureWarning)
 
-    def __init__(self, transform=None, batch_size=1):
+    def __init__(self, transform=None, batch_size=1, layers=None):
         """
         Args:
             csv_file (string): Path to the csv file with annotations.
@@ -39,7 +40,11 @@ class BaseB2PDataset(torch.utils.data.Dataset):
         self.class_to_idx = {'bridge': 1, 'no bridge': 0}
         self.transform = transform
         self.batch_size = batch_size
+        self.layers = layers
 
+        if layers is not None: 
+            assert type(layers) == list, 'layers of type {}, must be a list'.format(type(layers))
+            self.layers = [LAYER_TO_IX.index(l) for l in layers]
         # Set info for iteration
         self.__curr = 0
         self.__term = None
@@ -57,6 +62,10 @@ class BaseB2PDataset(torch.utils.data.Dataset):
             image = torch.moveaxis(image, 1, 0)
         if self.transform:
             image = self.transform(image)
+
+        # Only get the data layers specified
+        if self.layers is not None:
+            image = image.float()[self.layers, :, :]
 
         return image, tile_file, bbox
 
@@ -83,14 +92,14 @@ class BaseB2PDataset(torch.utils.data.Dataset):
 
 class B2PNoTruthDataset(BaseB2PDataset):
 
-    def __init__(self, csv_file, transform=None, batch_size=1):
+    def __init__(self, csv_file, transform=None, batch_size=1, layers=None):
         """
         Args:
             csv_file (string): Path to the csv file with annotations.
             transform (callable, optional): Optional transform to be applied
                 on a sample.
         """
-        super().__init__(transform, batch_size)
+        super().__init__(transform, batch_size, layers)
         df = pd.read_csv(
             csv_file,
             index_col=0,
@@ -116,14 +125,14 @@ class B2PNoTruthDataset(BaseB2PDataset):
 
 class B2PTruthDataset(BaseB2PDataset):
 
-    def __init__(self, csv_file, transform=None, batch_size=1, ratio=None, replacement=False):
+    def __init__(self, csv_file, transform=None, batch_size=1, layers=None, ratio=None, replacement=False):
         """
         Args:
             csv_file (string): Path to the csv file with annotations.
             transform (callable, optional): Optional transform to be applied
                 on a sample.
         """
-        super().__init__(transform, batch_size)
+        super().__init__(transform, batch_size, layers)
         df = pd.read_csv(
             csv_file,
             index_col=0,

@@ -44,7 +44,8 @@ DEFAULT_ARGS = Namespace(
     multiprocessing_distributed=False,
     dummy=False,
     best_acc1=0,
-    distributed=False
+    distributed=False,
+    layers=['nir','osm-water','elevation']
 )
 
 BEST_ACC1 = 0
@@ -218,6 +219,7 @@ def main_worker(gpu, ngpus_per_node, args):
         train_csv,
         TFORM,
         args.batch_size,
+        layers=args.layers,
         ratio=args.bridge_no_bridge_ratio
     )
 
@@ -225,6 +227,7 @@ def main_worker(gpu, ngpus_per_node, args):
         val_csv,
         TFORM,
         args.batch_size,
+        layers=args.layers,
         ratio=args.bridge_no_bridge_ratio
     )
 
@@ -241,7 +244,8 @@ def main_worker(gpu, ngpus_per_node, args):
             num_workers=args.workers, pin_memory=True, sampler=val_sampler)
         validate(val_loader, model, criterion, args)
         return
-
+    
+    layers_str = '_'.join(args.layers)
     for epoch in range(args.start_epoch, args.epochs):
 
         train_loader = torch.utils.data.DataLoader(
@@ -281,7 +285,7 @@ def main_worker(gpu, ngpus_per_node, args):
                     'scheduler': scheduler.state_dict()
                 },
                 is_best,
-                os.path.join(args.results_dir, f'{args.architecture}.chkpt{epoch + 1}.tar')
+                os.path.join(args.results_dir, f'{args.architecture}.{layers_str}.chkpt{epoch + 1}.tar')
             )
         train_dataset.update()
         val_dataset.update()
@@ -310,7 +314,7 @@ def train(train_loader, model, criterion, optimizer, epoch, device, args):
         # move data to the same device as model
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
-        images = images.float()[:,[4,6,7],:,:]
+        # images = images.float()[:,[3,4,6],:,:]
 
         # compute output
         output = model(images)
@@ -349,7 +353,7 @@ def validate(val_loader, model, criterion, args):
                     target = target.to('mps')
                 if torch.cuda.is_available():
                     target = target.cuda(args.gpu, non_blocking=True)
-                images = images.float()[:, [4,6,7], :, :]
+                # images = images.float()[:, [3,4,6], :, :]
                 # compute output
                 output = model(images)
                 loss = criterion(output, target)

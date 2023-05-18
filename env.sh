@@ -61,7 +61,7 @@ fi
 cwd=$PWD
 cd $DIR
 echo "Activating conda env"
-conda activate .
+conda activate b2p
 cd $cwd 
 
 #if pip -vvv freeze -r requirements.txt | grep "not installed"

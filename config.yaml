@@ -2,6 +2,6 @@
     bucket: 'b2p.njr'
 'torch':
     'inference':
-        'batch_size': 1000
+        'batch_size': 100
         'num_workers': 12 # This needs to be moved and dynamic
 

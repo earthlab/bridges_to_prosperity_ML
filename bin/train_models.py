@@ -9,7 +9,7 @@ ARCHITECTURES = ('resnet18', 'resnet34', 'resnet50')
 
 
 def train_optical(training_csv_path: str, test_csv_path: str, architectures: List[str] = ARCHITECTURES,
-                  no_bridge_to_bridge_ratios: Union[None, List[float]] = None, results_dir: str = TORCH_DIR):
+                  no_bridge_to_bridge_ratios: Union[None, List[float]] = None, results_dir: str = TORCH_DIR, layers: Union[None, List[str]]=None):
     os.makedirs(results_dir, exist_ok=True)
     no_bridge_to_bridge_ratios = [None] if no_bridge_to_bridge_ratios is None else no_bridge_to_bridge_ratios
 
@@ -20,7 +20,8 @@ def train_optical(training_csv_path: str, test_csv_path: str, architectures: Lis
                 training_csv_path,
                 test_csv_path,
                 architecture,
-                bridge_no_bridge_ratio=no_bridge_to_bridge_ratio
+                bridge_no_bridge_ratio=no_bridge_to_bridge_ratio,
+                layers=layers
             )
 
 
@@ -70,6 +71,22 @@ if __name__ == '__main__':
              'done '
     )
 
+    parser.add_argument(
+        '--layers',
+        type=list,
+        nargs='+',
+        required=False,
+        default=None,
+        help='List of (3) data layers to be used, choose from: '
+            ' - red'
+            ' - blue'
+            ' - green'
+            ' - nir'
+            ' - osm-water'
+            ' - osm-boundary'
+            ' - elevation'
+            ' - slope'
+    )
     args = parser.parse_args()
 
     train_optical(
@@ -77,7 +94,8 @@ if __name__ == '__main__':
         test_csv_path=args.train_csv,
         results_dir=args.results_dir,
         architectures=args.architectures,
-        no_bridge_to_bridge_ratios=args.ratios
+        no_bridge_to_bridge_ratios=args.ratios,
+        layers=args.layers
     )
 
    

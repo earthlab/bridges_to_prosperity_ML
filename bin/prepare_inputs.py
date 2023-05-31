@@ -57,7 +57,7 @@ def create_dset_csv(matched_df: pd.DataFrame, ratio: float, tile_dir: str = TILE
     print(f'Saving to {train_csv} and {val_csv}')
 
 
-def prepare_optical_inputs(requested_locations: List[str] = None, composites_dir: str = COMPOSITE_DIR,
+def prepare_inputs(requested_locations: List[str] = None, composites_dir: str = COMPOSITE_DIR,
                            tiles_dir: str = TILE_DIR, s3_bucket_name: str = CONFIG.AWS.BUCKET,
                            bucket_composite_dir: str = 'composites', truth_file_path: Union[None, str] = None,
                            train_to_test_ratio: float = 0.7, cores: int = mp.cpu_count() - 1, no_truth: bool = False):
@@ -126,7 +126,7 @@ if __name__ == "__main__":
                         help='If set then no truth data will be used to create output dataframe')
     args = parser.parse_args()
 
-    prepare_optical_inputs(requested_locations=args.locations, composites_dir=args.composites_dir,
+    prepare_inputs(requested_locations=args.locations, composites_dir=args.composites_dir,
                            tiles_dir=args.tiles_dir, s3_bucket_name=args.s3_bucket_name,
                            bucket_composite_dir=args.bucket_composite_dir, truth_file_path=args.truth_file_path,
                            train_to_test_ratio=args.train_to_test_ratio, cores=args.cores, no_truth=args.no_truth)

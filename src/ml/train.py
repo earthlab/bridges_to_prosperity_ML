@@ -2,8 +2,7 @@ import os
 import shutil
 import time
 import warnings
-from argparse import Namespace
-from typing import Union
+from typing import Union, List
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -18,41 +17,13 @@ from torch import nn
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Subset
 
-from src.ml.util import AverageMeter, ProgressMeter, Summary, accuracy, B2PTruthDataset, TFORM
-
-MODEL_NAME = sorted(name for name in torchvision.models.__dict__ if name.islower() and not name.startswith("__")
-                    and callable(torchvision.models.__dict__[name]))
-
-DEFAULT_ARGS = Namespace(
-    workers=4,
-    epochs=40,
-    start_epoch=0,
-    batch_size=1000,
-    lr=0.1,
-    momentum=0.9,
-    weight_decay=1e-4,
-    print_freq=10,
-    resume='',
-    evaluate=False,
-    pretrained=False,
-    world_size=-1,
-    rank=-1,
-    dist_url='tcp://224.66.41.62:23456',
-    dist_backend='nccl',
-    seed=None,
-    gpu=None,
-    multiprocessing_distributed=False,
-    dummy=False,
-    best_acc1=0,
-    distributed=False,
-    layers=['nir','osm-water','elevation']
-)
+from src.ml.util import AverageMeter, ProgressMeter, Summary, accuracy, B2PTruthDataset, TFORM, MODEL_NAME, DEFAULT_ARGS
 
 BEST_ACC1 = 0
 
 
 def train_torch(results_dir: str, train_csv_path: str, test_csv_path: str, architecture: str,
-                bridge_no_bridge_ratio: Union[None, float], seed: Union[None, int] = None):
+                bridge_no_bridge_ratio: Union[None, float], layers: Union[None, List[str]]=None, seed: Union[None, int] = None):
     # Configure the namespace for this run
 
     args = DEFAULT_ARGS
@@ -61,6 +32,8 @@ def train_torch(results_dir: str, train_csv_path: str, test_csv_path: str, archi
     args.test_csv_path = test_csv_path
     args.architecture = architecture
     args.bridge_no_bridge_ratio = bridge_no_bridge_ratio
+    if layers is not None: 
+        args.layers = layers
 
     os.makedirs(results_dir, exist_ok=True)
 

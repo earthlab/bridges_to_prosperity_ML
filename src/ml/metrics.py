@@ -72,8 +72,9 @@ class Metrics:
             0 or 'no_bridge' in calculations. Can be overriden when calling methods by supplying confidence parameter.
         """
         self._inference_results_set = pd.read_csv(inference_results_set)
-        self._validation_set = pd.read_csv(validation_set)
-
+        self._validation_set = pd.read_csv(validation_set).sort_values(subset_key)
+        self.ix_val = None
+        self.conf_dic = {}
         self._confidence = confidence
         self._confidence_column = confidence_column
         self._prediction_column = prediction_column
@@ -148,10 +149,12 @@ class Metrics:
         Args:
             confidence (float): Confidence threshold between 0 and 1.0. Only values above the threshold will remain True
         """
-        return [
+        if confidence not in self.conf_dic:
+            self.conf_dic[confidence] = [
             1 if self._inference_subset[self._confidence_column].iloc[i] >= confidence and val else 0
             for i, val in enumerate(self._inference_subset[self._prediction_column])
         ]
+        return self.conf_dic[confidence]
 
     def _subset(self, key: str) -> pd.DataFrame:
         """
@@ -164,7 +167,7 @@ class Metrics:
         is_in_result = is_in_set_pnb(prediction_key_array,
                                      self._validation_set[key].to_numpy()); prediction_key_array[is_in_result]
 
-        return self._inference_results_set.iloc[np.where(is_in_result)]
+        return self._inference_results_set.iloc[np.where(is_in_result)].sort_values(key)
 
     def _confidence_check(self, confidence: Union[None, float]) -> List[int]:
         if confidence is not None:
@@ -194,7 +197,7 @@ class Metrics:
 
         return np.count_nonzero(true_positives)
 
-    def calculate_true_negatives(self) -> int:
+    def calculate_true_negatives(self, confidence: Union[None, float] = None) -> int:
         """
         Counts the number of predictions that were marked as no_bridge in inference results set that were also marked as
         no_bridge in validation set.
@@ -202,8 +205,9 @@ class Metrics:
             true_negatives (int): Number of predictions that were marked as no_bridge in inference results set that were
              also marked as no_bridge in validation set.
         """
+        predictions_above_confidence = self._confidence_check(confidence)
         true_negatives = np.logical_and(np.logical_not(self._validation_set[self._validation_column].to_numpy()),
-                                        np.logical_not(self._inference_subset[self._prediction_column].to_numpy()))
+                                        np.logical_not(predictions_above_confidence))
 
         return np.count_nonzero(true_negatives)
 
@@ -225,7 +229,7 @@ class Metrics:
 
         return np.count_nonzero(false_positives)
 
-    def calculate_false_negatives(self) -> int:
+    def calculate_false_negatives(self, confidence: Union[None, float] = None) -> int:
         """
         Counts the number of predictions that were marked as no_bridge in inference results set that were not marked as
         bridge in validation set.
@@ -233,8 +237,9 @@ class Metrics:
             false_negatives (int): Number of predictions that were marked as no_bridge in inference results set that
             were not marked as bridge in validation set.
         """
+        predictions_above_confidence = self._confidence_check(confidence)
         false_negatives = np.logical_and(self._validation_set[self._validation_column].to_numpy(),
-                                         np.logical_not(self._inference_subset[self._prediction_column].to_numpy()))
+                                         np.logical_not(predictions_above_confidence))
         return np.count_nonzero(false_negatives)
 
     def calculate_precision(self, confidence: Union[None, float] = None) -> float:
@@ -265,7 +270,7 @@ class Metrics:
             recall (float): true_positives / (true_positives + false_negatives)
         """
         true_positive = self.calculate_true_positives(confidence)
-        false_negative = self.calculate_false_negatives()
+        false_negative = self.calculate_false_negatives(confidence)
 
         # Protect divide by zero
         if true_positive == 0:
@@ -286,35 +291,70 @@ class Metrics:
         recall = self.calculate_recall(confidence)
 
         return precision + recall
-
-    def plot_roc(self, outpath: str = None):
+    def compute_accurary(self, confidence: Union[None, float] = None) -> float:
+        """
+        Calculates total accurary 
+        Args:
+            confidence (float): When set to default value of None, the predictions above confidence values calculated on
+             instantiation will be used. Otherwise, predictions above confidence will be recalculated for result.
+        Returns:
+            accuracy (float): (true_positives + true_negatives) / (true_positives + true_positives + false_negatives + false_positives)
+        """
+        tp = self.calculate_true_positives(confidence)
+        tn = self.calculate_true_negatives(confidence) 
+        fp = self.calculate_false_positives(confidence)
+        fn = self.calculate_false_negatives(confidence)
+        return (tp + tn) / (tp + tn + fp + fn)
+    def _get_fpr_trp_thresh(self):
         positive_confidences = [1-conf if not self._inference_subset[self._prediction_column].iloc[i] else conf for
                                 i, conf in enumerate(self._inference_subset[self._confidence_column])]
 
         fpr, tpr, thresholds = metrics.roc_curve(self._validation_set[self._validation_column], positive_confidences)
+        return fpr, tpr, thresholds
 
-        gmean = np.sqrt(tpr * (1 - fpr))
-
-        # Find the optimal threshold
-        index = np.argmax(gmean)
-        thresholdOpt = round(thresholds[index], ndigits=4)
-        gmeanOpt = round(gmean[index], ndigits=4)
-        fprOpt = round(fpr[index], ndigits=4)
-        tprOpt = round(tpr[index], ndigits=4)
-        print('Best Threshold: {} with G-Mean: {}'.format(thresholdOpt, gmeanOpt))
-        print('FPR: {}, TPR: {}'.format(fprOpt, tprOpt))
-
-        plt.plot(fpr, tpr)
-        plt.plot([0, 1], [0, 1], linestyle='--')
-
-        plt.title('Receiver operating characteristic (ROC) curve')
+    def plot_roc(self, outpath: str = None, confusionMatrix: bool = True, titleStr: Union[str, None] = None):
+        
+        fpr, tpr, thresholds = self._get_fpr_trp_thresh()
+        plt.subplots()
+        plt.plot(fpr, tpr, label='ROC')
+        if confusionMatrix:
+            thresholdOpt, gmeanOpt, fprOpt, tprOpt, precision, f1, acc = self.confusion_matrix(fpr=fpr, tpr=tpr, thresholds=thresholds)
+            plt.plot(fprOpt, tprOpt, marker="*", markersize=10, markerfacecolor="red", label='Point At Threshold')
+        plt.plot([0, 1], [0, 1], linestyle='--', label="Random Classifier")
+        if titleStr is None:
+            titleStr = 'Receiver operating characteristic (ROC) curve' 
+        plt.title(titleStr)
         plt.ylabel('True positive rate')
         plt.xlabel('False positive rate')
 
-        # Save or show the plot![](../../../../../../../var/folders/94/t8rm1cdd27d7b64yjmvykh4h0000gp/T/TemporaryItems/NSIRD_screencaptureui_WZ6T3R/Screenshot 2023-04-11 at 2.36.28 PM.png)
+        # Save or show the plot
         if outpath is not None:
             plt.savefig(outpath)
         else:
             plt.show()
 
         return fpr, tpr, thresholds
+    def confusion_matrix(self, confidence : Union[float, None]=None, fpr : Union[List, None]=None, tpr : Union[List, None]=None, thresholds : Union[List, None]=None):
+        if fpr is None or tpr is None or thresholds is None: 
+            fpr, tpr, thresholds = self._get_fpr_trp_thresh()
+        if confidence is None:
+            gmean = np.sqrt(tpr * (1 - fpr))
+            # Find the optimal threshold
+            index = np.argmax(gmean)
+        else:
+            assert 0 < thresholds < 1, 'Confidence must be set between zero and 1'
+            IX = np.where(thresholds < confidence )
+            assert len(IX) > 0, 'Something bad happended, this list should be non-empty'
+            index = IX[-1]
+        thresholdOpt = round(thresholds[index], ndigits=4)
+        gmeanOpt = round(gmean[index], ndigits=4)
+        fprOpt = round(fpr[index], ndigits=4)
+        tprOpt = round(tpr[index], ndigits=4)
+        precision = self.calculate_precision(thresholdOpt)
+        f1 = self.calculate_f1(thresholdOpt)
+        acc = self.compute_accurary(thresholdOpt)
+
+        print('Best Threshold: {} with G-Mean: {}'.format(thresholdOpt, gmeanOpt))
+        print('FPR: {}, TPR: {}'.format(fprOpt, tprOpt))
+        print('Precision: {}, F1 score: {}, Total Accuracy: {}'.format(precision, f1, acc))
+        return thresholdOpt, gmeanOpt, fprOpt, tprOpt, precision, f1, acc

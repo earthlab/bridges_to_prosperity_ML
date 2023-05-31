@@ -1,6 +1,7 @@
 import warnings
 from enum import Enum
 from math import isnan
+from argparse import Namespace
 
 import numpy as np
 import pandas as pd
@@ -11,8 +12,37 @@ import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
+import torchvision
 import torchvision.transforms as transforms
 from definitions import LAYER_TO_IX
+
+MODEL_NAME = sorted(name for name in torchvision.models.__dict__ if name.islower() and not name.startswith("__")
+                    and callable(torchvision.models.__dict__[name]))
+
+DEFAULT_ARGS = Namespace(
+    workers=4,
+    epochs=40,
+    start_epoch=0,
+    batch_size=1000,
+    lr=0.1,
+    momentum=0.9,
+    weight_decay=1e-4,
+    print_freq=10,
+    resume='',
+    evaluate=False,
+    pretrained=False,
+    world_size=-1,
+    rank=-1,
+    dist_url='tcp://224.66.41.62:23456',
+    dist_backend='nccl',
+    seed=None,
+    gpu=None,
+    multiprocessing_distributed=False,
+    dummy=False,
+    best_acc1=0,
+    distributed=False,
+    layers=['osm-water','elevation', 'slope']
+)
 
 TFORM = transforms.Compose(
     [

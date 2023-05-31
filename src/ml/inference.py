@@ -5,16 +5,19 @@ import pandas as pd
 import torch
 import torchvision
 
-from src.ml.util import B2PNoTruthDataset, B2PTruthDataset, AverageMeter, ProgressMeter
+from src.ml.util import B2PNoTruthDataset, B2PTruthDataset, AverageMeter, ProgressMeter, DEFAULT_ARGS
 
 
-def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: str, truth_data: bool,
-                    batch_size: int = 1000, gpu=None, num_workers: int = 12, print_frequency: int = 100):
-    os.makedirs(os.path.basename(results_csv_path), exist_ok=True)
+def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: str, truth_data: bool, 
+                    batch_size: int = None, gpu=None, num_workers: int = None, print_frequency: int = 100, args=DEFAULT_ARGS):
+    res_dir,_ = os.path.split(results_csv_path)
+    os.makedirs(res_dir, exist_ok=True)
     architecture = os.path.basename(model_file_path).split('.')[0]
     print("Using pre-trained model '{}'".format(architecture))
     model = torchvision.models.__dict__[architecture](pretrained=True)
-
+    args.layers = os.path.basename(model_file_path).split('.')[1].split('_')
+    if batch_size is not None: 
+        args.batch_size = batch_size
     if not torch.cuda.is_available() and not torch.backends.mps.is_available():
         print('using CPU, this will be slow')
     elif gpu is not None and torch.cuda.is_available():
@@ -40,16 +43,12 @@ def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: 
     else:
         assert False, "Shouldn't happen"
 
-    num_channels = 8
-    model.conv1 = torch.nn.Conv2d(num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
-    torch.nn.init.kaiming_normal_(model.conv1.weight, mode='fan_out', nonlinearity='relu')
-
     model.load_state_dict(checkpoint['state_dict'], strict=False)
 
-    dset = B2PTruthDataset(tile_csv_path) if truth_data else B2PNoTruthDataset(tile_csv_path)
+    dset = B2PTruthDataset(tile_csv_path, layers=args.layers) if truth_data else B2PNoTruthDataset(tile_csv_path, layers=args.layers)
     dloader = torch.utils.data.DataLoader(
         dset,
-        batch_size=batch_size,
+        batch_size=args.batch_size,
         shuffle=False,
         num_workers=num_workers
     )

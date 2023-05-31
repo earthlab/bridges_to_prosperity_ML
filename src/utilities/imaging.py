@@ -347,6 +347,7 @@ def composite_to_tiles(
         bridge_locations,
         tqdm_pos=None,
         tqdm_update_rate=None,
+        remove_tiff=True,
         div: int = 300  # in meters
 ):
     grid_geoloc_file = TileGeoLoc(bands=bands)
@@ -418,7 +419,8 @@ def composite_to_tiles(
                         scale_img = scale(scale_img)
                         tensor = torch_transformer(scale_img)
                         torch.save(tensor, pt_file_path)
-
+                if remove_tiff:
+                    os.remove(tile_tiff_path)
                 k += 1
                 if k % tqdm_update_rate == 0:
                     pbar.update(tqdm_update_rate)

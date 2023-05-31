@@ -6,7 +6,7 @@ from src.ml.inference import inference_torch
 from src.utilities.config_reader import CONFIG
 
 
-def inference_optical(model_file_path: str, tile_csv_path: str, results_csv_path: str, truth_data: bool,
+def run_inference(model_file_path: str, tile_csv_path: str, results_csv_path: str, truth_data: bool,
                       batch_size: int = CONFIG.TORCH.INFERENCE.BATCH_SIZE,
                       num_workers: int = CONFIG.TORCH.INFERENCE.NUM_WORKERS, print_frequency: int = 100):
     if os.path.exists(results_csv_path):
@@ -47,6 +47,6 @@ if __name__ == '__main__':
     parser.add_argument('--print_frequency', '-p', required=False, type=int, default=100)
     args = parser.parse_args()
 
-    inference_optical(model_file_path=args.model_file_path, tile_csv_path=args.tile_csv_path,
-                      results_csv_path=args.results_csv_path, batch_size=args.batch_size, num_workers=args.num_workers,
-                      print_frequency=args.print_frequency, truth_data=args.truth_data)
+    run_inference(model_file_path=args.model_file_path, tile_csv_path=args.tile_csv_path,
+                  results_csv_path=args.results_csv_path, batch_size=args.batch_size, num_workers=args.num_workers,
+                  print_frequency=args.print_frequency, truth_data=args.truth_data)

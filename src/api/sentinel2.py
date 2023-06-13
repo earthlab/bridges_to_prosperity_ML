@@ -386,6 +386,14 @@ class SinergiseSentinelAPI:
             with open(MGRS_INDEX_FILE, 'w+') as f:
                 json.dump({}, f)
 
+    def bounds_to_mgrs(self, bounds: List[float]) -> List[str]:
+        mgrs_grids = self._lookup_mgrs(bbox=bounds)
+        if mgrs_grids is None:
+            mgrs_grids = self._find_overlapping_mgrs(bounds)
+            self._write_mgrs_index(bounds, mgrs_grids)
+
+        return mgrs_grids
+
     def _find_available_files(self, bounds: List[float], start_date: str, end_date: str,
                               bands: List[str]) -> List[Tuple[str, str]]:
         """
@@ -405,11 +413,7 @@ class SinergiseSentinelAPI:
             ref_date = ref_date + timedelta(days=1)
 
         info = []
-        mgrs_grids = self._lookup_mgrs(bbox=bounds)
-        if mgrs_grids is None:
-            mgrs_grids = self._find_overlapping_mgrs(bounds)
-            self._write_mgrs_index(bounds, mgrs_grids)
-
+        mgrs_grids = self.bounds_to_mgrs(bounds)
         for grid_string in mgrs_grids:
             utm_code = grid_string[:2]
             latitude_band = grid_string[2]

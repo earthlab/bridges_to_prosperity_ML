@@ -3,59 +3,19 @@ import multiprocessing as mp
 import os
 import random
 from glob import glob
-from typing import List, Tuple, Union
+from typing import List, Union
 
 import numpy as np
 import pandas as pd
-import yaml
-from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
-from bin.composites_to_tiles import create_tiles
-from bin.download_composites import download_composites
-from definitions import REGION_FILE_PATH, COMPOSITE_DIR, TILE_DIR, TRUTH_DIR
-from src.api.sentinel2 import initialize_s3_bucket
+from bin.optical.tiles_from_composites import create_tiles
+from bin.optical.download_composites import download_composites
+from definitions import COMPOSITE_DIR, TILE_DIR, TRUTH_DIR
 from src.utilities.config_reader import CONFIG
 from src.utilities.coords import get_bridge_locations
 
 CORES = mp.cpu_count() - 1
-
-
-def create_dset_csv(matched_df: pd.DataFrame, ratio: float, tile_dir: str = TILE_DIR) -> None:
-    assert 1 > ratio > 0
-
-    # TODO: Need to make sure redundant bridge tiles are handled correctly. Should just filter out any redundancies in
-    #  memory here first. Also make sure there are no redundant bbox in negative training data
-
-    # create training sets and validation sets
-    # Separate the training and validation into separate files
-    b_ix = matched_df.index[matched_df['is_bridge']].tolist()
-    nb_ix = matched_df.index[~matched_df['is_bridge']].tolist()
-    b_train_ix = random.sample(b_ix, int(round(ratio * len(b_ix))))
-    nb_train_ix = random.sample(nb_ix, int(round(ratio * len(nb_ix))))
-    b_val_ix = np.setdiff1d(b_ix, b_train_ix)
-    nb_val_ix = np.setdiff1d(nb_ix, nb_train_ix)
-
-    train_csv = os.path.join(tile_dir, 'train_df.csv')
-    val_csv = os.path.join(tile_dir, 'val_df.csv')
-    train_df = pd.concat(
-        [
-            matched_df.iloc[b_train_ix],
-            matched_df.iloc[nb_train_ix]
-        ],
-        ignore_index=True
-    )
-    val_df = pd.concat(
-        [
-            matched_df.iloc[b_val_ix],
-            matched_df.iloc[nb_val_ix]
-        ],
-        ignore_index=True
-    )
-    train_df.to_csv(train_csv)
-    val_df.to_csv(val_csv)
-    print(f'Saving to {train_csv} and {val_csv}')
-
 
 def prepare_inputs(requested_locations: List[str] = None, composites_dir: str = COMPOSITE_DIR,
                            tiles_dir: str = TILE_DIR, s3_bucket_name: str = CONFIG.AWS.BUCKET,

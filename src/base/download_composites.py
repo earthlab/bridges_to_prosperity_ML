@@ -1,25 +1,17 @@
 import argparse
 import multiprocessing as mp
 import os
-import botocore
-import random
-from glob import glob
-from typing import List, Tuple, Union
+from typing import List, Tuple
 
 import numpy as np
-import pandas as pd
 import yaml
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
-from bin.composites_to_tiles import create_tiles
-from definitions import REGION_FILE_PATH, COMPOSITE_DIR, TILE_DIR, TRUTH_DIR, S3_COMPOSITE_DIR
+from definitions import REGION_FILE_PATH, S3_COMPOSITE_DIR
 from src.api.sentinel2 import initialize_s3_bucket
 from src.utilities.config_reader import CONFIG
-from src.utilities.coords import get_bridge_locations
-from file_types import OpticalComposite
-
-CORES = mp.cpu_count() - 1
+from file_types import OpticalComposite, MultiVariateComposite, File
 
 
 def this_download(location_request_info: Tuple[str, int, int, str]) -> None:
@@ -57,19 +49,18 @@ def get_requested_locations(region: str, districts: List[str]) -> List[str]:
     return requested_locations
 
 
-def download_composites(region: str = None, districts: List[str] = None, s3_bucket_name: str = CONFIG.AWS.BUCKET,
-                        cores: int = mp.cpu_count() - 1, bands: List[str] = None, mgrs: List[str] = None):
+def download_composites(region: str = None, districts: List[str] = None,
+                        s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = mp.cpu_count() - 1,
+                        bands: List[str] = None, mgrs: List[str] = None):
     s3 = initialize_s3_bucket(s3_bucket_name)
-
-    if bands is not None:
-        bands = sorted(bands)
-
     requested_locations = get_requested_locations(region, districts)
 
     location_info = []
     for location in requested_locations:
         for obj in s3.objects.filter(Prefix=location):
-            s3_composite = OpticalComposite.create(obj.key)
+            s3_composite = File.create(obj.key)
+            if not isinstance(s3_composite, (OpticalComposite, MultiVariateComposite)):
+                continue
             if s3_composite:
                 if bands is not None:
                     if s3_composite.bands != bands:
@@ -77,7 +68,7 @@ def download_composites(region: str = None, districts: List[str] = None, s3_buck
                 if mgrs is not None:
                     if s3_composite.mgrs not in mgrs:
                         continue
-                destination = s3_composite.archive_path
+                destination = s3_composite.archive_path()
                 location_info.append((obj.key, obj.size, destination))
 
     parallel_inputs = []
@@ -93,30 +84,22 @@ def download_composites(region: str = None, districts: List[str] = None, s3_buck
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        '--region',
-        '-r',
-        type=str,
-        required=False,
-        help='Name of the composite region (Ex Uganda)'
-    )
-    parser.add_argument(
-        '--districts',
-        '-d',
-        type=str,
-        nargs='+',
-        required=False,
-        help='Name of the composite district (Ex. Fafan Ibanda)'
-    )
+    parser.add_argument('--cores', required=False, type=int, default=mp.cpu_count() - 1,
+                        help='Number of cores to use when making tiles in parallel. Default is cpu_count - 1')
     parser.add_argument('--s3_bucket_name', '-b', required=False, default=CONFIG.AWS.BUCKET, type=str,
                         help='Name of s3 bucket to search for composites in. Default is from project config, which is'
                              f' currently set to {CONFIG.AWS.BUCKET}')
-    parser.add_argument('--cores', required=False, type=int, default=mp.cpu_count() - 1,
-                        help='Number of cores to use when making tiles in parallel. Default is cpu_count - 1')
+    subparsers = parser.add_subparsers(help='The file type to download from s3. Can be: composite, model, '
+                                            'inference_results')
+
+    composite = subparsers.add_parser('composite')
+    composite.add_argument('--region', '-r', type=str, required=False, help='Name of the composite region (Ex Uganda)')
+    composite.add_argument('--districts', '-d', type=str, nargs='+', required=False,
+                        help='Name of the composite district (Ex. Fafan Ibanda)')
     parser.add_argument('--bands', required=False, type=str, default=None, nargs='+',
                         help='The bands to download composites for. The default is None which will select all band '
                              'combinations')
     args = parser.parse_args()
 
-    download_composites(region=args.region, districts=args.districts,
-                        s3_bucket_name=args.s3_bucket_name, cores=args.cores, bands=args.bands)
+    download_composites(region=args.region, districts=args.districts, s3_bucket_name=args.s3_bucket_name,
+                        cores=args.cores, bands=args.bands)

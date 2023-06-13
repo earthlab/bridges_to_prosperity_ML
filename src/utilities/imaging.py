@@ -24,7 +24,7 @@ import pyproj
 from pyproj import CRS
 
 from src.utilities.coords import tiff_to_bbox, bridge_in_bbox
-from definitions import SENTINEL_2_DIR, COMPOSITE_DIR, TILE_DIR
+from definitions import SENTINEL_2_DIR, COMPOSITE_DIR, OPTICAL_TILE_DIR, MULTIVARIATE_TILE_DIR
 from file_types import OpticalComposite, MultiVariateComposite, TileGeoLoc, Tile, PyTorch, Sentinel2Tile
 
 BANDS_TO_IX = {
@@ -168,10 +168,10 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
     assert os.path.isdir(s2_dir)
 
     optical_composite_file = OpticalComposite(region, district, coord, bands)
-    if os.path.isfile(optical_composite_file.archive_path):
-        return optical_composite_file.archive_path
+    if os.path.isfile(optical_composite_file.archive_path()):
+        return optical_composite_file.archive_path()
 
-    composite_dir = os.path.dirname(optical_composite_file.archive_path)
+    composite_dir = os.path.dirname(optical_composite_file.archive_path())
     os.makedirs(composite_dir, exist_ok=True)
 
     if num_slices > 1:
@@ -264,7 +264,7 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
     # Combine Bands
     n_bands = len(bands)
     with rasterio.open(
-            optical_composite_file.archive_path,
+            optical_composite_file.archive_path(),
             'w',
             driver='GTiff',
             width=g_ncols,
@@ -283,7 +283,7 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
 
     shutil.rmtree(slice_dir)
 
-    return optical_composite_file.archive_path
+    return optical_composite_file.archive_path()
 
 
 ''' In case you flip B02 with B04'''
@@ -351,15 +351,23 @@ def composite_to_tiles(
         div: int = 300  # in meters
 ):
     grid_geoloc_file = TileGeoLoc(bands=bands)
-    grid_geoloc_path = grid_geoloc_file.archive_path(composite.region, composite.district, composite.mgrs)
+
+    if isinstance(composite, OpticalComposite):
+        tile_dir = OPTICAL_TILE_DIR
+    elif isinstance(composite, MultiVariateComposite):
+        tile_dir = MULTIVARIATE_TILE_DIR
+    else:
+        raise ValueError('Input composite parameter must be of type OpticalComposite or MultiVariateComposite')
+
+    grid_geoloc_path = grid_geoloc_file.archive_path(tile_dir, composite.region, composite.district, composite.mgrs,
+                                                     bands=bands)
     if os.path.isfile(grid_geoloc_path):
         df = pd.read_csv(grid_geoloc_path)
         return df
 
-    grid_dir = os.path.basename(grid_geoloc_path)
-    os.makedirs(grid_dir, exist_ok=True)
+    os.makedirs(grid_geoloc_file.archive_dir, exist_ok=True)
 
-    rf = gdal.Open(composite.archive_path)
+    rf = gdal.Open(composite.archive_path())
     _, xres, _, _, _, yres = rf.GetGeoTransform()
     nxpix = int(div / abs(xres))
     nypix = int(div / abs(yres))
@@ -367,13 +375,13 @@ def composite_to_tiles(
     ysteps = np.arange(0, rf.RasterYSize, nypix).astype(np.int64).tolist()
 
     if bridge_locations is not None:
-        bbox = tiff_to_bbox(composite.archive_path)
+        bbox = tiff_to_bbox(composite.archive_path())
         this_bridge_locs = []
         p = polygon.Polygon(bbox)
         for loc in bridge_locations:
             if p.contains(loc):
                 this_bridge_locs.append(loc)
-        print(len(this_bridge_locs), composite.mgrs, 'BRIDGES')
+
     numTiles = len(xsteps) * len(ysteps)
     torch_transformer = ToTensor()
     df = pd.DataFrame(
@@ -384,7 +392,7 @@ def composite_to_tiles(
         tqdm_update_rate = int(round(numTiles / 100))
     else:
         assert type(tqdm_update_rate) == int
-    os.makedirs(os.path.join(TILE_DIR, composite.region, composite.district, composite.mgrs), exist_ok=True)
+
     with tqdm(
             position=tqdm_pos,
             total=numTiles,
@@ -396,9 +404,11 @@ def composite_to_tiles(
         for xmin in xsteps:
             for ymin in ysteps:
                 tile_tiff = Tile(x_min=xmin, y_min=ymin, bands=bands)
-                tile_tiff_path = tile_tiff.archive_path(composite.region, composite.district, composite.mgrs)
+                tile_tiff_path = tile_tiff.archive_path(tile_dir, composite.region, composite.district, composite.mgrs,
+                                                        bands=bands)
                 pt_file = PyTorch(x_min=xmin, y_min=ymin, bands=bands)
-                pt_file_path = pt_file.archive_path(composite.region, composite.district, composite.mgrs)
+                pt_file_path = pt_file.archive_path(tile_dir, composite.region, composite.district, composite.mgrs,
+                                                    bands=bands)
                 if not os.path.isfile(tile_tiff_path):
                     gdal.Translate(
                         tile_tiff_path,

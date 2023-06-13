@@ -57,7 +57,7 @@ def fix_file_name_and_crs(in_dir: str, region: str, district: str):
             mgrs = file[:5]
             optical_composite = OpticalComposite(region=region, district=district, military_grid=mgrs,
                                                  bands=['B02', 'B03', 'B04'])
-            shutil.copy(os.path.join(in_dir, file), optical_composite.archive_path)
+            shutil.copy(os.path.join(in_dir, file), optical_composite.archive_path())
 
     fix_crs(in_dir)
     bucket = initialize_s3_bucket()

@@ -17,25 +17,22 @@ from torch import nn
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Subset
 
-from src.ml.util import AverageMeter, ProgressMeter, Summary, accuracy, B2PTruthDataset, TFORM, MODEL_NAME, DEFAULT_ARGS
+from src.ml.util import AverageMeter, ProgressMeter, Summary, accuracy, B2PTruthDataset, TFORM, DEFAULT_ARGS
+from file_types import TrainedModel
 
 BEST_ACC1 = 0
 
 
-def train_torch(results_dir: str, train_csv_path: str, test_csv_path: str, architecture: str,
-                bridge_no_bridge_ratio: Union[None, float], layers: Union[None, List[str]]=None, seed: Union[None, int] = None):
+def train_torch(train_csv_path: str, test_csv_path: str, architecture: str,
+                bridge_no_bridge_ratio: Union[None, float], layers: List[str],
+                seed: Union[None, int] = None):
     # Configure the namespace for this run
-
     args = DEFAULT_ARGS
-    args.results_dir = results_dir
     args.train_csv_path = train_csv_path
     args.test_csv_path = test_csv_path
     args.architecture = architecture
     args.bridge_no_bridge_ratio = bridge_no_bridge_ratio
-    if layers is not None: 
-        args.layers = layers
-
-    os.makedirs(results_dir, exist_ok=True)
+    args.layers = layers
 
     if seed is not None:
         torch.manual_seed(seed)
@@ -45,7 +42,6 @@ def train_torch(results_dir: str, train_csv_path: str, test_csv_path: str, archi
                       'which can slow down your training considerably! You may see unexpected behavior when '
                       'restarting from checkpoints.')
 
-    # TODO: Maybe make these configurable from the CLI / signature
     if args.gpu is not None:
         warnings.warn('You have chosen a specific GPU. This will completely disable data parallelism.')
 
@@ -217,8 +213,7 @@ def main_worker(gpu, ngpus_per_node, args):
             num_workers=args.workers, pin_memory=True, sampler=val_sampler)
         validate(val_loader, model, criterion, args)
         return
-    
-    layers_str = '_'.join(args.layers)
+
     for epoch in range(args.start_epoch, args.epochs):
 
         train_loader = torch.utils.data.DataLoader(
@@ -257,8 +252,11 @@ def main_worker(gpu, ngpus_per_node, args):
                     'optimizer': optimizer.state_dict(),
                     'scheduler': scheduler.state_dict()
                 },
-                is_best,
-                os.path.join(args.results_dir, f'{args.architecture}.{layers_str}.chkpt{epoch + 1}.tar')
+                args.architecture,
+                args.layers,
+                epoch,
+                args.bridge_no_bridge_ratio,
+                is_best
             )
         train_dataset.update()
         val_dataset.update()
@@ -377,16 +375,13 @@ def validate(val_loader, model, criterion, args):
     return total_mt.avg, bridge_mt.avg, no_bridge_mt.avg
 
 
-def save_checkpoint(state, is_best, filename):
-    root, _ = os.path.split(filename)
-    if not os.path.isdir(root):
-        os.makedirs(root)
-    torch.save(state, filename)
+def save_checkpoint(state, architecture, layers, epoch, ratio, is_best):
+    filename = TrainedModel(architecture=architecture, layers=layers, epoch=epoch, ratio=ratio)
+    os.makedirs(filename.archive_dir, exist_ok=True)
+    torch.save(state, filename.archive_path())
     if is_best:
-        d = os.path.dirname(filename)
-        f = os.path.basename(filename)
-        prts = f.split('.chkpt')
+        best_filename = TrainedModel(architecture=architecture, layers=layers, epoch=epoch, ratio=ratio, best=True)
         shutil.copyfile(
-            filename,
-            os.path.join(d, '.'.join([prts[0], 'best']) + ".tar")
+            filename.archive_path(),
+            best_filename.archive_path()
         )

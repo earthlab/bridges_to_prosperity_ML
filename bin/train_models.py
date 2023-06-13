@@ -3,13 +3,25 @@ from typing import List, Union
 
 from definitions import LAYER_TO_IX
 from src.ml.train import train_torch
-from file_types import TrainedModel
+from file_types import TrainedModel, TrainSplit, ValidateSplit
 
 ARCHITECTURES = ('resnet18', 'resnet34', 'resnet50')
 
 
 def train_optical(training_csv_path: str, validate_csv_path: str, architectures: List[str] = ARCHITECTURES,
                   no_bridge_to_bridge_ratios: Union[None, List[float]] = None, layers: Union[None, List[str]] = None):
+    train_csv_file = TrainSplit.create(training_csv_path)
+    val_csv_file = ValidateSplit.create(validate_csv_path)
+
+    if train_csv_file is None:
+        raise ValueError(f'{train_csv_file} not a valid training set csv file')
+    if val_csv_file is None:
+        raise ValueError(f'{val_csv_file} not a valid validation set csv file')
+
+    if train_csv_file.regions != val_csv_file.regions:
+        raise ValueError(f'Training and validation csv files must contain the same region(s): \n Input training csv '
+                         f'regions: {train_csv_file.regions} \n Input validation csv regions: {val_csv_file.regions}')
+
     no_bridge_to_bridge_ratios = [None] if no_bridge_to_bridge_ratios is None else no_bridge_to_bridge_ratios
 
     for architecture in architectures:
@@ -19,6 +31,7 @@ def train_optical(training_csv_path: str, validate_csv_path: str, architectures:
             train_torch(
                 training_csv_path,
                 validate_csv_path,
+                train_csv_file.regions,
                 architecture,
                 bridge_no_bridge_ratio=no_bridge_to_bridge_ratio,
                 layers=layers

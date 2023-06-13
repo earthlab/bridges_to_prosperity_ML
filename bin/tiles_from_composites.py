@@ -12,10 +12,10 @@ import pandas as pd
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
-from definitions import REGION_FILE_PATH, COMPOSITE_DIR, TILE_DIR
+from definitions import REGION_FILE_PATH, COMPOSITE_DIR
 from src.utilities.coords import get_bridge_locations
 from src.utilities.imaging import composite_to_tiles
-from file_types import OpticalComposite, TileMatch, FileType, MultiVariateComposite, File
+from file_types import OpticalComposite, TileMatch, MultiVariateComposite, File
 
 
 def create_tiles(args):
@@ -64,7 +64,7 @@ def tiles_from_composites(no_truth: bool, cores: int, region: str):
             )
 
         tile_match_file = TileMatch()
-        tile_match_path = tile_match_file.archive_path(region, district)
+        tile_match_path = tile_match_file.archive_path([region], district)
 
         unique_bridge_locations = filter_non_unique_bridge_locations(matched_df)
         dfs.append(unique_bridge_locations)
@@ -74,7 +74,7 @@ def tiles_from_composites(no_truth: bool, cores: int, region: str):
     regional_matched_df = pd.concat(dfs, ignore_index=True)
     unique_bridge_locations = filter_non_unique_bridge_locations(regional_matched_df)
     regional_tile_match_file = TileMatch()
-    unique_bridge_locations.to_csv(regional_tile_match_file.archive_path(region))
+    unique_bridge_locations.to_csv(regional_tile_match_file.archive_path([region]))
 
 
 def filter_non_unique_bridge_locations(matched_df: pandas.DataFrame) -> pandas.DataFrame:

@@ -1,15 +1,9 @@
 import os
 import re
-from enum import Enum, auto
-from typing import List, Union
+from typing import List
 from definitions import COMPOSITE_DIR, B2P_DIR, ELEVATION_DIR, SLOPE_DIR, SENTINEL_2_DIR, MULTIVARIATE_DIR, OSM_DIR, \
-    MODEL_DIR, INFERENCE_RESULTS_DIR, TILE_DIR
+    MODEL_DIR, INFERENCE_RESULTS_DIR, TILE_DIR, TRAIN_VALIDATE_SPLIT_DIR, MULTI_REGION_TILE_MATCH
 import glob
-
-
-class FileType(Enum):
-    MULTIVARIATE_COMPOSITE = auto()
-    OPTICAL_COMPOSITE = auto()
 
 
 class File:
@@ -48,9 +42,6 @@ class OpticalComposite(File):
         self.bands = sorted(bands)
         super().__init__()
         self._s3 = True
-
-    def _build_regex(self):
-        return
 
     @property
     def name(self):
@@ -370,39 +361,36 @@ class TileGeoLoc(File):
 
 
 class TileMatch(File):
-    regex = r'^(?P<bands>[a-zA-Z0-9]{3}|multivariate(?:_[a-zA-Z0-9]{3}|multivariate)*)_tile_match\.csv$'
+    regex = r'tile_match_(?P<regions>\w+(?:_\w+)*)\.csv$'
 
-    def __init__(self, bands=None):
-        if bands is None:
-            bands = ['multivariate']
-        self.bands = sorted(bands)
+    def __init__(self, regions: List[str]):
+        self.regions = sorted(regions)
         super().__init__()
 
     @property
     def name(self):
-        base_string = ''
-        for band in self.bands:
-            base_string += band + '_'
-        base_string += 'tile_match.csv'
+        base_string = 'tile_match_'
+        for region in self.regions:
+            base_string += region + '_'
+        base_string += '.csv'
         return base_string
 
-    def archive_path(self, region: str, district: str = None) -> str:
-        base_path = os.path.join(TILE_DIR, region)
+    def archive_path(self, district: str = None) -> str:
+        base_path = os.path.join(TILE_DIR, self.regions[0]) if len(self.regions) == 1 else \
+            os.path.join(MULTI_REGION_TILE_MATCH, '_'.join(self.regions))
         if district is not None:
             base_path = os.path.join(base_path, district)
         base_path = os.path.join(base_path, self.name)
         return base_path
 
     @staticmethod
-    def find_files(in_dir: str, bands: List[str] = None, recursive: bool = False):
-        regex = r''
-        if bands is not None:
-            bands = sorted(bands)
-            for band in bands:
-                regex += r'{}'.format(band) + r'_'
-        else:
-            regex += 'multivariate_'
-        regex += r'tile_match\.csv$'
+    def find_files(in_dir: str, regions: List[str] = None, recursive: bool = False):
+        regex = r'tile_match'
+        if regions is not None:
+            regions = sorted(regions)
+            for region in regions:
+                regex += r'{}'.format(region) + r'_'
+        regex += r'\.csv$'
 
         files = glob.glob(in_dir + '/*', recursive=recursive)
         matching_files = [f for f in files if re.match(regex, os.path.basename(f)) is not None]
@@ -416,7 +404,7 @@ class TileMatch(File):
         match = re.match(regex, name)
         if match:
             group_dict = match.groupdict()
-            return cls(bands=group_dict['bands'].split('_'))
+            return cls(regions=group_dict['regions'].split('_'))
         else:
             return None
 
@@ -495,8 +483,8 @@ class TrainedModel(File):
         base_str += f'epoch{self.epoch}' + '_best' if self.best else '' + '.tar'
         return base_str
 
-    def archive_path(self):
-        return os.path.join(MODEL_DIR, self.architecture, f'r{self.ratio}', self.name)
+    def archive_path(self, regions: List[str]):
+        return os.path.join(MODEL_DIR, '_'.join(sorted(regions)), self.architecture, f'r{self.ratio}', self.name)
 
     @staticmethod
     def find_files(in_dir: str, architecture: str, layers: List[str], epoch: str, ratio: float, best: bool = False,
@@ -590,7 +578,7 @@ class TrainSplit(File):
     regex = r'train_(?P<regions>\w+(?:_\w+)*)_(?P<ratio>\d+)\.csv$'
 
     def __init__(self, regions: List[str], ratio: int):
-        self.regions = regions
+        self.regions = sorted(regions)
         self.ratio = ratio
         super().__init__()
 
@@ -599,14 +587,14 @@ class TrainSplit(File):
         return f"train_{'_'.join(self.regions)}_{self.ratio}.csv"
 
     def archive_path(self) -> str:
-        return os.path.join(TILE_DIR, 'train_validate_splits', self.name)
+        return os.path.join(TRAIN_VALIDATE_SPLIT_DIR, self.name)
 
     @staticmethod
     def find_files(in_dir: str, regions: List[str], ratio: int, recursive: bool = False):
         files = glob.glob(in_dir + '/**/*', recursive=recursive)
 
         regex = r'train_'
-        for region in regions:
+        for region in sorted(regions):
             regex += region + '_'
         regex += f'{ratio}.csv'
 
@@ -629,7 +617,7 @@ class ValidateSplit(File):
     regex = r'validate_(?P<regions>\w+(?:_\w+)*)_(?P<ratio>\d+)\.csv$'
 
     def __init__(self, regions: List[str], ratio: int):
-        self.regions = regions
+        self.regions = sorted(regions)
         self.ratio = ratio
         super().__init__()
 
@@ -638,14 +626,14 @@ class ValidateSplit(File):
         return f"validate_{'_'.join(self.regions)}_{self.ratio}.csv"
 
     def archive_path(self) -> str:
-        return os.path.join(TILE_DIR, 'train_validate_splits', self.name)
+        return os.path.join(TRAIN_VALIDATE_SPLIT_DIR, self.name)
 
     @staticmethod
     def find_files(in_dir: str, regions: List[str], ratio: int, recursive: bool = False):
         files = glob.glob(in_dir + '/**/*', recursive=recursive)
 
         regex = r'validate_'
-        for region in regions:
+        for region in sorted(regions):
             regex += region + '_'
         regex += f'{ratio}.csv'
 
@@ -687,8 +675,9 @@ class InferenceResultsCSV(File):
         base_str += f'epoch{self.epoch}' + '_best' if self.best else '' + '_results' '.csv'
         return base_str
 
-    def archive_path(self, region: str, ):
-        return os.path.join(INFERENCE_RESULTS_DIR, self.architecture, f'r{self.ratio}', self.name)
+    def archive_path(self, regions: List[str]):
+        return os.path.join(INFERENCE_RESULTS_DIR, '_'.join(sorted(regions)), self.architecture, f'r{self.ratio}',
+                            self.name)
 
     @staticmethod
     def find_files(in_dir: str, architecture: str, layers: List[str], epoch: str, ratio: float, best: bool = False,
@@ -748,9 +737,10 @@ class InferenceResultsShapefile(File):
         base_str += f'epoch{self.epoch}' + '_best' if self.best else '' + '_results' '.shp'
         return base_str
 
-    def archive_path(self):
+    def archive_path(self, regions: List[str]):
         sub_dir = '_'.join(self.layers) + f'_{self.epoch}' + '_best' if self.best else ''
-        return os.path.join(INFERENCE_RESULTS_DIR, self.architecture, f'r{self.ratio}', sub_dir, self.name)
+        return os.path.join(INFERENCE_RESULTS_DIR, '_'.join(sorted(regions)), self.architecture, f'r{self.ratio}',
+                            sub_dir, self.name)
 
     @staticmethod
     def find_files(in_dir: str, architecture: str, layers: List[str], epoch: str, ratio: float, best: bool = False,

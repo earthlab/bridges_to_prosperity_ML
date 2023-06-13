@@ -23,7 +23,7 @@ from file_types import TrainedModel
 BEST_ACC1 = 0
 
 
-def train_torch(train_csv_path: str, test_csv_path: str, architecture: str,
+def train_torch(train_csv_path: str, test_csv_path: str, regions: str, architecture: str,
                 bridge_no_bridge_ratio: Union[None, float], layers: List[str],
                 seed: Union[None, int] = None):
     # Configure the namespace for this run
@@ -33,6 +33,7 @@ def train_torch(train_csv_path: str, test_csv_path: str, architecture: str,
     args.architecture = architecture
     args.bridge_no_bridge_ratio = bridge_no_bridge_ratio
     args.layers = layers
+    args.regions = regions
 
     if seed is not None:
         torch.manual_seed(seed)
@@ -241,7 +242,7 @@ def main_worker(gpu, ngpus_per_node, args):
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                                                     and args.rank % ngpus_per_node == 0):
             save_checkpoint(
-                {
+                state={
                     'epoch': epoch + 1,
                     'arch': args.architecture,
                     'state_dict': model.state_dict(),  # this was full of NaN with all the training data
@@ -252,11 +253,12 @@ def main_worker(gpu, ngpus_per_node, args):
                     'optimizer': optimizer.state_dict(),
                     'scheduler': scheduler.state_dict()
                 },
-                args.architecture,
-                args.layers,
-                epoch,
-                args.bridge_no_bridge_ratio,
-                is_best
+                architecture=args.architecture,
+                regions=args.regions,
+                layers=args.layers,
+                epoch=epoch,
+                ratio=args.bridge_no_bridge_ratio,
+                is_best=is_best
             )
         train_dataset.update()
         val_dataset.update()
@@ -375,13 +377,13 @@ def validate(val_loader, model, criterion, args):
     return total_mt.avg, bridge_mt.avg, no_bridge_mt.avg
 
 
-def save_checkpoint(state, architecture, layers, epoch, ratio, is_best):
+def save_checkpoint(state, architecture, regions, layers, epoch, ratio, is_best):
     filename = TrainedModel(architecture=architecture, layers=layers, epoch=epoch, ratio=ratio)
     os.makedirs(filename.archive_dir, exist_ok=True)
-    torch.save(state, filename.archive_path())
+    torch.save(state, filename.archive_path(regions))
     if is_best:
         best_filename = TrainedModel(architecture=architecture, layers=layers, epoch=epoch, ratio=ratio, best=True)
         shutil.copyfile(
-            filename.archive_path(),
-            best_filename.archive_path()
+            filename.archive_path(regions),
+            best_filename.archive_path(regions)
         )

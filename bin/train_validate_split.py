@@ -6,7 +6,7 @@ from typing import List
 
 import numpy as np
 import pandas as pd
-from file_types import TrainSplit, ValidateSplit, TileMatch, FileType
+from file_types import TrainSplit, ValidateSplit, TileMatch
 from definitions import TILE_DIR
 
 CORES = mp.cpu_count() - 1
@@ -17,6 +17,7 @@ def create_dset_csv(regions: List[str], ratio: int) -> None:
 
     train_dfs = []
     val_dfs = []
+    matched_dfs = []
     for region in regions:
         df = TileMatch.find_files(os.path.join(TILE_DIR, region))
         if not df:
@@ -47,16 +48,20 @@ def create_dset_csv(regions: List[str], ratio: int) -> None:
         )
         train_dfs.append(train_df)
         val_dfs.append(val_df)
+        matched_dfs.append(matched_df)
 
     joined_train_df = pd.concat(train_dfs, ignore_index=True)
     joined_val_df = pd.concat(val_dfs, ignore_index=True)
+    joined_matched_df = pd.concat(matched_dfs, ignore_index=True)
 
     train_csv = TrainSplit(regions, ratio)
     val_csv = ValidateSplit(regions, ratio)
+    matched_df = TileMatch(regions)
 
     joined_train_df.to_csv(train_csv.archive_path())
     joined_val_df.to_csv(val_csv.archive_path())
-    print(f'Saving to {train_csv.archive_path()} and {val_csv.archive_path()}')
+    joined_matched_df.to_csv(matched_df.archive_path())
+    print(f'Saving to {train_csv.archive_path()}, {val_csv.archive_path()}, and {matched_df.archive_path()}')
 
 
 if __name__ == '__main__':

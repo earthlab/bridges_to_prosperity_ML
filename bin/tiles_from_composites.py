@@ -12,7 +12,7 @@ import pandas as pd
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
-from definitions import REGION_FILE_PATH, COMPOSITE_DIR, MULTIVARIATE_TILE_DIR, OPTICAL_TILE_DIR
+from definitions import REGION_FILE_PATH, COMPOSITE_DIR, TILE_DIR
 from src.utilities.coords import get_bridge_locations
 from src.utilities.imaging import composite_to_tiles
 from file_types import OpticalComposite, TileMatch, FileType, MultiVariateComposite, File
@@ -35,7 +35,7 @@ def create_tiles(args):
     return df
 
 
-def tiles_from_composites(file_type: FileType, no_truth: bool, cores: int, region: str):
+def tiles_from_composites(no_truth: bool, cores: int, region: str):
     bridge_locations = None if no_truth else get_bridge_locations()
 
     with open(REGION_FILE_PATH, 'r') as f:
@@ -45,17 +45,7 @@ def tiles_from_composites(file_type: FileType, no_truth: bool, cores: int, regio
     dfs = []
     for district in districts:
         composite_dir = os.path.join(COMPOSITE_DIR, region, district)
-
-        if file_type == FileType.MULTIVARIATE_COMPOSITE:
-            bands = None
-            composites = MultiVariateComposite.find_files(composite_dir, recursive=True)
-            tile_dir = MULTIVARIATE_TILE_DIR
-        elif file_type == FileType.OPTICAL_COMPOSITE:
-            bands = ['B02', 'B03', 'B04']
-            composites = OpticalComposite.find_files(composite_dir, bands=bands, recursive=True)
-            tile_dir = OPTICAL_TILE_DIR
-        else:
-            return
+        composites = MultiVariateComposite.find_files(composite_dir, recursive=True)
 
         if cores == 1:
             matched_df = create_tiles((composites, bridge_locations, 1))
@@ -73,8 +63,8 @@ def tiles_from_composites(file_type: FileType, no_truth: bool, cores: int, regio
                 max_workers=cores
             )
 
-        tile_match_file = TileMatch(bands)
-        tile_match_path = tile_match_file.archive_path(tile_dir, region, district)
+        tile_match_file = TileMatch()
+        tile_match_path = tile_match_file.archive_path(region, district)
 
         unique_bridge_locations = filter_non_unique_bridge_locations(matched_df)
         dfs.append(unique_bridge_locations)
@@ -83,8 +73,8 @@ def tiles_from_composites(file_type: FileType, no_truth: bool, cores: int, regio
 
     regional_matched_df = pd.concat(dfs, ignore_index=True)
     unique_bridge_locations = filter_non_unique_bridge_locations(regional_matched_df)
-    regional_tile_match_file = TileMatch(bands)
-    unique_bridge_locations.to_csv(regional_tile_match_file.archive_path(tile_dir, region))
+    regional_tile_match_file = TileMatch()
+    unique_bridge_locations.to_csv(regional_tile_match_file.archive_path(region))
 
 
 def filter_non_unique_bridge_locations(matched_df: pandas.DataFrame) -> pandas.DataFrame:

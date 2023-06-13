@@ -3,7 +3,7 @@ import re
 from enum import Enum, auto
 from typing import List, Union
 from definitions import COMPOSITE_DIR, B2P_DIR, ELEVATION_DIR, SLOPE_DIR, SENTINEL_2_DIR, MULTIVARIATE_DIR, OSM_DIR, \
-    MODEL_DIR, INFERENCE_RESULTS_DIR
+    MODEL_DIR, INFERENCE_RESULTS_DIR, TILE_DIR
 import glob
 
 
@@ -386,8 +386,8 @@ class TileMatch(File):
         base_string += 'tile_match.csv'
         return base_string
 
-    def archive_path(self, tile_dir: str, region: str, district: str = None) -> str:
-        base_path = os.path.join(tile_dir, region)
+    def archive_path(self, region: str, district: str = None) -> str:
+        base_path = os.path.join(TILE_DIR, region)
         if district is not None:
             base_path = os.path.join(base_path, district)
         base_path = os.path.join(base_path, self.name)
@@ -598,8 +598,8 @@ class TrainSplit(File):
     def name(self):
         return f"train_{'_'.join(self.regions)}_{self.ratio}.csv"
 
-    def archive_path(self, tile_dir: str) -> str:
-        return os.path.join(tile_dir, 'train_validate_splits', self.name)
+    def archive_path(self) -> str:
+        return os.path.join(TILE_DIR, 'train_validate_splits', self.name)
 
     @staticmethod
     def find_files(in_dir: str, regions: List[str], ratio: int, recursive: bool = False):
@@ -637,8 +637,8 @@ class ValidateSplit(File):
     def name(self):
         return f"validate_{'_'.join(self.regions)}_{self.ratio}.csv"
 
-    def archive_path(self, tile_dir: str) -> str:
-        return os.path.join(tile_dir, 'train_validate_splits', self.name)
+    def archive_path(self) -> str:
+        return os.path.join(TILE_DIR, 'train_validate_splits', self.name)
 
     @staticmethod
     def find_files(in_dir: str, regions: List[str], ratio: int, recursive: bool = False):

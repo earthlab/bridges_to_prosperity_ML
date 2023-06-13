@@ -7,22 +7,20 @@ from typing import List
 import numpy as np
 import pandas as pd
 from file_types import TrainSplit, ValidateSplit, TileMatch, FileType
-from definitions import MULTIVARIATE_TILE_DIR, OPTICAL_TILE_DIR
+from definitions import TILE_DIR
 
 CORES = mp.cpu_count() - 1
 
 
-def create_dset_csv(file_type: FileType, regions: List[str], ratio: int) -> None:
+def create_dset_csv(regions: List[str], ratio: int) -> None:
     assert 100 > ratio > 0
-
-    tile_dir = MULTIVARIATE_TILE_DIR if file_type == FileType.MULTIVARIATE_COMPOSITE else OPTICAL_TILE_DIR
 
     train_dfs = []
     val_dfs = []
     for region in regions:
-        df = TileMatch.find_files(os.path.join(tile_dir, region))
+        df = TileMatch.find_files(os.path.join(TILE_DIR, region))
         if not df:
-            raise LookupError(f'Could not find tile match file for region {region} in {os.path.join(tile_dir, region)}')
+            raise LookupError(f'Could not find tile match file for region {region} in {os.path.join(TILE_DIR, region)}')
 
         matched_df = pd.read_csv(df[0])
 
@@ -56,9 +54,9 @@ def create_dset_csv(file_type: FileType, regions: List[str], ratio: int) -> None
     train_csv = TrainSplit(regions, ratio)
     val_csv = ValidateSplit(regions, ratio)
 
-    joined_train_df.to_csv(train_csv.archive_path(tile_dir))
-    joined_val_df.to_csv(val_csv.archive_path(tile_dir))
-    print(f'Saving to {train_csv.archive_path(tile_dir)} and {val_csv.archive_path(tile_dir)}')
+    joined_train_df.to_csv(train_csv.archive_path())
+    joined_val_df.to_csv(val_csv.archive_path())
+    print(f'Saving to {train_csv.archive_path()} and {val_csv.archive_path()}')
 
 
 if __name__ == '__main__':

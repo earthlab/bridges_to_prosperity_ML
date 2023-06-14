@@ -23,7 +23,7 @@ from file_types import TrainedModel
 BEST_ACC1 = 0
 
 
-def train_torch(train_csv_path: str, test_csv_path: str, regions: str, architecture: str,
+def train_torch(train_csv_path: str, test_csv_path: str, regions: List[str], architecture: str,
                 bridge_no_bridge_ratio: Union[None, float], layers: List[str],
                 seed: Union[None, int] = None):
     # Configure the namespace for this run

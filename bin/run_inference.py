@@ -1,6 +1,9 @@
 import argparse
 import os
 from pathlib import Path
+from typing import List
+
+import pandas as pd
 
 from src.ml.inference import inference_torch
 from src.utilities.config_reader import CONFIG
@@ -8,14 +11,19 @@ from src.utilities.files import results_csv_to_shapefile
 from file_types import InferenceResultsCSV, TrainedModel, TileMatch, InferenceResultsShapefile
 
 
-def run_inference(model_file_path: str, tile_csv_path: str, truth_data: bool,
+def run_inference(model_file_path: str, regions: List[str], truth_data: bool,
                   batch_size: int = CONFIG.TORCH.INFERENCE.BATCH_SIZE,
                   num_workers: int = CONFIG.TORCH.INFERENCE.NUM_WORKERS, print_frequency: int = 100):
-    tile_csv_file = TileMatch.create(tile_csv_path)
-    if tile_csv_file is None:
-        raise ValueError(f'{os.path.basename(tile_csv_path)} is not a valid tile csv file')
-
-    regions = tile_csv_file.regions
+    all_region_tile_match = TileMatch(regions=regions)
+    if not all_region_tile_match.exists:
+        dfs = []
+        for region in regions:
+            region_tile_match = TileMatch(regions=[region])
+            if not region_tile_match.exists:
+                raise LookupError(f'Could not find tile match csv for region {region}')
+            dfs.append(pd.read_csv(region_tile_match.archive_path()))
+        dfs = pd.concat(dfs, ignore_index=True)
+        dfs.to_csv(all_region_tile_match.archive_path())
 
     model_file = TrainedModel.create(model_file_path)
     if model_file is None:
@@ -35,7 +43,7 @@ def run_inference(model_file_path: str, tile_csv_path: str, truth_data: bool,
 
     inference_torch(
         model_file_path=model_file_path,
-        tile_csv_path=tile_csv_path,
+        tile_csv_path=all_region_tile_match.archive_path(),
         results_csv_path=results_csv_archive_path,
         batch_size=batch_size,
         num_workers=num_workers,
@@ -52,10 +60,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_file_path', required=True, type=str,
                         help='Path to the model used to run inference')
-    parser.add_argument('--tile_csv_path', required=True, type=str,
-                        help='Path to csv file describing all tiles to run inference on.')
+    parser.add_argument('--inference_regions', required=True, type=str,
+                        help='Region(s) to run inference over')
     parser.add_argument('--truth_data', action='store_true',
-                        help='If set then truth data will be read in and target column will be included in output csv')
+                        help='If set then truth data will be read in and target column will be included in results csv')
     parser.add_argument('--batch_size', required=False, type=int, default=CONFIG.TORCH.INFERENCE.BATCH_SIZE,
                         help='Batch size for inference')
     parser.add_argument('--num_workers', '-w', required=False, type=int, default=CONFIG.TORCH.INFERENCE.NUM_WORKERS,
@@ -63,6 +71,6 @@ if __name__ == '__main__':
     parser.add_argument('--print_frequency', '-p', required=False, type=int, default=100)
     args = parser.parse_args()
 
-    run_inference(model_file_path=args.model_file_path, tile_csv_path=args.tile_csv_path,
+    run_inference(model_file_path=args.model_file_path, regions=args.inference_regions,
                   batch_size=args.batch_size, num_workers=args.num_workers,
                   print_frequency=args.print_frequency, truth_data=args.truth_data)

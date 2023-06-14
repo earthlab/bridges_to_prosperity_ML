@@ -45,7 +45,8 @@ def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: 
 
     model.load_state_dict(checkpoint['state_dict'], strict=False)
 
-    dset = B2PTruthDataset(tile_csv_path, layers=args.layers) if truth_data else B2PNoTruthDataset(tile_csv_path, layers=args.layers)
+    dset = B2PTruthDataset(tile_csv_path, layers=args.layers) if truth_data else B2PNoTruthDataset(tile_csv_path,
+                                                                                                   layers=args.layers)
     dloader = torch.utils.data.DataLoader(
         dset,
         batch_size=args.batch_size,

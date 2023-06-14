@@ -22,7 +22,7 @@ from src.utilities.coords import tiff_to_bbox
 from bin.optical.create_composites import create_composites as create_optical_composites
 
 from file_types import OpticalComposite, Elevation as ElevationFile, Slope as SlopeFile, OSM as OSMFile,\
-    MultiVariateComposite as MultiVariateCompositeFile, FileType
+    MultiVariateComposite as MultiVariateCompositeFile, File
 
 CORES = mp.cpu_count() - 1
 Image.MAX_IMAGE_PIXELS = None

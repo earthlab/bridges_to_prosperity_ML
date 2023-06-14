@@ -19,11 +19,11 @@ def create_dset_csv(regions: List[str], ratio: int) -> None:
     val_dfs = []
     matched_dfs = []
     for region in regions:
-        df = TileMatch.find_files(os.path.join(TILE_DIR, region))
-        if not df:
-            raise LookupError(f'Could not find tile match file for region {region} in {os.path.join(TILE_DIR, region)}')
-
-        matched_df = pd.read_csv(df[0])
+        df = TileMatch([region])
+        if not df.exists:
+            raise LookupError(f'Could not find tile match file for region {region}.'
+                              f' Run tiles_from_composites.py with the region set to {region} to create this file')
+        matched_df = pd.read_csv(df.archive_path())
 
         # Create training sets and validation sets separate the training and validation into separate files
         b_ix = matched_df.index[matched_df['is_bridge']].tolist()

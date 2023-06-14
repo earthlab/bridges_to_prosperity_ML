@@ -3,6 +3,7 @@ Creates tiff tile files for the specified composites. By default, this will craw
 tiles for all composites and write them to data/tiles. The input composite directory, output tile directory, and ground
 truth directory paths can be overriden so process is only completed for specified region.
 """
+import argparse
 import pandas
 import yaml
 import os
@@ -11,6 +12,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
+import multiprocessing as mp
 
 from definitions import REGION_FILE_PATH, COMPOSITE_DIR
 from src.utilities.coords import get_bridge_locations
@@ -22,13 +24,7 @@ def create_tiles(args):
     composite_files, bridge_locs, pos = args
     df = []
     for composite_path in tqdm(composite_files, position=0, leave=True):
-        composite_file = File.create(composite_path)
-        if isinstance(composite_file, OpticalComposite):
-            bands = composite_file.bands
-        elif isinstance(composite_file, MultiVariateComposite):
-            bands = ['multivariate']
-        else:
-            continue
+        bands = ['multivariate']
         df_i = composite_to_tiles(composite_path, bands, bridge_locs, pos)
         df.append(df_i)
     df = pd.concat(df, ignore_index=True)
@@ -63,8 +59,8 @@ def tiles_from_composites(no_truth: bool, cores: int, region: str):
                 max_workers=cores
             )
 
-        tile_match_file = TileMatch()
-        tile_match_path = tile_match_file.archive_path([region], district)
+        tile_match_file = TileMatch([region])
+        tile_match_path = tile_match_file.archive_path(district)
 
         unique_bridge_locations = filter_non_unique_bridge_locations(matched_df)
         dfs.append(unique_bridge_locations)
@@ -73,8 +69,8 @@ def tiles_from_composites(no_truth: bool, cores: int, region: str):
 
     regional_matched_df = pd.concat(dfs, ignore_index=True)
     unique_bridge_locations = filter_non_unique_bridge_locations(regional_matched_df)
-    regional_tile_match_file = TileMatch()
-    unique_bridge_locations.to_csv(regional_tile_match_file.archive_path([region]))
+    regional_tile_match_file = TileMatch([region])
+    unique_bridge_locations.to_csv(regional_tile_match_file.archive_path())
 
 
 def filter_non_unique_bridge_locations(matched_df: pandas.DataFrame) -> pandas.DataFrame:
@@ -88,3 +84,15 @@ def filter_non_unique_bridge_locations(matched_df: pandas.DataFrame) -> pandas.D
                 bridge_dup.append(matched_df['bridge_loc'][i])
 
     return matched_df.drop(rows_to_delete)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--region', required=True, type=str, help='Name of region to make tiles for. Must be in the '
+                                                                  'region_info.yaml file')
+    parser.add_argument('--no_truth', action='store_true', help='Must be set if none of the districts in the specified'
+                                                                ' region has ground truth data')
+    parser.add_argument('--cores', required=False, type=int, default=mp.cpu_count() - 1,
+                        help='The number of cores to use to create tiles in parallel. Default is cpu_count - 1')
+    args = parser.parse_args()
+    tiles_from_composites(args.no_truth, args.cores, args.region)

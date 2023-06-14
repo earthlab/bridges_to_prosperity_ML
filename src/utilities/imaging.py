@@ -182,7 +182,7 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
     crs = None
     transform = None
     for band in tqdm(bands, desc=f'Processing {coord}', leave=True, position=1, total=len(bands), disable=pbar):
-        band_files = Sentinel2Tile.find_files(s2_dir, [band], recursive=True)
+        band_files = Sentinel2Tile.find_files(s2_dir, band, recursive=True)
         assert len(band_files) > 1, f'{s2_dir}'
 
         # TODO: Keep looping here until crs and transform are found
@@ -342,15 +342,14 @@ def scale_multiband_composite(multiband_tiff: str):
 
 
 def composite_to_tiles(
-        composite: Union[OpticalComposite, MultiVariateComposite],
-        bands,
+        composite: MultiVariateComposite,
         bridge_locations,
         tqdm_pos=None,
         tqdm_update_rate=None,
         remove_tiff=True,
         div: int = 300  # in meters
 ):
-    grid_geoloc_file = TileGeoLoc(bands=bands)
+    grid_geoloc_file = TileGeoLoc()
 
     if isinstance(composite, OpticalComposite):
         tile_dir = OPTICAL_TILE_DIR
@@ -359,8 +358,7 @@ def composite_to_tiles(
     else:
         raise ValueError('Input composite parameter must be of type OpticalComposite or MultiVariateComposite')
 
-    grid_geoloc_path = grid_geoloc_file.archive_path(tile_dir, composite.region, composite.district, composite.mgrs,
-                                                     bands=bands)
+    grid_geoloc_path = grid_geoloc_file.archive_path(tile_dir, composite.region, composite.district, composite.mgrs)
     if os.path.isfile(grid_geoloc_path):
         df = pd.read_csv(grid_geoloc_path)
         return df
@@ -403,12 +401,10 @@ def composite_to_tiles(
         k = 0
         for xmin in xsteps:
             for ymin in ysteps:
-                tile_tiff = Tile(x_min=xmin, y_min=ymin, bands=bands)
-                tile_tiff_path = tile_tiff.archive_path(tile_dir, composite.region, composite.district, composite.mgrs,
-                                                        bands=bands)
-                pt_file = PyTorch(x_min=xmin, y_min=ymin, bands=bands)
-                pt_file_path = pt_file.archive_path(tile_dir, composite.region, composite.district, composite.mgrs,
-                                                    bands=bands)
+                tile_tiff = Tile(x_min=xmin, y_min=ymin)
+                tile_tiff_path = tile_tiff.archive_path(tile_dir, composite.region, composite.district, composite.mgrs)
+                pt_file = PyTorch(x_min=xmin, y_min=ymin)
+                pt_file_path = pt_file.archive_path(tile_dir, composite.region, composite.district, composite.mgrs)
                 if not os.path.isfile(tile_tiff_path):
                     gdal.Translate(
                         tile_tiff_path,
@@ -583,17 +579,12 @@ def numpy_array_to_raster(output_path: str, numpy_array: np.array, geo_transform
         n_band (int): The band to write to in the output raster
         no_data (int): Value in numpy array that should be treated as no data
         gdal_data_type (int): Gdal data type of raster (see gdal documentation for list of values)
-        spatial_reference_system_wkid (int): Well known id (wkid) of the spatial reference of the data
     """
     rows, columns = numpy_array.shape
 
     # create output raster
     output_raster = _create_raster(output_path, int(columns), int(rows), n_band, gdal_data_type)
-
-    print('Setting projected')
-    print(projection)
     output_raster.SetProjection(projection)
-    print('Set')
     output_raster.SetGeoTransform(geo_transform)
     output_band = output_raster.GetRasterBand(1)
     output_band.SetNoDataValue(no_data)
@@ -605,43 +596,3 @@ def numpy_array_to_raster(output_path: str, numpy_array: np.array, geo_transform
         raise Exception('Failed to create raster: %s' % output_path)
 
     return output_raster
-
-
-def fix_crs(in_dir: str):
-    for file in os.listdir(in_dir):
-        optical_composite = OpticalComposite.create(file)
-        if optical_composite is not None:
-            tiff_file = gdal.Open(os.path.join(in_dir, file), gdal.GA_Update)
-            projection = tiff_file.GetProjection()
-            epsg = int(pyproj.Proj(projection).crs.to_epsg())
-            # print(epsg)
-            # if epsg == 4326:
-            print(optical_composite.mgrs)
-            bbox = mgrs_to_bbox(optical_composite.mgrs)
-            crs = resolve_crs(bbox[3], bbox[0])
-            tiff_file.SetProjection(crs.ExportToWkt())
-            print(int(pyproj.Proj(crs.ExportToWkt()).crs.to_epsg()))
-            tiff_file = None
-
-
-def validate_tiff_to_bbox(indir: str):
-    for file in os.listdir(indir):
-        ft = MultiVariateComposite.create(file)
-        if ft is not None:
-            mgrs_bbox = mgrs_to_bbox(ft.mgrs)
-            util_bbox = tiff_to_bbox(os.path.join(indir, file))
-            if not (abs(util_bbox[3][0] - mgrs_bbox[1]) < 0.001 and abs(util_bbox[3][1] - mgrs_bbox[0]) < 0.001
-                    #and abs(util_bbox[1][0] - mgrs_bbox[3]) < 0.001 and abs(util_bbox[1][1] - mgrs_bbox[2]) < 0.001
-            ):
-                print(f"Didn't pass: {file}, mgrs: {mgrs_bbox}, util: {util_bbox}")
-
-
-def find_trans_utm(indir: str):
-    for file in os.listdir(indir):
-        ft = MultiVariateComposite.create(file)
-        if ft is not None:
-            mgrs_bbox = mgrs_to_bbox(ft.mgrs)
-            utm_bl = get_utm_epsg(mgrs_bbox[1], mgrs_bbox[0])
-            utm_tr = get_utm_epsg(mgrs_bbox[3], mgrs_bbox[0])
-            if utm_tr != utm_bl:
-                print(file)

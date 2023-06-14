@@ -51,10 +51,17 @@ class OpticalComposite(File):
         return base_string + '.tif'
 
     def archive_path(self):
-        return os.path.join(B2P_DIR, 'data', COMPOSITE_DIR, self.region, self.district, self.name)
+        return os.path.join(COMPOSITE_DIR, self.region, self.district, self.name)
 
     @staticmethod
-    def find_files(in_dir: str, bands: List[str] = None, mgrs: List[str] = None, recursive: bool = False):
+    def find_files(region: str = None, district: str = None, bands: List[str] = None, mgrs: List[str] = None,
+                   recursive: bool = False, in_dir: str = None):
+        in_dir = COMPOSITE_DIR if in_dir is None else in_dir
+        if region is not None:
+            in_dir = os.path.join(in_dir, region)
+        if district is not None:
+            in_dir = os.path.join(in_dir, district)
+        
         if bands is None:
             bands = []
         bands = sorted(bands)
@@ -70,13 +77,13 @@ class OpticalComposite(File):
         if mgrs is not None:
             matching_files = []
             for f in files:
-                match = re.match(OpticalComposite.base_regex, os.path.basename(f))
+                match = re.match(regex, os.path.basename(f))
                 if match and match.groupdict()['mgrs'] in mgrs:
                     matching_files.append(f)
         else:
             matching_files = [f for f in files if re.match(regex, os.path.basename(f)) is not None]
 
-        return matching_files
+        return sorted(matching_files)
 
     @classmethod
     def create(cls, file_path: str):
@@ -123,12 +130,8 @@ class Sentinel2Tile(File):
         return os.path.join(SENTINEL_2_DIR, region, district, self.mgrs_grid, self.date_str, self.name)
 
     @staticmethod
-    def find_files(in_dir: str, bands: List[str], recursive: bool = False):
-        bands = sorted(bands)
-        regex = Sentinel2Tile.base_regex
-        for band in bands:
-            regex += r'{}'.format(band) + (r'_' if band != bands[-1] else r'')
-        regex += r'\.jp2$'
+    def find_files(in_dir: str, band: str, recursive: bool = False):
+        regex = Sentinel2Tile.base_regex + r'{}_'.format(band) + r'\.jp2$'
 
         files = glob.glob(in_dir + '/**/*', recursive=recursive)
         matching_files = [f for f in files if re.match(regex, os.path.basename(f)) is not None]

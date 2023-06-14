@@ -130,6 +130,7 @@ class APIAuth:
         s3 = auth.login(aws_account='b2p')
 
     """
+    # TODO: Remove this
     SAML2AWS_INSTALL_ERROR_STR = "Error configuring saml2aws. Is it installed? Check for installation by running" \
                                  " 'saml2aws version'\n If not installed follow instructions at " \
                                  "https://curc.readthedocs.io/en/iaasce-954_grouper/cloud/aws/getting-started/" \

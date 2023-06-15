@@ -111,11 +111,8 @@ def _download_task(namespace: Namespace) -> None:
     """
     s3 = initialize_s3_client(CONFIG.AWS.BUCKET)
     os.makedirs(namespace.outdir, exist_ok=True)
-    dst = os.path.join(namespace.outdir, namespace.available_file.replace('/', '_'))
-    if os.path.isfile(dst):
-        return
     s3.download_file(namespace.bucket_name, namespace.available_file,
-                     dst,
+                     namespace.dest,
                      ExtraArgs={'RequestPayer': 'requester'}
                      )
 
@@ -290,7 +287,7 @@ class SinergiseSentinelAPI:
         else:
             self._s3 = initialize_s3_client()
 
-    def download(self, bounds: List[float], buffer: float, outdir: str, start_date: str, end_date: str,
+    def download(self, bounds: List[float], buffer: float, region: str, district: str, start_date: str, end_date: str,
                  bands=None) -> None:
         """
         Downloads a list of .jp2 files from the Sinergise Sentinel2 LC1 bucket given a bounding box defined in lat/long,
@@ -298,7 +295,6 @@ class SinergiseSentinelAPI:
          Args:
              bounds (list): Bounding box defined in lat / lon [min_lon, min_lat, max_lon, max_lat]
              buffer (float): Amount by which to extend the bounding box by, in meters
-             outdir (str): Directory where requested files will be written to
              start_date (str): Beginning of requested data creation date YYYY-MM-DD
              end_date (str): End of requested data creation date YYYY-MM-DD
              bands (list): The bands to download for each file. Default is ['B02', 'B03', 'B04', 'B08'] for R, G, B, and
@@ -315,8 +311,6 @@ class SinergiseSentinelAPI:
         bounds[2] += buffer
         bounds[3] += buffer
 
-        os.makedirs(outdir, exist_ok=True)
-
         available_files = self._find_available_files(bounds, start_date, end_date, bands)
         total_data = 0
         for file in available_files:
@@ -329,25 +323,22 @@ class SinergiseSentinelAPI:
             if '/preview/' in file_path:
                 continue
 
-            created_file_path = file_path.replace('_qi_', '').replace('/', '_')
+            created_file_path = file_path.replace('_qi_', '').replace('/', '_').replace('tile_', '')
 
             file = Sentinel2Tile.create(created_file_path)
             if file is None:
                 file = Sentinel2Cloud.create(created_file_path)
                 if file is None:
                     continue
-
-            file_dir = os.path.join(outdir, file.mgrs_grid, file.date_str)
+            
+            archive_path = file.archive_path(region, district, create_dir=True)
 
             # Skip if file is already local
-            if os.path.exists(os.path.join(file_dir, os.path.basename(file_path))):
+            if os.path.exists(archive_path):
                 continue
 
-            args.append(Namespace(available_file=file_path, bucket_name=self._bucket_name, outdir=file_dir))
+            args.append(Namespace(available_file=file_path, bucket_name=self._bucket_name, dest=archive_path))
 
-        # proceed = input(f'Found {len(args)} files for download. Total size of files is'
-        #                 f' {round(total_data, 2)}GB and estimated cost will be ${round(0.09 * total_data, 2)}'
-        #                 f'. Proceed (y/n)?')
         print(f'Found {len(args)} files for download. Total size of files is'
               f' {round(total_data, 2)}GB and estimated cost will be ${round(0.09 * total_data, 2)}'
               )

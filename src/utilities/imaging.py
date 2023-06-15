@@ -24,7 +24,7 @@ import pyproj
 from pyproj import CRS
 
 from src.utilities.coords import tiff_to_bbox, bridge_in_bbox
-from definitions import SENTINEL_2_DIR, COMPOSITE_DIR, OPTICAL_TILE_DIR, MULTIVARIATE_TILE_DIR
+from definitions import TILE_DIR
 from file_types import OpticalComposite, MultiVariateComposite, TileGeoLoc, Tile, PyTorch, Sentinel2Tile
 
 BANDS_TO_IX = {
@@ -164,15 +164,12 @@ def resolve_crs(lat, lon):
 def create_composite(region: str, district: str, coord: str, bands: list, dtype: type, num_slices: int = 1,
                      pbar: bool = True):
     print('Creating composite for', coord)
-    s2_dir = os.path.join(SENTINEL_2_DIR, region, district, coord)
-    assert os.path.isdir(s2_dir)
-
     optical_composite_file = OpticalComposite(region, district, coord, bands)
-    if os.path.isfile(optical_composite_file.archive_path()):
-        return optical_composite_file.archive_path()
+    archive_path = optical_composite_file.archive_path(create_dir=True)
+    if os.path.exists(archive_path):
+        return archive_path
 
-    composite_dir = os.path.dirname(optical_composite_file.archive_path())
-    os.makedirs(composite_dir, exist_ok=True)
+    composite_dir = os.path.dirname(archive_path)
 
     if num_slices > 1:
         slice_dir = os.path.join(composite_dir, optical_composite_file.mgrs)
@@ -182,17 +179,25 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
     crs = None
     transform = None
     for band in tqdm(bands, desc=f'Processing {coord}', leave=True, position=1, total=len(bands), disable=pbar):
-        band_files = Sentinel2Tile.find_files(s2_dir, band, recursive=True)
-        assert len(band_files) > 1, f'{s2_dir}'
+        band_files = Sentinel2Tile.find_files(region=region, district=district, band=band, recursive=True)
+        if len(os.listdir(band_files)) == 0:
+            raise LookupError(f'No sentinel2 files found at {os.path.join(Sentinel2Tile._ROOT_DATA_DIR, region, district)} for band {band}')
 
-        # TODO: Keep looping here until crs and transform are found
-        with rasterio.open(band_files[0], 'r', driver='JP2OpenJPEG') as rf:
-            g_nrows, g_ncols = rf.meta['width'], rf.meta['height']
-            if rf.crs is None:
+        crs = None
+        transform = None
+        g_nrows = None
+        g_ncols = None
+        for file in band_files:
+            with rasterio.open(file, 'r', driver='JP2OpenJPEG') as rf:
+                g_nrows, g_ncols = rf.meta['width'], rf.meta['height']
                 crs = rf.crs
-            else:
-                crs = rf.crs
-            transform = rf.transform
+                transform = rf.transform
+            if crs is not None and transform is not None and g_nrows is not None and g_ncols is not None:
+                break
+        
+        if crs is None or transform is None or g_nrows is None or g_ncols is None:
+            raise LookupError(f'Could not determine the following projection attributes from the available sentinel2 files in {os.path.dirname(file)}: \n' \
+                              f'{"CRS" if crs is None else ""} {"Transform" if transform is None else ""} {"Number of rows" if g_nrows is None else ""} {"Number of columns" if g_ncols is None else ""}')
 
         # Handle slicing if necessary, slicing along rows only
         if num_slices > 1:
@@ -264,7 +269,7 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
     # Combine Bands
     n_bands = len(bands)
     with rasterio.open(
-            optical_composite_file.archive_path(),
+            archive_path,
             'w',
             driver='GTiff',
             width=g_ncols,
@@ -283,7 +288,7 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
 
     shutil.rmtree(slice_dir)
 
-    return optical_composite_file.archive_path()
+    return archive_path
 
 
 ''' In case you flip B02 with B04'''
@@ -350,13 +355,6 @@ def composite_to_tiles(
         div: int = 300  # in meters
 ):
     grid_geoloc_file = TileGeoLoc()
-
-    if isinstance(composite, OpticalComposite):
-        tile_dir = OPTICAL_TILE_DIR
-    elif isinstance(composite, MultiVariateComposite):
-        tile_dir = MULTIVARIATE_TILE_DIR
-    else:
-        raise ValueError('Input composite parameter must be of type OpticalComposite or MultiVariateComposite')
 
     grid_geoloc_path = grid_geoloc_file.archive_path(tile_dir, composite.region, composite.district, composite.mgrs)
     if os.path.isfile(grid_geoloc_path):

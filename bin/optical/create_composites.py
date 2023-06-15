@@ -8,17 +8,14 @@ from typing import List
 import numpy as np
 from tqdm import tqdm
 
-from definitions import SENTINEL_2_DIR, REGION_FILE_PATH
+from definitions import REGION_FILE_PATH
 from src.utilities import imaging
 
 
 # TODO: Add bands parameter
-def download_sentinel2(output_dir, bounds, start_date, end_date, buffer, bands: List[str]):
+def download_sentinel2(region, district, bounds, start_date, end_date, buffer, bands: List[str]):
     api = SinergiseSentinelAPI()
-    api.download(bounds, buffer, output_dir, start_date, end_date, bands)
-
-    if not os.listdir(output_dir):
-        raise FileNotFoundError('No files returned from the query parameters')
+    api.download(bounds, buffer, region, district, start_date, end_date, bands)
 
 
 def _composite_task(task_args: Namespace):
@@ -46,7 +43,7 @@ def split_list(lst, n):
     return sublists
 
 
-def sentinel2_to_composite(s2_dir, district, slices, n_cores: int, bands: List[str], region: str,
+def sentinel2_to_composite(s2_dir, district: str, slices: int, n_cores: int, bands: List[str], region: str,
                            mgrs: List[str] = None):
     if mgrs is not None:
         mgrs = [c.lower() for c in mgrs]
@@ -98,7 +95,6 @@ def create_composites(region: str, bands: List[str], buffer: int, slices: int, n
     dates = region_info[region]['dates']
 
     for district in districts:
-        s2_dir = os.path.join(SENTINEL_2_DIR, region, district)
         bounds = region_info[region]['districts'][district]['bbox']
         print('Downloading Sentinel2 data')
         for date in dates:

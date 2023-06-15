@@ -139,8 +139,7 @@ def create_date_cubes(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORE
         mgrs_grids = sentinel2_api.bounds_to_mgrs(bbox) if mgrs is None else mgrs
 
         # Load composites from S3
-        download_composites(file_type=FileType.OPTICAL_COMPOSITE, region=region, districts=[district],
-                            s3_bucket_name=s3_bucket_name, cores=cores, mgrs=mgrs_grids)
+        download_composites(region=region, districts=[district], s3_bucket_name=s3_bucket_name, cores=cores, mgrs=mgrs_grids)
 
         task_args = []
         for mgrs_grid in mgrs_grids:

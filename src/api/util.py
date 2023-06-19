@@ -1,4 +1,3 @@
-import os
 import yaml
 
 from definitions import SECRETS_FILE_PATH

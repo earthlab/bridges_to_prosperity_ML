@@ -323,21 +323,20 @@ class SinergiseSentinelAPI:
             if '/preview/' in file_path:
                 continue
 
-            created_file_path = file_path.replace('_qi_', '').replace('/', '_').replace('tile_', '')
+            created_file_path = f"{region}_{district}_{file_path.replace('_qi_', '').replace('/', '_').replace('tile_', '')}"
 
             file = Sentinel2Tile.create(created_file_path)
             if file is None:
                 file = Sentinel2Cloud.create(created_file_path)
                 if file is None:
                     continue
-            
-            archive_path = file.archive_path(region, district, create_dir=True)
+            file.create_archive_dir()
 
             # Skip if file is already local
-            if os.path.exists(archive_path):
+            if file.exists:
                 continue
 
-            args.append(Namespace(available_file=file_path, bucket_name=self._bucket_name, dest=archive_path))
+            args.append(Namespace(available_file=file_path, bucket_name=self._bucket_name, dest=file.archive_path))
 
         print(f'Found {len(args)} files for download. Total size of files is'
               f' {round(total_data, 2)}GB and estimated cost will be ${round(0.09 * total_data, 2)}'

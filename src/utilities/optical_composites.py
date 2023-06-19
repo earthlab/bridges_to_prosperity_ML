@@ -2,24 +2,24 @@ from src.api.sentinel2 import SinergiseSentinelAPI
 import multiprocessing as mp
 import os
 import yaml
-from argparse import Namespace, ArgumentParser
+from argparse import Namespace
 from typing import List
 
 import numpy as np
 from tqdm import tqdm
 
 from definitions import REGION_FILE_PATH
-from src.utilities import imaging
+from src.utilities.imaging import create_optical_composite_from_s2
+from file_types import Sentinel2Tile
 
 
-# TODO: Add bands parameter
 def download_sentinel2(region, district, bounds, start_date, end_date, buffer, bands: List[str]):
     api = SinergiseSentinelAPI()
     api.download(bounds, buffer, region, district, start_date, end_date, bands)
 
 
 def _composite_task(task_args: Namespace):
-    imaging.create_composite(
+    create_optical_composite_from_s2(
         task_args.region,
         task_args.district,
         task_args.coord,
@@ -43,13 +43,15 @@ def split_list(lst, n):
     return sublists
 
 
-def sentinel2_to_composite(s2_dir, district: str, slices: int, n_cores: int, bands: List[str], region: str,
+def sentinel2_to_composite(region: str, district: str, slices: int, n_cores: int, bands: List[str], 
                            mgrs: List[str] = None):
     if mgrs is not None:
         mgrs = [c.lower() for c in mgrs]
 
+    mgrs_coords = Sentinel2Tile.get_mgrs_dirs(region, district)
+
     args = []
-    for coord in os.listdir(s2_dir):
+    for coord in mgrs_coords:
         if mgrs is not None and coord.lower() not in mgrs:
             continue
 
@@ -98,68 +100,6 @@ def create_composites(region: str, bands: List[str], buffer: int, slices: int, n
         bounds = region_info[region]['districts'][district]['bbox']
         print('Downloading Sentinel2 data')
         for date in dates:
-            download_sentinel2(s2_dir, bounds, date[0], date[1], buffer, bands)
+            download_sentinel2(region, district, bounds, date[0], date[1], buffer, bands)
 
-        sentinel2_to_composite(s2_dir, district, slices, n_cores, bands, region, mgrs=mgrs)
-
-
-if __name__ == '__main__':
-    parser = ArgumentParser()
-    parser.add_argument(
-        '--region',
-        '-r',
-        type=str,
-        required=True,
-        help='Name of the composite region (Ex Uganda)'
-    )
-    parser.add_argument(
-        '--districts',
-        '-d',
-        type=str,
-        nargs='+',
-        required=False,
-        help='Name of the composite district (Ex. Uganda/Ibanda)'
-    )
-    parser.add_argument(
-        '--slices',
-        '-s',
-        type=int,
-        required=False,
-        default=6,
-        help='The number of slices to break the sentinel2 tiles up into before cloud-correcting (Default is 1)'
-    )
-    parser.add_argument(
-        '--buffer',
-        required=False,
-        default=100,
-        type=float,
-        help='Buffer for bounding box query in meters'
-    )
-    parser.add_argument(
-        '--n_cores',
-        '-n',
-        type=int,
-        required=False,
-        default=mp.cpu_count() - 1,
-        help='number of cores to be used to paralellize these tasks)'
-    )
-    parser.add_argument(
-        '--mgrs',
-        '-m',
-        type=str,
-        nargs='+',
-        required=False,
-        help='Name of the mgrs tiles to make tiles for'
-    )
-    parser.add_argument(
-        '--bands',
-        '-b',
-        type=str,
-        nargs='+',
-        required=False,
-        default=['B02', 'B03', 'B04', 'B08']
-    )
-    args = parser.parse_args()
-
-    create_composites(args.region, bands=args.bands, buffer=args.buffer, slices=args.slices, n_cores=args.n_cores,
-                      districts=args.districts, mgrs=args.mgrs)
+        sentinel2_to_composite(region, district, slices, n_cores, bands, region, mgrs=mgrs)

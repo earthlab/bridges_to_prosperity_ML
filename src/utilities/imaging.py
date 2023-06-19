@@ -3,7 +3,6 @@ import shutil
 import warnings
 from glob import glob
 from typing import Union, List
-import traceback
 
 import geopandas as gpd
 import numpy as np
@@ -24,8 +23,7 @@ import pyproj
 from pyproj import CRS
 
 from src.utilities.coords import tiff_to_bbox, bridge_in_bbox
-from definitions import TILE_DIR
-from file_types import OpticalComposite, MultiVariateComposite, TileGeoLoc, Tile, PyTorch, Sentinel2Tile
+from file_types import OpticalComposite, MultiVariateComposite, Tile, PyTorch, Sentinel2Tile, OpticalCompositeSlice, SingleRegionTileMatch
 
 BANDS_TO_IX = {
     'B02': 3,  # Blue
@@ -161,27 +159,22 @@ def resolve_crs(lat, lon):
     return crs
 
 
-def create_composite(region: str, district: str, coord: str, bands: list, dtype: type, num_slices: int = 1,
-                     pbar: bool = True):
+def create_optical_composite_from_s2(region: str, district: str, coord: str, bands: list, dtype: type, num_slices: int = 1,
+                                     pbar: bool = True) -> str:
     print('Creating composite for', coord)
     optical_composite_file = OpticalComposite(region, district, coord, bands)
-    archive_path = optical_composite_file.archive_path(create_dir=True)
-    if os.path.exists(archive_path):
-        return archive_path
-
-    composite_dir = os.path.dirname(archive_path)
-
-    if num_slices > 1:
-        slice_dir = os.path.join(composite_dir, optical_composite_file.mgrs)
-        os.makedirs(slice_dir, exist_ok=True)
+    all_bands_archive_path = optical_composite_file.archive_path(create_dir=True)
+    if os.path.exists(all_bands_archive_path):
+        return all_bands_archive_path
 
     # Loop through each band, getting a median estimate for each
     crs = None
     transform = None
+    optical_composite_band_files: List[OpticalComposite] =[]
     for band in tqdm(bands, desc=f'Processing {coord}', leave=True, position=1, total=len(bands), disable=pbar):
-        band_files = Sentinel2Tile.find_files(region=region, district=district, band=band, recursive=True)
-        if len(os.listdir(band_files)) == 0:
-            raise LookupError(f'No sentinel2 files found at {os.path.join(Sentinel2Tile._ROOT_DATA_DIR, region, district)} for band {band}')
+        band_files = Sentinel2Tile.find_files(region=region, district=district, band=band, mgrs=coord)
+        if not band_files:
+            raise LookupError(f'No sentinel2 files found for region: {region} district: {district} band: {band} mgrs: {mgrs}')
 
         crs = None
         transform = None
@@ -199,27 +192,27 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
             raise LookupError(f'Could not determine the following projection attributes from the available sentinel2 files in {os.path.dirname(file)}: \n' \
                               f'{"CRS" if crs is None else ""} {"Transform" if transform is None else ""} {"Number of rows" if g_nrows is None else ""} {"Number of columns" if g_ncols is None else ""}')
 
-        # Handle slicing if necessary, slicing along rows only
-        if num_slices > 1:
-            slice_width = g_nrows / num_slices
-            slice_end_pts = [int(i) for i in np.arange(0, g_nrows + slice_width, slice_width)]
-            slice_bounds = [(slice_end_pts[i], slice_end_pts[i + 1] - 1) for i in range(num_slices - 1)]
-            slice_bounds.append((slice_end_pts[-2], slice_end_pts[-1]))
-        else:
-            slice_bounds = [None]
-        joined_file_path = os.path.join(composite_dir, f'{band}_{coord}.tiff')
-        if os.path.isfile(joined_file_path):
+        slice_width = g_nrows / num_slices
+        slice_end_pts = [int(i) for i in np.arange(0, g_nrows + slice_width, slice_width)]
+        slice_bounds = [(slice_end_pts[i], slice_end_pts[i + 1] - 1) for i in range(num_slices - 1)]
+        slice_bounds.append((slice_end_pts[-2], slice_end_pts[-1]))   
+
+        single_band_composite = OpticalComposite(region, district, coord, [band])
+        single_band_composite_archive_path = single_band_composite.archive_path(create_dir=True)
+        if os.path.exists(single_band_composite_archive_path):
+            optical_composite_band_files.append(single_band_composite_archive_path)
             continue
 
         # Median across time, slicing if necessary
+        slice_files: List[OpticalCompositeSlice] = []
         for k, row_bound in tqdm(enumerate(slice_bounds), desc=f'band={band}', total=num_slices, position=2,
                                  disable=pbar):
-            if num_slices > 1:
-                slice_file_path = os.path.join(slice_dir, f'{band}_slice|{row_bound[0]}|{row_bound[1]}|.tiff')
-            else:
-                slice_file_path = joined_file_path
-            if os.path.isfile(slice_file_path):
+            slice_file = OpticalCompositeSlice(region, district, coord, band, row_bound[0], row_bound[1])
+            slice_file_archive_path = slice_file.archive_path(create_dir=True)
+            if os.path.exists(slice_file_archive_path):
+                slice_files.append(slice_file)
                 continue
+
             cloud_correct_imgs = []
             for img_path in tqdm(band_files, desc=f'slice {k + 1}', leave=False, position=3, disable=pbar):
                 # Get data from files
@@ -238,9 +231,10 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
             median_corrected = np.nanmedian(corrected_stack, axis=0, overwrite_input=True)
             median_corrected = median_corrected.reshape(cloud_correct_imgs[0].shape)
 
-            with rasterio.open(slice_file_path, 'w', driver='Gtiff', width=g_ncols, height=g_nrows, count=1, crs=crs,
+            with rasterio.open(slice_file_archive_path, 'w', driver='Gtiff', width=g_ncols, height=g_nrows, count=1, crs=crs,
                                transform=transform, dtype=dtype) as wf:
                 wf.write(median_corrected.astype(dtype), 1)
+                slice_files.append(slice_file)
             # release mem
             median_corrected = []
             del median_corrected
@@ -248,28 +242,24 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
             del corrected_stack
 
         # Combine slices
-        if num_slices > 1:
-            with rasterio.open(joined_file_path, 'w', driver='GTiff', width=g_ncols, height=g_nrows, count=1, crs=crs,
-                               transform=transform, dtype=dtype) as wf:
-                for slice_file_path in glob(os.path.join(slice_dir, f'{band}_slice*.tiff')):
-                    prts = slice_file_path.split('|')
-                    left = int(prts[1])
-                    right = int(prts[2])
-                    with rasterio.open(slice_file_path, 'r', driver='GTiff') as rf:
-                        wf.write(
-                            rf.read(1),
-                            window=Window.from_slices(
-                                slice(left, right),
-                                slice(0, g_ncols)
-                            ),
-                            indexes=1
-                        )
-                    os.remove(slice_file_path)
+        with rasterio.open(single_band_composite_archive_path, 'w', driver='GTiff', width=g_ncols, height=g_nrows, count=1, crs=crs,
+                            transform=transform, dtype=dtype) as wf:
+            for slice_file in slice_files:
+                with rasterio.open(slice_file.archive_path(), 'r', driver='GTiff') as rf:
+                    wf.write(
+                        rf.read(1),
+                        window=Window.from_slices(
+                            slice(slice_file.left_bound, slice_file.right_bound),
+                            slice(0, g_ncols)
+                        ),
+                        indexes=1
+                    )
+                os.remove(slice_file.archive_path())
 
     # Combine Bands
-    n_bands = len(bands)
+    n_bands = len(optical_composite_band_files)
     with rasterio.open(
-            archive_path,
+            all_bands_archive_path,
             'w',
             driver='GTiff',
             width=g_ncols,
@@ -279,50 +269,16 @@ def create_composite(region: str, district: str, coord: str, bands: list, dtype:
             transform=transform,
             dtype=dtype
     ) as wf:
-        for band in tqdm(bands, total=n_bands, desc='Combining bands...', leave=False, position=1, disable=pbar):
-            j = BANDS_TO_IX[band] if n_bands > 1 else 1
-            band_path = os.path.join(composite_dir, f'{band}_{coord}.tiff')
-            with rasterio.open(band_path, 'r', driver='GTiff') as rf:
+        for band_file in tqdm(optical_composite_band_files, total=n_bands, desc='Combining bands...', leave=False, position=1, disable=pbar):
+            j = BANDS_TO_IX[band_file.bands[0]]
+            band_file_path = band_file.archive_path()
+            with rasterio.open(band_file_path, 'r', driver='GTiff') as rf:
                 wf.write(rf.read(1), indexes=j)
-            os.remove(band_path)
+            os.remove(band_file_path)
 
-    shutil.rmtree(slice_dir)
+    shutil.rmtree(os.path.dirname(slice_file.archive_path()))
 
-    return archive_path
-
-
-''' In case you flip B02 with B04'''
-
-
-def _flip_rgb(infile, outfile, dtype=np.float32):
-    crs, transform, g_ncols, g_nrows, = None, None, None, None
-    b02, b03, b04 = None, None, None
-    with rasterio.open(
-            infile,
-            'r',
-            driver='GTiff',
-    ) as rf:
-        g_nrows, g_ncols = rf.meta['width'], rf.meta['height']
-        crs = rf.crs
-        transform = rf.transform
-        b02 = rf.read(1)
-        b03 = rf.read(2)
-        b04 = rf.read(3)
-    with rasterio.open(
-            outfile,
-            'w',
-            driver='GTiff',
-            width=g_ncols,
-            height=g_nrows,
-            count=3,
-            crs=crs,
-            transform=transform,
-            dtype=dtype
-    ) as wf:
-        wf.write(b04, indexes=1)
-        wf.write(b03, indexes=2)
-        wf.write(b02, indexes=3)
-    return None
+    return all_bands_archive_path
 
 
 def scale_multiband_composite(multiband_tiff: str):
@@ -346,27 +302,18 @@ def scale_multiband_composite(multiband_tiff: str):
     return scaled_tiff
 
 
-def composite_to_tiles(
-        composite: MultiVariateComposite,
-        bridge_locations,
-        tqdm_pos=None,
-        tqdm_update_rate=None,
-        remove_tiff=True,
-        div: int = 300  # in meters
-):
-    grid_geoloc_file = TileGeoLoc()
+def composite_to_tiles(composite: MultiVariateComposite, bridge_locations, tqdm_pos=None, tqdm_update_rate=None, remove_tiff=True, tile_size: int = 300) -> pd.DataFrame:
+    grid_geoloc_file = SingleRegionTileMatch(tile_size)
 
-    grid_geoloc_path = grid_geoloc_file.archive_path(tile_dir, composite.region, composite.district, composite.mgrs)
-    if os.path.isfile(grid_geoloc_path):
+    grid_geoloc_path = grid_geoloc_file.archive_path(composite.region, composite.district, composite.mgrs, create_dir=True)
+    if os.path.exists(grid_geoloc_path):
         df = pd.read_csv(grid_geoloc_path)
         return df
 
-    os.makedirs(grid_geoloc_file.archive_dir, exist_ok=True)
-
     rf = gdal.Open(composite.archive_path())
     _, xres, _, _, _, yres = rf.GetGeoTransform()
-    nxpix = int(div / abs(xres))
-    nypix = int(div / abs(yres))
+    nxpix = int(tile_size / abs(xres))
+    nypix = int(tile_size / abs(yres))
     xsteps = np.arange(0, rf.RasterXSize, nxpix).astype(np.int64).tolist()
     ysteps = np.arange(0, rf.RasterYSize, nypix).astype(np.int64).tolist()
 
@@ -400,9 +347,9 @@ def composite_to_tiles(
         for xmin in xsteps:
             for ymin in ysteps:
                 tile_tiff = Tile(x_min=xmin, y_min=ymin)
-                tile_tiff_path = tile_tiff.archive_path(tile_dir, composite.region, composite.district, composite.mgrs)
+                tile_tiff_path = tile_tiff.archive_path(composite.region, composite.district, composite.mgrs, tile_size=tile_size, create_dir=True)
                 pt_file = PyTorch(x_min=xmin, y_min=ymin)
-                pt_file_path = pt_file.archive_path(tile_dir, composite.region, composite.district, composite.mgrs)
+                pt_file_path = pt_file.archive_path(composite.region, composite.district, composite.mgrs, tile_size=tile_size)
                 if not os.path.isfile(tile_tiff_path):
                     gdal.Translate(
                         tile_tiff_path,
@@ -416,7 +363,7 @@ def composite_to_tiles(
                     df.at[k, 'is_bridge'], df.at[k, 'bridge_loc'], ix = bridge_in_bbox(bbox, this_bridge_locs)
                     if ix is not None:
                         this_bridge_locs.pop(ix)
-                if not os.path.isfile(pt_file_path):
+                if not os.path.exists(pt_file_path):
                     with rasterio.open(tile_tiff_path, 'r') as tmp:
                         scale_img = tmp.read()
                         scale_img = np.moveaxis(scale_img, 0, -1)  # make dims be c, w, h
@@ -556,10 +503,6 @@ def elevation_to_slope(elevation_file: str, slope_outfile: str):
     dataset = gdal.Open(elevation_file)
     geo_transform = dataset.GetGeoTransform()
     projection = dataset.GetProjection()
-
-    n_nan = np.count_nonzero(np.isnan(slope_deg))
-
-    print("Number of NaN values:", n_nan)
 
     numpy_array_to_raster(slope_outfile, slope_deg, geo_transform, projection)
 

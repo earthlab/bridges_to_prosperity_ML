@@ -1,7 +1,7 @@
 import os
 import re
-from typing import List
-from definitions import COMPOSITE_DIR, B2P_DIR, ELEVATION_DIR, SLOPE_DIR, SENTINEL_2_DIR, OSM_DIR, \
+from typing import List, Set
+from definitions import COMPOSITE_DIR, ELEVATION_DIR, SLOPE_DIR, SENTINEL_2_DIR, OSM_DIR, \
     MODEL_DIR, INFERENCE_RESULTS_DIR, TILE_DIR, TRAIN_VALIDATE_SPLIT_DIR, MULTI_REGION_TILE_MATCH, DATA_DIR
 import glob
 from pathlib import Path
@@ -21,12 +21,19 @@ class File(ABC):
         return None
     
     @abstractproperty
-    def name(self):
+    def name(self) -> str:
         pass
 
-    @abstractmethod
-    def archive_path(self):
+    @abstractproperty
+    def archive_path(self) -> str:
         pass
+
+    @property
+    def exists(self) -> bool:
+        return os.path.exists(self.archive_path)
+    
+    def create_archive_dir(self) -> None:
+        Path(os.path.dirname(self.archive_path)).mkdir(parents=True, exist_ok=True)
 
 
 class _BaseCompositeFile(File):
@@ -38,14 +45,13 @@ class _BaseCompositeFile(File):
         self.district = district
         self.mgrs = military_grid
     
-    def archive_path(self, create_dir: bool = False) -> str:
-        path = os.path.join(self._ROOT_DATA_DIR, self.region, self.district, self.name)
-        if create_dir:
-            Path(path).mkdir(parents=True, exist_ok=True)
-        return path
+    @property
+    def archive_path(self) -> str:
+        return os.path.join(self._ROOT_DATA_DIR, self.region, self.district, self.name)
     
+    @property
     def s3_archive_path(self) -> str:
-        return self.archive_path().replace(DATA_DIR + os.sep, '')
+        return self.archive_path.replace(DATA_DIR + os.sep, '')
     
     @staticmethod
     def find_files(regex: str, region: str = None, district: str = None, mgrs: List[str] = None) -> List[str]:
@@ -57,11 +63,11 @@ class _BaseCompositeFile(File):
             if not match:
                 continue
             group_dict = match.groupdict()
-            if region is not None and group_dict['region'] != region:
+            if region is not None and group_dict['region'].lower() != region.lower():
                 continue
-            if district is not None and group_dict['district'] != district:
+            if district is not None and group_dict['district'].lower() != district.lower():
                 continue
-            if mgrs is not None and group_dict['mgrs'] not in mgrs:
+            if mgrs is not None and group_dict['mgrs'] not in [m.lower() for m in mgrs]:
                 continue
             matching_files.append(f)
 
@@ -107,7 +113,50 @@ class OpticalComposite(_BaseCompositeFile):
                        bands=group_dict['bands'].split('_'))
         else:
             return None
-        
+    
+
+class OpticalCompositeSlice(_BaseCompositeFile):
+    regex = r'optical_composite_slice_(?P<region>[^_]+)_(?P<district>[^_]+)_(?P<mgrs>[^_]+)_(?P<band>[^_]+)_(?P<left_bound>\d+)_(?P<right_bound>\d+)\.tif$'
+    def __init__(self, region: str, district: str, military_grid: str, band: str, left_bound: int, right_bound: int):
+        super().__init__(region, district, military_grid)
+        self.band = band
+        self.left_bound = left_bound
+        self.right_bound = right_bound
+
+    @property
+    def name(self) -> str:
+        return f'optical_composite_slice_{self.region}_{self.district}_{self.mgrs}_{self.band}_{self.left_bound}_{self.right_bound}.tif'
+
+    @staticmethod
+    def find_files(region: str = None, district: str = None, bands: List[str] = None, mgrs: List[str] = None) -> List[str]:
+        files = _BaseCompositeFile.find_files(OpticalComposite.regex, region, district, mgrs)
+
+        if bands is not None:
+            matching_files = []
+            for file in files:
+                match = re.match(OpticalComposite.regex, os.path.basename(file))
+                group_dict = match.groupdict()
+                if bands is not None and group_dict['bands'].split('_') != sorted(bands):
+                    continue
+                matching_files.append(file)
+            files = matching_files
+        return sorted(files)
+    
+    @property
+    def archive_path(self) -> str:
+        return os.path.join(self._ROOT_DATA_DIR, self.region, self.district, self.mgrs, self.name)
+
+    @classmethod
+    def create(cls, file_path: str):
+        name = os.path.basename(file_path)
+        match = re.match(cls.regex, name)
+        if match:
+            group_dict = match.groupdict()
+            return cls(region=group_dict['region'], district=group_dict['district'], military_grid=group_dict['mgrs'],
+                       band=group_dict['band'], left_bound=int(group_dict['left_bound']), right_bound=int(group_dict['right_bound']))
+        else:
+            return None
+
 
 class MultiVariateComposite(_BaseCompositeFile):
     _ROOT_DATA_DIR = COMPOSITE_DIR
@@ -139,9 +188,11 @@ class MultiVariateComposite(_BaseCompositeFile):
 class _BaseSentinel2File(File):
     _ROOT_DATA_DIR = SENTINEL_2_DIR
 
-    def __init__(self, utm_code: str, latitude_band: str, square: str, year: int, month: int, day: int, band: str,
+    def __init__(self, region: str, district: str, utm_code: str, latitude_band: str, square: str, year: int, month: int, day: int, band: str,
                  sequence: int = 0):
         super().__init__()
+        self.region = region
+        self.district = district
         self.utm_code = utm_code
         self.latitude_band = latitude_band
         self.square = square
@@ -159,26 +210,28 @@ class _BaseSentinel2File(File):
     def date_str(self) -> str:
         return f'{self.year}_{self.month}_{self.day}'
     
-    def archive_path(self, region: str, district: str, create_dir: bool = False) -> str:
-        path = os.path.join(self._ROOT_DATA_DIR, region, district, self.mgrs_grid, self.date_str, self.name)
-        if create_dir:
-            Path(path).mkdir(parents=True, exist_ok=True)
-        return path
+    @staticmethod
+    def get_mgrs_dirs(region: str, district: str) -> Set[str]:
+        mgrs_regex = r"\d{2}[a-zA-Z]{3}"
+        mgrs_dirs = set()
+        for dir in os.listdir(os.path.join(_BaseSentinel2File._ROOT_DATA_DIR, region, district)):
+            match = re.match(mgrs_regex, dir)
+            if match:
+                mgrs_dirs.add(dir)
+        return mgrs_dirs
+    
+    @property
+    def archive_path(self) -> str:
+        return os.path.join(self._ROOT_DATA_DIR, self.region, self.district, self.mgrs_grid, self.date_str, self.name)
+    
+    @staticmethod
+    def _mgrs_from_utm_lat_square(utm_code: str, latitude_band: str, square: str) -> str:
+        return f'{utm_code}{latitude_band}{square}'
 
     @staticmethod
-    def find_files(regex: str, region: str = None, district: str = None, utm_code: str = None, latitude_band: str = None, square: str = None,
+    def find_files(regex: str, region: str = None, district: str = None, mgrs: str = None,
                    year: int = None, month: int = None, day: int = None, sequence: int = None, band: str = None) -> List[str]:
-        if region is None and district is not None:
-            raise ValueError('Must specify region if district is specified')
-
-        in_dir = _BaseSentinel2File._ROOT_DATA_DIR
-
-        if region is not None:
-            in_dir = os.path.join(in_dir, region)
-        if district is not None:
-            in_dir = os.path.join(in_dir, district)
-
-        files = glob.glob(in_dir + '/**/*', recursive=True)
+        files = glob.glob(_BaseSentinel2File._ROOT_DATA_DIR + '/**/*', recursive=True)
 
         matching_files = []
         for file in files:
@@ -186,11 +239,11 @@ class _BaseSentinel2File(File):
             if not match:
                 continue
             group_dict = match.groupdict()
-            if utm_code is not None and group_dict['utm_code'] != utm_code:
+            if mgrs is not None and _BaseSentinel2File._mgrs_from_utm_lat_square(group_dict['utm_code'], group_dict['latitude_band'], group_dict['square']) != mgrs:
                 continue
-            if latitude_band is not None and group_dict['latitude_band'] != latitude_band:
+            if region is not None and group_dict['region'].lower() != region.lower():
                 continue
-            if square is not None and group_dict['square'] != square:
+            if district is not None and group_dict['district'].lower() != district.lower():
                 continue
             if year is not None and int(group_dict['year']) != year:
                 continue
@@ -206,80 +259,70 @@ class _BaseSentinel2File(File):
 
         return sorted(matching_files)
 
-
-class Sentinel2Tile(_BaseSentinel2File):
-    regex = r'(?P<utm_code>\d+)_(?P<latitude_band>\S+)_(?P<square>\S+)_(?P<year>\d{4})_(?P<month>\d+)_(?P<day>\d+)_(?P<sequence>\d{1})_(?P<band>B\d{2})\.jp2$'
-
-    def __init__(self, utm_code: str, latitude_band: str, square: str, year: int, month: int, day: int, band: str,
-                 sequence: int = 0):
-        super().__init__(utm_code, latitude_band, square, year, month, day, band, sequence)
-
-    @property
-    def name(self) -> str:
-        return f'{self.utm_code}_{self.latitude_band}_{self.square}_{self.year}_{self.month}_{self.day}_' \
-               f'{self.sequence}_{self.band}.jp2'
-
-    def archive_path(self, region: str, district: str, create_dir: bool = False) -> str:
-        return super().archive_path(region, district, create_dir)
-
-    @staticmethod
-    def find_files(region: str = None, district: str = None, utm_code: str = None, latitude_band: str = None, square: str = None,
-                   year: int = None, month: int = None, day: int = None, sequence: int = None, band: str = None) -> List[str]:
-        return _BaseSentinel2File.find_files(Sentinel2Tile.regex, region, district, utm_code, latitude_band, square, year,
-                                             month, day, sequence, band)
-
     @classmethod
     def create(cls, file_path: str):
         name = os.path.basename(file_path)
         match = re.match(cls.regex, name)
         if match:
             group_dict = match.groupdict()
-            return cls(utm_code=group_dict['utm_code'], latitude_band=group_dict['latitude_band'],
-                       square=group_dict['square'], year=int(group_dict['year']), month=int(group_dict['month']),
-                       day=int(group_dict['day']), band=group_dict['band'], sequence=int(group_dict['sequence']))
-        else:
-            return None
-
-
-class Sentinel2Cloud(_BaseSentinel2File):
-    regex = r'(?P<utm_code>\d+)_(?P<latitude_band>\S+)_(?P<square>\S+)_(?P<year>\d{4})_(?P<month>\d+)_(?P<day>\d+)_(?P<sequence>\d{1})_qi_MSK_CLOUDS_B00.gml'
-
-    def __init__(self, utm_code: str, latitude_band: str, square: str, year: int, month: int, day: int,
-                 sequence: int = 0):
-        super().__init__(utm_code, latitude_band, square, year, month, day, 'B00', sequence)
-
-    @property
-    def name(self) -> str:
-        return f'{self.utm_code}_{self.latitude_band}_{self.square}_{self.year}_{self.month}_{self.day}_' \
-               f'{self.sequence}_qi_MSK_CLOUDS_B00.gml'
-
-    def archive_path(self, region: str, district: str, create_dir: bool = False) -> str:
-        return super().archive_path(region, district, create_dir)
-
-    @staticmethod
-    def find_files(region: str = None, district: str = None, utm_code: str = None, latitude_band: str = None, square: str = None,
-                   year: int = None, month: int = None, day: int = None, sequence: int = None) -> List[str]:
-        return _BaseSentinel2File.find_files(Sentinel2Cloud.regex, region, district, utm_code, latitude_band, square, year,
-                                             month, day, sequence)
-
-    @classmethod
-    def create(cls, file_path: str):
-        name = os.path.basename(file_path)
-        match = re.match(cls.regex, name)
-        if match:
-            group_dict = match.groupdict()
-            return cls(utm_code=group_dict['utm_code'], latitude_band=group_dict['latitude_band'],
+            return cls(region=group_dict['region'], district=group_dict['district'], utm_code=group_dict['utm_code'], latitude_band=group_dict['latitude_band'],
                        square=group_dict['square'], year=int(group_dict['year']), month=int(group_dict['month']),
                        day=int(group_dict['day']), sequence=int(group_dict['sequence']))
         else:
             return None
-        
+
+
+class Sentinel2Tile(_BaseSentinel2File):
+    regex = r'(?P<region>[^_]+)_(?P<district>[^_]+)_(?P<utm_code>\d+)_(?P<latitude_band>\S+)_(?P<square>\S+)_(?P<year>\d{4})_(?P<month>\d+)_(?P<day>\d+)_(?P<sequence>\d{1})_(?P<band>B\d{2})\.jp2$'
+
+    def __init__(self, region: str, district: str, utm_code: str, latitude_band: str, square: str, year: int, month: int, day: int, band: str,
+                 sequence: int = 0):
+        super().__init__(region, district, utm_code, latitude_band, square, year, month, day, band, sequence)
+
+    @property
+    def name(self) -> str:
+        return f'{self.region}_{self.district}_{self.utm_code}_{self.latitude_band}_{self.square}_{self.year}_{self.month}_{self.day}_' \
+               f'{self.sequence}_{self.band}.jp2'
+
+    @staticmethod
+    def find_files(region: str = None, district: str = None, mgrs: str = None,
+                   year: int = None, month: int = None, day: int = None, sequence: int = None, band: str = None) -> List[str]:
+        return _BaseSentinel2File.find_files(Sentinel2Tile.regex, region, district, mgrs, year,
+                                             month, day, sequence, band)
+
+    @classmethod
+    def create(cls, file_path: str):
+        return super(Sentinel2Tile, cls).create(file_path)
+
+
+class Sentinel2Cloud(_BaseSentinel2File):
+    regex = r'(?P<region>[^_]+)_(?P<district>[^_]+)_(?P<utm_code>\d+)_(?P<latitude_band>\S+)_(?P<square>\S+)_(?P<year>\d{4})_(?P<month>\d+)_(?P<day>\d+)_(?P<sequence>\d{1})_qi_MSK_CLOUDS_B00.gml'
+
+    def __init__(self, region: str, district: str, utm_code: str, latitude_band: str, square: str, year: int, month: int, day: int,
+                 sequence: int = 0):
+        super().__init__(region, district, utm_code, latitude_band, square, year, month, day, 'B00', sequence)
+
+    @property
+    def name(self) -> str:
+        return f'{self.region}_{self.district}_{self.utm_code}_{self.latitude_band}_{self.square}_{self.year}_{self.month}_{self.day}_' \
+               f'{self.sequence}_qi_MSK_CLOUDS_B00.gml'
+
+    @staticmethod
+    def find_files(region: str = None, district: str = None, mgrs: str = None,
+                   year: int = None, month: int = None, day: int = None, sequence: int = None) -> List[str]:
+        return _BaseSentinel2File.find_files(Sentinel2Cloud.regex, region, district, mgrs, year,
+                                             month, day, sequence)
+
+    @classmethod
+    def create(cls, file_path: str):
+        return super(Sentinel2Cloud, cls).create(file_path)
+    
 
 class _BaseNonOpticalBand(File):
-    regex = r'(?P<region>[^_]+)_(?P<district>[^_]+)(?:_(?P<mgrs>[^_]{5}))?\.tif$'
+    regex = r'(?P<region>[^_]+)_(?P<district>[^_]+)_(?P<mgrs>[^_]{5})\.tif$'
     _ROOT_DATA_DIR = None
 
-    def __init__(self, region: str, district: str, mgrs: str = None):
+    def __init__(self, region: str, district: str, mgrs: str):
         self.region = region
         self.district = district
         self.mgrs = mgrs
@@ -292,12 +335,9 @@ class _BaseNonOpticalBand(File):
             base_string += f'_{self.mgrs}'
         return base_string + '.tif'
 
-    def archive_path(self, create_dir: bool = False) -> str:
-        path = os.path.join(self._ROOT_DATA_DIR, self.region, self.district, self.name)
-        if create_dir:
-            Path(path).mkdir(parents=True, exist_ok=True)      
-
-        return path
+    @property
+    def archive_path(self) -> str:
+        return os.path.join(self._ROOT_DATA_DIR, self.region, self.district, self.name)
 
     @staticmethod
     def find_files(in_dir: str, region: str = None, district: str = None, mgrs: str = None) -> List[str]:
@@ -309,15 +349,26 @@ class _BaseNonOpticalBand(File):
             if not match:
                 continue
             group_dict = match.groupdict()
-            if region is not None and group_dict['region'] != region:
+            if region is not None and group_dict['region'].lower() != region.lower():
                 continue
-            if district is not None and group_dict['district'] != district:
+            if district is not None and group_dict['district'].lower() != district.lower():
                 continue
             if mgrs is not None and group_dict['mgrs'].lower() != mgrs.lower():
                 continue
             matching_files.append(file)
 
         return sorted(matching_files)
+    
+    @classmethod
+    def create(cls, file_path: str):
+        name = os.path.basename(file_path)
+        match = re.match(cls.regex, name)
+        if match:
+            group_dict = match.groupdict()
+            return cls(region=group_dict['region'], district=group_dict['district'],
+                       mgrs=group_dict['mgrs'])
+        else:
+            return None
 
 
 class Elevation(_BaseNonOpticalBand):
@@ -329,14 +380,7 @@ class Elevation(_BaseNonOpticalBand):
 
     @classmethod
     def create(cls, file_path: str):
-        name = os.path.basename(file_path)
-        match = re.match(cls.regex, name)
-        if match:
-            group_dict = match.groupdict()
-            return cls(region=group_dict['region'], district=group_dict['district'],
-                       mgrs=group_dict['mgrs'] if 'mgrs' in group_dict else None)
-        else:
-            return None
+        return super(Elevation, cls).create(file_path)
 
 
 class Slope(_BaseNonOpticalBand):
@@ -348,14 +392,7 @@ class Slope(_BaseNonOpticalBand):
 
     @classmethod
     def create(cls, file_path: str):
-        name = os.path.basename(file_path)
-        match = re.match(cls.regex, name)
-        if match:
-            group_dict = match.groupdict()
-            return cls(region=group_dict['region'], district=group_dict['district'],
-                       mgrs=group_dict['mgrs'] if 'mgrs' in group_dict else None)
-        else:
-            return None
+        return super(Slope, cls).create(file_path)
 
 
 class OSM(_BaseNonOpticalBand):
@@ -367,64 +404,50 @@ class OSM(_BaseNonOpticalBand):
 
     @classmethod
     def create(cls, file_path: str):
-        name = os.path.basename(file_path)
-        match = re.match(cls.regex, name)
-        if match:
-            group_dict = match.groupdict()
-            return cls(region=group_dict['region'], district=group_dict['district'],
-                       mgrs=group_dict['mgrs'] if 'mgrs' in group_dict else None)
-        else:
-            return None
+        return super(OSM, cls).create(file_path)
 
 
 class SingleRegionTileMatch(File):
     _ROOT_DATA_DIR = TILE_DIR
-    regex = r'tile_match_(?P<tile_size>\d+)\.csv$'
+    regex = r'tile_match_(?P<region>[^_]+)_?((?P<district>[^_]+)_)?((?P<mgrs>[^_]+)_)(?P<tile_size>\d+)\.csv$'
 
-    def __init__(self, tile_size: int):
+    def __init__(self, region: str, tile_size: int, district: str = None, military_grid: str = None):
+        self.region = region
+        self.district = district 
+        self.military_grid = military_grid
         self.tile_size = tile_size
         super().__init__()
 
     @property
     def name(self):
-        return f'tile_match_{self.tile_size}.csv'
+        return f'tile_match_{self.region}_{self.district}_{self.military_grid}_{self.tile_size}.csv'
 
-    def archive_path(self, region: str, district: str = None, military_grid: str = None, create_dir: bool = False) -> str:
-        base_path = os.path.join(self._ROOT_DATA_DIR, region)
-        if district is not None:
-            base_path = os.path.join(base_path, district)
-        if military_grid is not None:
-            base_path = os.path.join(base_path, military_grid)
-        base_path = os.path.join(base_path, self.name)
+    @property
+    def archive_path(self) -> str:
+        base_path = os.path.join(self._ROOT_DATA_DIR, self.region)
+        if self.district is not None:
+            base_path = os.path.join(base_path, self.district)
+        if self.military_grid is not None:
+            base_path = os.path.join(base_path, self.military_grid)
+        path = os.path.join(base_path, self.name)
 
-        if create_dir:
-            Path(base_path).mkdir(parents=True, exist_ok=True)
-
-        return base_path
+        return path
 
     @staticmethod
     def find_files(tile_size: int, region: str = None, district: str = None, military_grid: str = None) -> List[str]:
-        if region is None and district is not None:
-            raise ValueError('Must specify region if district is specified')
-        
-        if district is None and military_grid is not None:
-            raise ValueError('Must specify region and district if military grid is specified')
-
-        in_dir = SingleRegionTileMatch._ROOT_DATA_DIR
-        if region is not None:
-            in_dir = os.path.join(in_dir, region)
-        if district is not None:
-            in_dir = os.path.join(in_dir, district)
-        if military_grid is not None:
-            in_dir = os.path.join(in_dir, military_grid)
-
-        files = glob.glob( + '/**/*', recursive=True)
+        files = glob.glob(SingleRegionTileMatch._ROOT_DATA_DIR + '/**/*', recursive=True)
         matching_files = []
         for file in files:
             match = re.match(SingleRegionTileMatch.regex, os.path.basename(file))
             if not match:
                 continue
             group_dict = match.groupdict()
+            if region is not None and group_dict['region'].lower() != region.lower():
+                continue
+            if district is not None and group_dict['district'].lower() != district.lower():
+                continue
+            if military_grid is not None and group_dict['mgrs'].lower() != military_grid.lower():
+                continue
             if int(group_dict['tile_size']) != tile_size:
                 continue
             matching_files.append(file)
@@ -434,45 +457,43 @@ class SingleRegionTileMatch(File):
     @classmethod
     def create(cls, file_path: str):
         name = os.path.basename(file_path)
-        regex = cls.regex
-        match = re.match(regex, name)
+        match = re.match(cls.regex, name)
         if match:
             group_dict = match.groupdict()
-            return cls(tile_size=int(group_dict['tile_size']))
+            return cls(region=group_dict['region'], district=group_dict['district'], military_grid=group_dict['mgrs'], tile_size=int(group_dict['tile_size']))
         else:
             return None
 
 
 class MultiRegionTileMatch(File):
     _ROOT_DATA_DIR = MULTI_REGION_TILE_MATCH
-    regex = r'tile_match_(?P<tile_size>\d+)\.csv$'
+    regex = r'tile_match_(?P<regions>\w+(?:_\w+)*)_(?P<tile_size>\d+)\.csv$'
 
-    def __init__(self, tile_size: int):
+    def __init__(self, regions: List[str], tile_size: int):
+        self.regions = sorted(regions)
         self.tile_size = tile_size
         super().__init__()
 
     @property
     def name(self):
-        return f'tile_match_{self.tile_size}.csv'
+        return f"tile_match_{'_'.join(self.regions)}_{self.tile_size}.csv"
 
-    def archive_path(self, regions: List[str], create_dir: bool = False) -> str:
-        regions = sorted(regions)
-        path = os.path.join(self._ROOT_DATA_DIR, '_'.join(regions), self.name)
-        if create_dir:
-            Path(path).mkdir(parents=True, exist_ok=True)
-        return path
+    @property
+    def archive_path(self) -> str:
+        return os.path.join(self._ROOT_DATA_DIR, '_'.join(self.regions), self.name)
         
     @staticmethod
-    def find_files(regions: List[str] = None):
-        in_dir = MultiRegionTileMatch._ROOT_DATA_DIR
-        if regions is not None:
-            regions = sorted(regions)
-            in_dir = os.path.join(in_dir, '_'.join(regions))
-        files = glob.glob(in_dir + '/**/*', recursive=True)
+    def find_files(regions: List[str] = None, tile_size: int = None):
+        files = glob.glob(MultiRegionTileMatch._ROOT_DATA_DIR + '/**/*', recursive=True)
         matching_files = []
         for file in files:
             match = re.match(MultiRegionTileMatch.regex, os.path.basename(file))
             if not match:
+                continue
+            group_dict = match.groupdict()
+            if regions is not None and group_dict['regions'].split('_') != sorted(regions):
+                continue
+            if tile_size is not None and int(group_dict['tile_size']) != tile_size:
                 continue
             matching_files.append(file)
 
@@ -485,7 +506,7 @@ class MultiRegionTileMatch(File):
         match = re.match(regex, name)
         if match:
             group_dict = match.groupdict()
-            return cls(tile_size=int(group_dict['tile_size']))
+            return cls(regions=group_dict['regions'].split('_'), tile_size=int(group_dict['tile_size']))
         else:
             return None
         
@@ -493,57 +514,63 @@ class MultiRegionTileMatch(File):
 class _BaseTileFile(File):
     _ROOT_DATA_DIR = TILE_DIR
 
-    def __init__(self, x_min: int, y_min: int):
+    def __init__(self, region: str, district: str, military_grid: str, tile_size: int, x_min: int, y_min: int):
+        self.region = region
+        self.district = district
+        self.military_grid = military_grid
+        self.tile_size = tile_size
         self.x_min = x_min
         self.y_min = y_min
         super().__init__()
 
-    def archive_path(self, region: str, district: str, military_grid: str, tile_size: int, create_dir: bool = False) -> str:
-        path = os.path.join(self._ROOT_DATA_DIR, region, district, military_grid, str(tile_size), self.name)
-        if create_dir:
-            Path(path).mkdir(parents=True, exist_ok=True)
-        return path
+    @property
+    def archive_path(self) -> str:
+        return os.path.join(self._ROOT_DATA_DIR, self.region, self.district, self.military_grid, str(self.tile_size), self.name)
 
     @staticmethod
     def find_files(regex: str, region: str = None, district: str = None, military_grid: str = None, tile_size: int = None) -> List[str]:
-        if district is not None and region is None:
-            raise ValueError('Must specify region if district is specified')
-        if military_grid is not None and district is None:
-            raise ValueError('Must specify region and district if military grid is specified')
-        if tile_size is not None and military_grid is None:
-            raise ValueError('Must specify region, district, and military grid if tile size is specified')
-
-        in_dir = _BaseTileFile._ROOT_DATA_DIR
-        if region is not None:
-            in_dir = os.path.join(in_dir, region)
-        if district is not None:
-            in_dir = os.path.join(in_dir, district)
-        if military_grid is not None:
-            in_dir = os.path.join(in_dir, military_grid)
-        if tile_size is not None:
-            in_dir = os.path.join(in_dir, tile_size)
-
-        files = glob.glob(in_dir + '/**/*', recursive=True)
+        files = glob.glob(_BaseTileFile._ROOT_DATA_DIR + '/**/*', recursive=True)
         
         matching_files = []
         for file in files:
             match = re.match(regex, os.path.basename(file))
             if not match:
                 continue
+            group_dict = match.groupdict()
+            if region is not None and group_dict['region'].lower() != region.lower():
+                continue
+            if district is not None and group_dict['district'].lower() != district.lower():
+                continue
+            if military_grid is not None and group_dict['mgrs'].lower() != military_grid.lower():
+                continue
+            if tile_size is not None and int(group_dict['tile_size']) != tile_size:
+                continue
             matching_files.append(file)
 
         return sorted(matching_files)
+    
+    @classmethod
+    def create(cls, file_path: str):
+        name = os.path.basename(file_path)
+        regex = cls.regex
+        match = re.match(regex, name)
+        if match:
+            group_dict = match.groupdict()
+            return cls(region=group_dict['region'], district=group_dict['district'], military_grid=group_dict['mgrs'], tile_size=int(group_dict['tile_size']),
+                        x_min=int(group_dict['x_min']), y_min=int(group_dict['y_min']))
+        else:
+            return None
 
 
 class Tile(_BaseTileFile):
-    regex = r'^(?P<x_min>\d+)_(?P<y_min>\d+)\.tif$'
+    regex = r'^(?P<region>[^_]+)_(?P<district>[^_]+)_(?P<mgrs>[^_]+)_(?P<tile_size>\d+)_(?P<x_min>\d+)_(?P<y_min>\d+)\.tif$'
 
-    def __init__(self, x_min: int, y_min: int):
-        super().__init__(x_min, y_min)
+    def __init__(self, region: str, district: str, military_grid: str, tile_size: int, x_min: int, y_min: int):
+        super().__init__(region, district, military_grid, tile_size, x_min, y_min)
 
     @property
     def name(self) -> str:
-        return f'{self.x_min}_{self.y_min}.tif'
+        return f'{self.region}_{self.district}_{self.mgrs}_{self.tile_size}_{self.x_min}_{self.y_min}.tif'
     
     @staticmethod
     def find_files(region: str = None, district: str = None, military_grid: str = None, tile_size: int = None) -> List[str]:
@@ -551,25 +578,18 @@ class Tile(_BaseTileFile):
 
     @classmethod
     def create(cls, file_path: str):
-        name = os.path.basename(file_path)
-        regex = cls.regex
-        match = re.match(regex, name)
-        if match:
-            group_dict = match.groupdict()
-            return cls(x_min=int(group_dict['x_min']), y_min=int(group_dict['y_min']))
-        else:
-            return None
+        return super(Tile, cls).create(file_path)
 
 
 class PyTorch(_BaseTileFile):
-    regex = r'^(?P<x_min>\d+)_(?P<y_min>\d+)\.pt$'
+    regex = r'^(?P<region>[^_]+)_(?P<district>[^_]+)_(?P<mgrs>[^_]+)_(?P<tile_size>\d+)_(?P<x_min>\d+)_(?P<y_min>\d+)\.pt$'
 
-    def __init__(self, x_min: int, y_min: int):
-        super().__init__(x_min, y_min)
+    def __init__(self, region: str, district: str, military_grid: str, tile_size: int, x_min: int, y_min: int):
+        super().__init__(region, district, military_grid, tile_size, x_min, y_min)
 
     @property
     def name(self) -> str:
-        return f'{self.x_min}_{self.y_min}.tif'
+        return f'{self.region}_{self.district}_{self.mgrs}_{self.tile_size}_{self.x_min}_{self.y_min}.tif'
     
     @staticmethod
     def find_files(region: str = None, district: str = None, military_grid: str = None, tile_size: int = None) -> List[str]:
@@ -577,23 +597,17 @@ class PyTorch(_BaseTileFile):
 
     @classmethod
     def create(cls, file_path: str):
-        name = os.path.basename(file_path)
-        regex = cls.regex
-        match = re.match(regex, name)
-        if match:
-            group_dict = match.groupdict()
-            return cls(x_min=int(group_dict['x_min']), y_min=int(group_dict['y_min']))
-        else:
-            return None
+        return super(PyTorch, cls).create(file_path)
         
 
 class _BaseInferenceFiles(File):
     _ROOT_DATA_DIR = None
     base_layers = 'red|blue|green|nir|osm-water|osm-boundary|elevation|slope'
 
-    def __init__(self, architecture: str, layers: List[str], epoch: int, ratio: float, tile_size: int, best: bool = False):
+    def __init__(self, regions: List[str], architecture: str, layers: List[str], epoch: int, ratio: float, tile_size: int, best: bool = False):
         if not 0 < len(layers) <= 3:
             raise ValueError('Must only between 1 and 3 layer(s)')
+        self.regions = sorted(regions)
         self.architecture = architecture
         self.layers = sorted(layers)
         self.epoch = epoch
@@ -602,34 +616,18 @@ class _BaseInferenceFiles(File):
         self.best = best
         super().__init__()
 
-    def archive_path(self, regions: List[str], create_dir: bool = False) -> str:
-        path = os.path.join(self._BASE_DATA_DIR, '_'.join(sorted(regions)), self.architecture, f'r{self.ratio}', self.name)
-        if create_dir:
-            Path(path).mkdir(parents=True, exist_ok=True)
-        return path
+    @property
+    def archive_path(self) -> str:
+        return os.path.join(self._ROOT_DATA_DIR, '_'.join(self.regions), self.architecture, f'r{self.ratio}', self.name)
     
-    def s3_archive_path(self, regions: List[str]) -> str:
-        return self.archive_path(regions).replace(DATA_DIR + os.sep, '')
+    def s3_archive_path(self) -> str:
+        return self.archive_path.replace(DATA_DIR + os.sep, '')
     
     @staticmethod
     def find_files(in_dir: str, regex: str, regions: List[str] = None, architecture: str = None, layers: List[str] = None, epoch: str = None, ratio: float = None, tile_size: int = None,
                    best: bool = False) -> List[str]:
         if not 0 < len(layers) <= 3:
             raise ValueError('Must only between 1 and 3 layer(s)')
-
-        if architecture is None and regions is not None:
-            raise ValueError('Must specify region if architecture is specified')
-        
-        if ratio is None and architecture is None:
-            raise ValueError('Must specify architecture if ratio is specified')
-
-        if regions is not None:
-            regions = sorted(regions)
-            in_dir = os.path.join(in_dir, '_'.join(regions))
-        if architecture is not None:
-            in_dir = os.path.join(in_dir,  architecture)
-        if ratio is not None:
-            in_dir = os.path.join(in_dir, f'r{ratio}')
         
         files = glob.glob(in_dir + '/**/*', recursive=True)
 
@@ -648,6 +646,12 @@ class _BaseInferenceFiles(File):
                         break
                 if not layer_match:
                     continue
+            if regions is not None and group_dict['regions'].lower() != '_'.join(sorted(regions)).lower():
+                continue
+            if architecture is not None and group_dict['architecture'] != architecture:
+                continue
+            if ratio is not None and float(group_dict['ratio']) != ratio:
+                continue 
             if best and group_dict['best'] is None:
                 continue
             if epoch is not None and epoch != group_dict['epoch']:
@@ -657,19 +661,36 @@ class _BaseInferenceFiles(File):
             matching_files.append(file)
 
         return sorted(matching_files)
+    
+    @classmethod
+    def create(cls, file_path: str):
+        name = os.path.basename(file_path)
+        regex = cls.regex
+        match = re.match(regex, name)
+        if match:
+            group_dict = match.groupdict()
+            layers = []
+            for i in range(1, 4):
+                layer = group_dict[f'layer_{i}']
+                if layer is not None:
+                    layers.append(layer)
+            return cls(regions=group_dict['regions'].split('_'), architecture=group_dict['architecture'], tile_size=int(group_dict['tile_size']), layers=layers, epoch=group_dict['epoch'],
+                       ratio=group_dict['ratio'], best=group_dict['best'] is not None)
+        else:
+            return None
 
 
 class TrainedModel(_BaseInferenceFiles):
     _ROOT_DATA_DIR = MODEL_DIR
     base_layers = _BaseInferenceFiles.base_layers
-    regex = rf'^(?P<architecture>resnet\d+)_r(?P<ratio>\d+\.\d+)_ts(?P<tile_size>\d+)_(?P<layer_1>{base_layers})_((?P<layer_2>{base_layers}_)?((?P<layer_3>{base_layers})_)epoch(?P<epoch>\d+)?(?P<best>_best)\.tar$'
+    regex = rf'^(?P<regions>\w+(?:_\w+)*)_(?P<architecture>resnet\d+)_r(?P<ratio>\d+\.\d+)_ts(?P<tile_size>\d+)_(?P<layer_1>{base_layers})_?((?P<layer_2>{base_layers}_)?((?P<layer_3>{base_layers})_)epoch(?P<epoch>\d+)?(?P<best>_best)\.tar$'
 
-    def __init__(self, architecture: str, layers: List[str], epoch: int, ratio: float, tile_size: int, best: bool = False):
-        super().__init__(architecture, layers, epoch, ratio, tile_size, best)
+    def __init__(self, regions: List[str], architecture: str, layers: List[str], epoch: int, ratio: float, tile_size: int, best: bool = False):
+        super().__init__(regions, architecture, layers, epoch, ratio, tile_size, best)
 
     @property
     def name(self) -> str:
-        base_str = self.architecture + f'_r{self.ratio}_' + f'ts{self.tile_size}'
+        base_str = '_'.join(self.regions) + '_' + self.architecture + f'_r{self.ratio}_' + f'ts{self.tile_size}'
 
         for layer in self.layers:
             base_str += layer + '_'
@@ -683,33 +704,20 @@ class TrainedModel(_BaseInferenceFiles):
 
     @classmethod
     def create(cls, file_path: str):
-        name = os.path.basename(file_path)
-        regex = cls.regex
-        match = re.match(regex, name)
-        if match:
-            group_dict = match.groupdict()
-            layers = []
-            for i in range(1, 4):
-                layer = group_dict[f'layer_{i}']
-                if layer is not None:
-                    layers.append(layer)
-            return cls(architecture=group_dict['architecture'], tile_size=int(group_dict['tile_size']), layers=layers, epoch=group_dict['epoch'],
-                       ratio=group_dict['ratio'], best=group_dict['best'] is not None)
-        else:
-            return None
+        return super(TrainedModel, cls).create(file_path)
 
 
 class InferenceResultsCSV(_BaseInferenceFiles):
     _ROOT_DATA_DIR = INFERENCE_RESULTS_DIR
     base_layers = _BaseInferenceFiles.base_layers
-    regex = rf'^(?P<architecture>resnet\d+)_r(?P<ratio>\d+\.\d+)_(?P<layer_1>{base_layers})_((?P<layer_2>{base_layers}_)?((?P<layer_3>{base_layers})_)epoch(?P<epoch>\d+)?(?P<best>_best)_results\.csv$'
+    regex = rf'^(?P<regions>\w+(?:_\w+)*)_(?P<architecture>resnet\d+)_r(?P<ratio>\d+\.\d+)_(?P<layer_1>{base_layers})_((?P<layer_2>{base_layers}_)?((?P<layer_3>{base_layers})_)epoch(?P<epoch>\d+)?(?P<best>_best)_results\.csv$'
 
-    def __init__(self, architecture: str, layers: List[str], epoch: int, ratio: float, tile_size: int, best: bool = False):
-        super().__init__(architecture, layers, epoch, ratio, tile_size, best)
+    def __init__(self, regions: List[str], architecture: str, layers: List[str], epoch: int, ratio: float, tile_size: int, best: bool = False):
+        super().__init__(regions, architecture, layers, epoch, ratio, tile_size, best)
 
     @property
     def name(self) -> str:
-        base_str = self.architecture + f'_r{self.ratio}_' + f'ts{self.tile_size}'
+        base_str = '_'.join(self.regions) + '_' + self.architecture + f'_r{self.ratio}_' + f'ts{self.tile_size}'
 
         for layer in self.layers:
             base_str += layer + '_'
@@ -723,33 +731,20 @@ class InferenceResultsCSV(_BaseInferenceFiles):
 
     @classmethod
     def create(cls, file_path: str):
-        name = os.path.basename(file_path)
-        regex = cls.regex
-        match = re.match(regex, name)
-        if match:
-            group_dict = match.groupdict()
-            layers = []
-            for i in range(1, 4):
-                layer = group_dict[f'layer_{i}']
-                if layer is not None:
-                    layers.append(layer)
-            return cls(architecture=group_dict['architecture'], tile_size=int(group_dict['tile_size']), layers=layers, epoch=group_dict['epoch'],
-                       ratio=group_dict['ratio'], best=group_dict['best'] is not None)
-        else:
-            return None
+        return super(InferenceResultsCSV, cls).create(file_path)
 
 
 class InferenceResultsShapefile(_BaseInferenceFiles):
     _ROOT_DATA_DIR = INFERENCE_RESULTS_DIR
     base_layers = _BaseInferenceFiles.base_layers
-    regex = rf'^(?P<architecture>resnet\d+)_r(?P<ratio>\d+\.\d+)_(?P<layer_1>{base_layers})_((?P<layer_2>{base_layers}_)?((?P<layer_3>{base_layers})_)epoch(?P<epoch>\d+)?(?P<best>_best)_results\.shp$'
+    regex = rf'^(?P<regions>\w+(?:_\w+)*)_(?P<architecture>resnet\d+)_r(?P<ratio>\d+\.\d+)_(?P<layer_1>{base_layers})_((?P<layer_2>{base_layers}_)?((?P<layer_3>{base_layers})_)epoch(?P<epoch>\d+)?(?P<best>_best)_results\.shp$'
 
-    def __init__(self, architecture: str, layers: List[str], epoch: int, ratio: float, tile_size: int, best: bool = False):
-        super().__init__(architecture, layers, epoch, ratio, tile_size, best)
+    def __init__(self, regions: List[str], architecture: str, layers: List[str], epoch: int, ratio: float, tile_size: int, best: bool = False):
+        super().__init__(regions, architecture, layers, epoch, ratio, tile_size, best)
 
     @property
     def name(self) -> str:
-        base_str = self.architecture + f'_r{self.ratio}_' + '_'
+        base_str = '_'.join(self.regions) + '_' + self.architecture + f'_r{self.ratio}_' + '_'
 
         for layer in self.layers:
             base_str += layer + '_'
@@ -757,10 +752,12 @@ class InferenceResultsShapefile(_BaseInferenceFiles):
         base_str += f'epoch{self.epoch}' + '_best' if self.best else '' + '_results' '.shp'
         return base_str
 
-    def archive_path(self, regions: List[str]):
+    @property
+    def archive_path(self) -> str:
         sub_dir = '_'.join(self.layers) + f'_{self.epoch}' + '_best' if self.best else '' + 'shapefile'
-        return os.path.join(self._ROOT_DATA_DIR, '_'.join(sorted(regions)), self.architecture, f'r{self.ratio}',
+        path = os.path.join(self._ROOT_DATA_DIR, '_'.join(self.regions), self.architecture, f'r{self.ratio}',
                             sub_dir, self.name)
+        return path
 
     @staticmethod
     def find_files(regions: List[str] = None, architecture: str = None, layers: List[str] = None, epoch: str = None, ratio: float = None, tile_size: int = None, best: bool = False) -> List[str]:
@@ -768,35 +765,21 @@ class InferenceResultsShapefile(_BaseInferenceFiles):
 
     @classmethod
     def create(cls, file_path: str):
-        name = os.path.basename(file_path)
-        regex = cls.regex
-        match = re.match(regex, name)
-        if match:
-            group_dict = match.groupdict()
-            layers = []
-            for i in range(1, 4):
-                layer = group_dict[f'layer_{i}']
-                if layer is not None:
-                    layers.append(layer)
-            return cls(architecture=group_dict['architecture'], tile_size=int(group_dict['tile_size']), layers=layers, epoch=group_dict['epoch'],
-                       ratio=group_dict['ratio'], best=group_dict['best'] is not None)
-        else:
-            return None
+        return super(InferenceResultsShapefile, cls).create(file_path)
 
 
 class _BaseDatasetSplit(File):
     _ROOT_DATA_DIR = TRAIN_VALIDATE_SPLIT_DIR
 
-    def __init__(self, regions: List[str], ratio: int):
+    def __init__(self, regions: List[str], ratio: int, tile_size: int):
         self.regions = sorted(regions)
         self.ratio = ratio
+        self.tile_size = tile_size
         super().__init__()
 
-    def archive_path(self, create_dir: bool = False) -> str:
-        path = os.path.join(TRAIN_VALIDATE_SPLIT_DIR, self.name)
-        if create_dir:
-            Path(path).mkdir(parents=True, exist_ok=True)
-        return path
+    @property
+    def archive_path(self) -> str:
+        return os.path.join(TRAIN_VALIDATE_SPLIT_DIR, self.name)
 
     @staticmethod
     def find_files(regex: str, regions: List[str] = None, ratio: int = None) -> List[str]:
@@ -810,24 +793,34 @@ class _BaseDatasetSplit(File):
             group_dict = match.groupdict()
             if regions is not None:
                 regions = '_'.join(sorted(regions))
-                if regions != group_dict['regions']:
+                if regions.lower() != group_dict['regions'].lower():
                     continue
             if ratio is not None and ratio != int(group_dict['ratio']):
                 continue
             matching_files.append(file)
 
         return sorted(matching_files)
+    
+    @classmethod
+    def create(cls, file_path: str):
+        name = os.path.basename(file_path)
+        match = re.match(cls.regex, name)
+        if match:
+            group_dict = match.groupdict()
+            return cls(regions=group_dict['regions'].split('_'), ratio=int(group_dict['ratio']), tile_size=int(group_dict['tile_size']))
+        else:
+            return None
 
 
 class TrainSplit(_BaseDatasetSplit):
-    regex = r'train_(?P<regions>\w+(?:_\w+)*)_(?P<ratio>\d+)\.csv$'
+    regex = r'train_(?P<regions>\w+(?:_\w+)*)_(?P<ratio>\d+)_(?P<tile_size>\d+)meter\.csv$'
 
-    def __init__(self, regions: List[str], ratio: int):
-        super().__init__(regions, ratio)
+    def __init__(self, regions: List[str], ratio: int, tile_size: int):
+        super().__init__(regions, ratio, tile_size)
 
     @property
     def name(self) -> str:
-        return f"train_{'_'.join(self.regions)}_{self.ratio}.csv"
+        return f"train_{'_'.join(self.regions)}_{self.ratio}_{self.tile_size}meter.csv"
 
     @staticmethod
     def find_files(regions: List[str], ratio: int) -> List[str]:
@@ -835,35 +828,23 @@ class TrainSplit(_BaseDatasetSplit):
 
     @classmethod
     def create(cls, file_path: str):
-        name = os.path.basename(file_path)
-        match = re.match(cls.regex, name)
-        if match:
-            group_dict = match.groupdict()
-            return cls(regions=group_dict['regions'].split('_'), ratio=int(group_dict['ratio']))
-        else:
-            return None
+        return super(TrainSplit, cls).create(file_path)
 
 
-class ValidateSplit(File):
-    regex = r'validate_(?P<regions>\w+(?:_\w+)*)_(?P<ratio>\d+)\.csv$'
+class ValidateSplit(_BaseDatasetSplit):
+    regex = r'validate_(?P<regions>\w+(?:_\w+)*)_(?P<ratio>\d+)_(?P<tile_size>\d+)meter\.csv$'
 
-    def __init__(self, regions: List[str], ratio: int):
-        super().__init__(regions, ratio)
+    def __init__(self, regions: List[str], ratio: int, tile_size: int):
+        super().__init__(regions, ratio, tile_size)
 
     @property
     def name(self) -> str:
-        return f"validate_{'_'.join(self.regions)}_{self.ratio}.csv"
+        return f"validate_{'_'.join(self.regions)}_{self.ratio}_{self.tile_size}meter.csv"
 
     @staticmethod
     def find_files(regions: List[str], ratio: int) -> List[str]:
-        return super().find_files(TrainSplit.regex, regions, ratio)
+        return super().find_files(ValidateSplit.regex, regions, ratio)
 
     @classmethod
     def create(cls, file_path: str):
-        name = os.path.basename(file_path)
-        match = re.match(cls.regex, name)
-        if match:
-            group_dict = match.groupdict()
-            return cls(regions=group_dict['regions'].split('_'), ratio=int(group_dict['ratio']))
-        else:
-            return None
+        return super(ValidateSplit, cls).create(file_path)

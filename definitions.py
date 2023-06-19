@@ -25,8 +25,8 @@ S3_COMPOSITE_DIR = 'composites'
 # Order of data cube layers
 LAYER_TO_IX = [
     'red',
-    'blue',
     'green',
+    'blue',
     'nir',
     'osm-water',
     'osm-boundary',

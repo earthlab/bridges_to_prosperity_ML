@@ -24,7 +24,7 @@ BEST_ACC1 = 0
 
 
 def train_torch(train_csv_path: str, test_csv_path: str, regions: List[str], architecture: str,
-                bridge_no_bridge_ratio: Union[None, float], layers: List[str],
+                bridge_no_bridge_ratio: Union[None, float], layers: List[str], tile_size: int,
                 seed: Union[None, int] = None):
     # Configure the namespace for this run
     args = DEFAULT_ARGS
@@ -33,6 +33,7 @@ def train_torch(train_csv_path: str, test_csv_path: str, regions: List[str], arc
     args.architecture = architecture
     args.bridge_no_bridge_ratio = bridge_no_bridge_ratio
     args.layers = layers
+    args.tile_size = tile_size
     args.regions = regions
 
     if seed is not None:
@@ -258,7 +259,8 @@ def main_worker(gpu, ngpus_per_node, args):
                 layers=args.layers,
                 epoch=epoch,
                 ratio=args.bridge_no_bridge_ratio,
-                is_best=is_best
+                is_best=is_best,
+                tile_size=args.tile_size
             )
         train_dataset.update()
         val_dataset.update()
@@ -377,13 +379,11 @@ def validate(val_loader, model, criterion, args):
     return total_mt.avg, bridge_mt.avg, no_bridge_mt.avg
 
 
-def save_checkpoint(state, architecture, regions, layers, epoch, ratio, is_best):
-    filename = TrainedModel(architecture=architecture, layers=layers, epoch=epoch, ratio=ratio)
-    os.makedirs(filename.archive_dir, exist_ok=True)
-    torch.save(state, filename.archive_path(regions))
+def save_checkpoint(state, architecture, regions, layers, epoch, ratio, is_best, tile_size):
+    model_file = TrainedModel(regions=regions, architecture=architecture, layers=layers, epoch=epoch, ratio=ratio, tile_size=tile_size)
+    model_file.create_archive_dir()
+    torch.save(state, model_file.archive_path)
     if is_best:
-        best_filename = TrainedModel(architecture=architecture, layers=layers, epoch=epoch, ratio=ratio, best=True)
-        shutil.copyfile(
-            filename.archive_path(regions),
-            best_filename.archive_path(regions)
-        )
+        best_filename = TrainedModel(regions=regions, architecture=architecture, layers=layers, epoch=epoch, ratio=ratio, best=True, tile_size=tile_size)
+        best_filename.create_archive_dir()
+        shutil.copyfile(model_file.archive_path, best_filename.archive_path)

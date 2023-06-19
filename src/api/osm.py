@@ -27,7 +27,6 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
     s2_tiff_file = gdal.Open(s2_tiff)
     epsg_code = rasterio.CRS.from_wkt(s2_tiff_file.GetProjection()).to_epsg()
 
-    print(bbox)
     # Call to ox api to get geometries for specific tags
     if debug: print('Getting water from osm')
     water = ox.geometries.geometries_from_bbox(*bbox, TAGS_WATER)

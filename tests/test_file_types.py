@@ -408,321 +408,6 @@ class TestMultiVariateComposite(TestFileTypes):
         self.assertEqual(MultiVariateComposite.find_files(region='Rwanda', district='all', mgrs=['37MRV']), [])
 
 
-class TestElevationFile(TestFileTypes):
-    @classmethod
-    def setUpClass(cls):
-        TestFileTypes.setUpClass()
-        Elevation._ROOT_DATA_DIR = os.path.join(cls.TEST_DATA_DIR, 'elevation')
-
-    def test_init(self):
-        elevation_file = Elevation(region='Uganda', district='Kasese', mgrs='35MRV')
-        self.assertIsNotNone(elevation_file)
-        self.assertEqual(elevation_file.region, 'Uganda')
-        self.assertEqual(elevation_file.district, 'Kasese')
-        self.assertEqual(elevation_file.mgrs, '35MRV')
-
-        elevation_file = Elevation(region='Rwanda', district='all', mgrs='36MRV')
-        self.assertIsNotNone(elevation_file)
-        self.assertEqual(elevation_file.region, 'Rwanda')
-        self.assertEqual(elevation_file.district, 'all')
-        self.assertEqual(elevation_file.mgrs, '36MRV')
-
-    def test_name(self):
-        elevation_file = Elevation(region='Uganda', district='Kasese', mgrs='35MRV')
-        self.assertEqual(elevation_file.name, 'Uganda_Kasese_35MRV.tif')
-
-        elevation_file = Elevation(region='Rwanda', district='all', mgrs='36MRV')
-        self.assertEqual(elevation_file.name, 'Rwanda_all_36MRV.tif')
-
-    def test_archive_path(self):
-        elevation_file = Elevation(region='Uganda', district='Kasese', mgrs='35MRV')
-        self.assertEqual(elevation_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'elevation', 'Uganda', 'Kasese',
-                                                                   'Uganda_Kasese_35MRV.tif'))
-
-        elevation_file = Elevation(region='Rwanda', district='all', mgrs='36MRV')
-        self.assertEqual(elevation_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'elevation', 'Rwanda', 'all',
-                                                                   'Rwanda_all_36MRV.tif'))
-
-    def test_create(self):
-        elevation_file = Elevation(region='Uganda', district='Kasese', mgrs='35MRV')
-        elevation_file_create = Elevation.create(elevation_file.name)
-        self.assertIsInstance(elevation_file_create, Elevation)
-        self.assertEqual(elevation_file_create.region, 'Uganda')
-        self.assertEqual(elevation_file_create.district, 'Kasese')
-        self.assertEqual(elevation_file_create.mgrs, '35MRV')
-
-        elevation_file_create = Elevation.create(elevation_file.archive_path)
-        self.assertIsInstance(elevation_file_create, Elevation)
-        self.assertEqual(elevation_file_create.region, 'Uganda')
-        self.assertEqual(elevation_file_create.district, 'Kasese')
-        self.assertEqual(elevation_file_create.mgrs, '35MRV')
-
-    def test_find_files(self):
-        district_1 = os.path.join(self.TEST_DATA_DIR, 'elevation', 'Uganda', 'Kibaale')
-        os.makedirs(district_1)
-        for file in [
-            'Uganda_Kibaale_35MRV.tif',
-            'Uganda_Kibaale_36MGR.tif',
-            'off_nominal.txt'
-        ]:
-            self.create_blank_file(os.path.join(district_1, file))
-
-        district_2 = os.path.join(self.TEST_DATA_DIR, 'elevation', 'Uganda', 'Kasese')
-        for file in [
-            'Uganda_Kasese_35MRV.tif',
-            'Uganda_Kasese_36MGR.tif',
-            'off_nominal.txt'
-        ]:
-            self.create_blank_file(os.path.join(district_2, file))
-
-        district_3 = os.path.join(self.TEST_DATA_DIR, 'elevation', 'Rwanda', 'all')
-        for file in [
-            'Rwanda_all_35MRV.tif',
-            'off_nominal.txt'
-        ]:
-            self.create_blank_file(os.path.join(district_3, file))
-
-        self.assertEqual(Elevation.find_files(), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
-            os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
-            os.path.join(district_2, 'Uganda_Kasese_36MGR.tif'),
-            os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
-        ]))
-        self.assertEqual(Elevation.find_files(region='Uganda'),
-                         sorted([
-                             os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-                             os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
-                             os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
-                             os.path.join(district_2, 'Uganda_Kasese_36MGR.tif')
-                         ]))
-        self.assertEqual(Elevation.find_files(region='Uganda',
-                                              district='Kibaale'), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif')
-        ]))
-        self.assertEqual(Elevation.find_files(region='Uganda',
-                                              district='Kibaale', mgrs='35MRV'), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif')
-        ]))
-        self.assertEqual(Elevation.find_files(region='Rwanda',
-                                              district='all', mgrs='35MRV'),
-                         sorted([
-                             os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
-                         ]))
-        self.assertEqual(Elevation.find_files(region='Rwanda', district='all', mgrs='37MRV'), [])
-
-
-class TestSlopeFile(TestFileTypes):
-    @classmethod
-    def setUpClass(cls):
-        TestFileTypes.setUpClass()
-        Slope._ROOT_DATA_DIR = os.path.join(cls.TEST_DATA_DIR, 'slope')
-
-    def test_init(self):
-        slope_file = Slope(region='Uganda', district='Kasese', mgrs='35MRV')
-        self.assertIsNotNone(slope_file)
-        self.assertEqual(slope_file.region, 'Uganda')
-        self.assertEqual(slope_file.district, 'Kasese')
-        self.assertEqual(slope_file.mgrs, '35MRV')
-
-        slope_file = Slope(region='Rwanda', district='all', mgrs='36MRV')
-        self.assertIsNotNone(slope_file)
-        self.assertEqual(slope_file.region, 'Rwanda')
-        self.assertEqual(slope_file.district, 'all')
-        self.assertEqual(slope_file.mgrs, '36MRV')
-
-    def test_name(self):
-        slope_file = Slope(region='Uganda', district='Kasese', mgrs='35MRV')
-        self.assertEqual(slope_file.name, 'Uganda_Kasese_35MRV.tif')
-
-        slope_file = Slope(region='Rwanda', district='all', mgrs='36MRV')
-        self.assertEqual(slope_file.name, 'Rwanda_all_36MRV.tif')
-
-    def test_archive_path(self):
-        slope_file = Slope(region='Uganda', district='Kasese', mgrs='35MRV')
-        self.assertEqual(slope_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'slope', 'Uganda', 'Kasese',
-                                                                   'Uganda_Kasese_35MRV.tif'))
-
-        slope_file = Slope(region='Rwanda', district='all', mgrs='36MRV')
-        self.assertEqual(slope_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'slope', 'Rwanda', 'all',
-                                                                   'Rwanda_all_36MRV.tif'))
-
-    def test_create(self):
-        slope_file = Slope(region='Uganda', district='Kasese', mgrs='35MRV')
-        slope_file_create = Slope.create(slope_file.name)
-        self.assertIsInstance(slope_file_create, Slope)
-        self.assertEqual(slope_file_create.region, 'Uganda')
-        self.assertEqual(slope_file_create.district, 'Kasese')
-        self.assertEqual(slope_file_create.mgrs, '35MRV')
-
-        slope_file_create = Slope.create(slope_file.archive_path)
-        self.assertIsInstance(slope_file_create, Slope)
-        self.assertEqual(slope_file_create.region, 'Uganda')
-        self.assertEqual(slope_file_create.district, 'Kasese')
-        self.assertEqual(slope_file_create.mgrs, '35MRV')
-
-    def test_find_files(self):
-        district_1 = os.path.join(self.TEST_DATA_DIR, 'slope', 'Uganda', 'Kibaale')
-        os.makedirs(district_1)
-        for file in [
-            'Uganda_Kibaale_35MRV.tif',
-            'Uganda_Kibaale_36MGR.tif',
-            'off_nominal.txt'
-        ]:
-            self.create_blank_file(os.path.join(district_1, file))
-
-        district_2 = os.path.join(self.TEST_DATA_DIR, 'slope', 'Uganda', 'Kasese')
-        for file in [
-            'Uganda_Kasese_35MRV.tif',
-            'Uganda_Kasese_36MGR.tif',
-            'off_nominal.txt'
-        ]:
-            self.create_blank_file(os.path.join(district_2, file))
-
-        district_3 = os.path.join(self.TEST_DATA_DIR, 'slope', 'Rwanda', 'all')
-        for file in [
-            'Rwanda_all_35MRV.tif',
-            'off_nominal.txt'
-        ]:
-            self.create_blank_file(os.path.join(district_3, file))
-
-        self.assertEqual(Slope.find_files(), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
-            os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
-            os.path.join(district_2, 'Uganda_Kasese_36MGR.tif'),
-            os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
-        ]))
-        self.assertEqual(Slope.find_files(region='Uganda'),
-                         sorted([
-                             os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-                             os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
-                             os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
-                             os.path.join(district_2, 'Uganda_Kasese_36MGR.tif')
-                         ]))
-        self.assertEqual(Slope.find_files(region='Uganda',
-                                              district='Kibaale'), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif')
-        ]))
-        self.assertEqual(Slope.find_files(region='Uganda',
-                                              district='Kibaale', mgrs='35MRV'), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif')
-        ]))
-        self.assertEqual(Slope.find_files(region='Rwanda',
-                                              district='all', mgrs='35MRV'),
-                         sorted([
-                             os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
-                         ]))
-        self.assertEqual(Slope.find_files(region='Rwanda', district='all', mgrs='37MRV'), [])
-
-
-class TestOSMFile(TestFileTypes):
-    @classmethod
-    def setUpClass(cls):
-        TestFileTypes.setUpClass()
-        OSM._ROOT_DATA_DIR = os.path.join(cls.TEST_DATA_DIR, 'osm')
-
-    def test_init(self):
-        osm_file = OSM(region='Uganda', district='Kasese', mgrs='35MRV')
-        self.assertIsNotNone(osm_file)
-        self.assertEqual(osm_file.region, 'Uganda')
-        self.assertEqual(osm_file.district, 'Kasese')
-        self.assertEqual(osm_file.mgrs, '35MRV')
-
-        osm_file = OSM(region='Rwanda', district='all', mgrs='36MRV')
-        self.assertIsNotNone(osm_file)
-        self.assertEqual(osm_file.region, 'Rwanda')
-        self.assertEqual(osm_file.district, 'all')
-        self.assertEqual(osm_file.mgrs, '36MRV')
-
-    def test_name(self):
-        osm_file = OSM(region='Uganda', district='Kasese', mgrs='35MRV')
-        self.assertEqual(osm_file.name, 'Uganda_Kasese_35MRV.tif')
-
-        osm_file = OSM(region='Rwanda', district='all', mgrs='36MRV')
-        self.assertEqual(osm_file.name, 'Rwanda_all_36MRV.tif')
-
-    def test_archive_path(self):
-        osm_file = OSM(region='Uganda', district='Kasese', mgrs='35MRV')
-        self.assertEqual(osm_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'osm', 'Uganda', 'Kasese',
-                                                                   'Uganda_Kasese_35MRV.tif'))
-
-        osm_file = OSM(region='Rwanda', district='all', mgrs='36MRV')
-        self.assertEqual(osm_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'osm', 'Rwanda', 'all',
-                                                                   'Rwanda_all_36MRV.tif'))
-
-    def test_create(self):
-        osm_file = OSM(region='Uganda', district='Kasese', mgrs='35MRV')
-        osm_file_create = OSM.create(osm_file.name)
-        self.assertIsInstance(osm_file_create, OSM)
-        self.assertEqual(osm_file_create.region, 'Uganda')
-        self.assertEqual(osm_file_create.district, 'Kasese')
-        self.assertEqual(osm_file_create.mgrs, '35MRV')
-
-        osm_file_create = OSM.create(osm_file.archive_path)
-        self.assertIsInstance(osm_file_create, OSM)
-        self.assertEqual(osm_file_create.region, 'Uganda')
-        self.assertEqual(osm_file_create.district, 'Kasese')
-        self.assertEqual(osm_file_create.mgrs, '35MRV')
-
-    def test_find_files(self):
-        district_1 = os.path.join(self.TEST_DATA_DIR, 'osm', 'Uganda', 'Kibaale')
-        os.makedirs(district_1)
-        for file in [
-            'Uganda_Kibaale_35MRV.tif',
-            'Uganda_Kibaale_36MGR.tif',
-            'off_nominal.txt'
-        ]:
-            self.create_blank_file(os.path.join(district_1, file))
-
-        district_2 = os.path.join(self.TEST_DATA_DIR, 'osm', 'Uganda', 'Kasese')
-        for file in [
-            'Uganda_Kasese_35MRV.tif',
-            'Uganda_Kasese_36MGR.tif',
-            'off_nominal.txt'
-        ]:
-            self.create_blank_file(os.path.join(district_2, file))
-
-        district_3 = os.path.join(self.TEST_DATA_DIR, 'osm', 'Rwanda', 'all')
-        for file in [
-            'Rwanda_all_35MRV.tif',
-            'off_nominal.txt'
-        ]:
-            self.create_blank_file(os.path.join(district_3, file))
-
-        self.assertEqual(OSM.find_files(), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
-            os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
-            os.path.join(district_2, 'Uganda_Kasese_36MGR.tif'),
-            os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
-        ]))
-        self.assertEqual(OSM.find_files(region='Uganda'),
-                         sorted([
-                             os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-                             os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
-                             os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
-                             os.path.join(district_2, 'Uganda_Kasese_36MGR.tif')
-                         ]))
-        self.assertEqual(OSM.find_files(region='Uganda',
-                                              district='Kibaale'), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif')
-        ]))
-        self.assertEqual(OSM.find_files(region='Uganda',
-                                              district='Kibaale', mgrs='35MRV'), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif')
-        ]))
-        self.assertEqual(OSM.find_files(region='Rwanda',
-                                              district='all', mgrs='35MRV'),
-                         sorted([
-                             os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
-                         ]))
-        self.assertEqual(OSM.find_files(region='Rwanda', district='all', mgrs='37MRV'), [])
-
-
 class TestSentinel2Tile(TestFileTypes):
 
     @classmethod
@@ -1088,3 +773,376 @@ class TestSentinel2Cloud(TestFileTypes):
         self.assertEqual(Sentinel2Cloud.find_files(region='Uganda', district='Kabarole', sequence=2), sorted([
             os.path.join(district_2, 'Uganda_Kabarole_35_MR_V_2020_1_1_2_qi_MSK_CLOUDS_B00.gml'),
         ]))
+
+
+class TestElevationFile(TestFileTypes):
+    @classmethod
+    def setUpClass(cls):
+        TestFileTypes.setUpClass()
+        Elevation._ROOT_DATA_DIR = os.path.join(cls.TEST_DATA_DIR, 'elevation')
+
+    def test_init(self):
+        elevation_file = Elevation(region='Uganda', district='Kasese', mgrs='35MRV')
+        self.assertIsNotNone(elevation_file)
+        self.assertEqual(elevation_file.region, 'Uganda')
+        self.assertEqual(elevation_file.district, 'Kasese')
+        self.assertEqual(elevation_file.mgrs, '35MRV')
+
+        elevation_file = Elevation(region='Rwanda', district='all', mgrs='36MRV')
+        self.assertIsNotNone(elevation_file)
+        self.assertEqual(elevation_file.region, 'Rwanda')
+        self.assertEqual(elevation_file.district, 'all')
+        self.assertEqual(elevation_file.mgrs, '36MRV')
+
+    def test_name(self):
+        elevation_file = Elevation(region='Uganda', district='Kasese', mgrs='35MRV')
+        self.assertEqual(elevation_file.name, 'Uganda_Kasese_35MRV.tif')
+
+        elevation_file = Elevation(region='Rwanda', district='all', mgrs='36MRV')
+        self.assertEqual(elevation_file.name, 'Rwanda_all_36MRV.tif')
+
+    def test_archive_path(self):
+        elevation_file = Elevation(region='Uganda', district='Kasese', mgrs='35MRV')
+        self.assertEqual(elevation_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'elevation', 'Uganda', 'Kasese',
+                                                                   'Uganda_Kasese_35MRV.tif'))
+
+        elevation_file = Elevation(region='Rwanda', district='all', mgrs='36MRV')
+        self.assertEqual(elevation_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'elevation', 'Rwanda', 'all',
+                                                                   'Rwanda_all_36MRV.tif'))
+
+    def test_create(self):
+        elevation_file = Elevation(region='Uganda', district='Kasese', mgrs='35MRV')
+        elevation_file_create = Elevation.create(elevation_file.name)
+        self.assertIsInstance(elevation_file_create, Elevation)
+        self.assertEqual(elevation_file_create.region, 'Uganda')
+        self.assertEqual(elevation_file_create.district, 'Kasese')
+        self.assertEqual(elevation_file_create.mgrs, '35MRV')
+
+        elevation_file_create = Elevation.create(elevation_file.archive_path)
+        self.assertIsInstance(elevation_file_create, Elevation)
+        self.assertEqual(elevation_file_create.region, 'Uganda')
+        self.assertEqual(elevation_file_create.district, 'Kasese')
+        self.assertEqual(elevation_file_create.mgrs, '35MRV')
+
+    def test_find_files(self):
+        district_1 = os.path.join(self.TEST_DATA_DIR, 'elevation', 'Uganda', 'Kibaale')
+        os.makedirs(district_1)
+        for file in [
+            'Uganda_Kibaale_35MRV.tif',
+            'Uganda_Kibaale_36MGR.tif',
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_1, file))
+
+        district_2 = os.path.join(self.TEST_DATA_DIR, 'elevation', 'Uganda', 'Kasese')
+        for file in [
+            'Uganda_Kasese_35MRV.tif',
+            'Uganda_Kasese_36MGR.tif',
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_2, file))
+
+        district_3 = os.path.join(self.TEST_DATA_DIR, 'elevation', 'Rwanda', 'all')
+        for file in [
+            'Rwanda_all_35MRV.tif',
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_3, file))
+
+        self.assertEqual(Elevation.find_files(), sorted([
+            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
+            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
+            os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
+            os.path.join(district_2, 'Uganda_Kasese_36MGR.tif'),
+            os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
+        ]))
+        self.assertEqual(Elevation.find_files(region='Uganda'),
+                         sorted([
+                             os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
+                             os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
+                             os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
+                             os.path.join(district_2, 'Uganda_Kasese_36MGR.tif')
+                         ]))
+        self.assertEqual(Elevation.find_files(region='Uganda',
+                                              district='Kibaale'), sorted([
+            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
+            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif')
+        ]))
+        self.assertEqual(Elevation.find_files(region='Uganda',
+                                              district='Kibaale', mgrs='35MRV'), sorted([
+            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif')
+        ]))
+        self.assertEqual(Elevation.find_files(region='Rwanda',
+                                              district='all', mgrs='35MRV'),
+                         sorted([
+                             os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
+                         ]))
+        self.assertEqual(Elevation.find_files(region='Rwanda', district='all', mgrs='37MRV'), [])
+
+
+class TestSlopeFile(TestFileTypes):
+    @classmethod
+    def setUpClass(cls):
+        TestFileTypes.setUpClass()
+        Slope._ROOT_DATA_DIR = os.path.join(cls.TEST_DATA_DIR, 'slope')
+
+    def test_init(self):
+        slope_file = Slope(region='Uganda', district='Kasese', mgrs='35MRV')
+        self.assertIsNotNone(slope_file)
+        self.assertEqual(slope_file.region, 'Uganda')
+        self.assertEqual(slope_file.district, 'Kasese')
+        self.assertEqual(slope_file.mgrs, '35MRV')
+
+        slope_file = Slope(region='Rwanda', district='all', mgrs='36MRV')
+        self.assertIsNotNone(slope_file)
+        self.assertEqual(slope_file.region, 'Rwanda')
+        self.assertEqual(slope_file.district, 'all')
+        self.assertEqual(slope_file.mgrs, '36MRV')
+
+    def test_name(self):
+        slope_file = Slope(region='Uganda', district='Kasese', mgrs='35MRV')
+        self.assertEqual(slope_file.name, 'Uganda_Kasese_35MRV.tif')
+
+        slope_file = Slope(region='Rwanda', district='all', mgrs='36MRV')
+        self.assertEqual(slope_file.name, 'Rwanda_all_36MRV.tif')
+
+    def test_archive_path(self):
+        slope_file = Slope(region='Uganda', district='Kasese', mgrs='35MRV')
+        self.assertEqual(slope_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'slope', 'Uganda', 'Kasese',
+                                                               'Uganda_Kasese_35MRV.tif'))
+
+        slope_file = Slope(region='Rwanda', district='all', mgrs='36MRV')
+        self.assertEqual(slope_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'slope', 'Rwanda', 'all',
+                                                               'Rwanda_all_36MRV.tif'))
+
+    def test_create(self):
+        slope_file = Slope(region='Uganda', district='Kasese', mgrs='35MRV')
+        slope_file_create = Slope.create(slope_file.name)
+        self.assertIsInstance(slope_file_create, Slope)
+        self.assertEqual(slope_file_create.region, 'Uganda')
+        self.assertEqual(slope_file_create.district, 'Kasese')
+        self.assertEqual(slope_file_create.mgrs, '35MRV')
+
+        slope_file_create = Slope.create(slope_file.archive_path)
+        self.assertIsInstance(slope_file_create, Slope)
+        self.assertEqual(slope_file_create.region, 'Uganda')
+        self.assertEqual(slope_file_create.district, 'Kasese')
+        self.assertEqual(slope_file_create.mgrs, '35MRV')
+
+    def test_find_files(self):
+        district_1 = os.path.join(self.TEST_DATA_DIR, 'slope', 'Uganda', 'Kibaale')
+        os.makedirs(district_1)
+        for file in [
+            'Uganda_Kibaale_35MRV.tif',
+            'Uganda_Kibaale_36MGR.tif',
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_1, file))
+
+        district_2 = os.path.join(self.TEST_DATA_DIR, 'slope', 'Uganda', 'Kasese')
+        for file in [
+            'Uganda_Kasese_35MRV.tif',
+            'Uganda_Kasese_36MGR.tif',
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_2, file))
+
+        district_3 = os.path.join(self.TEST_DATA_DIR, 'slope', 'Rwanda', 'all')
+        for file in [
+            'Rwanda_all_35MRV.tif',
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_3, file))
+
+        self.assertEqual(Slope.find_files(), sorted([
+            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
+            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
+            os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
+            os.path.join(district_2, 'Uganda_Kasese_36MGR.tif'),
+            os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
+        ]))
+        self.assertEqual(Slope.find_files(region='Uganda'),
+                         sorted([
+                             os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
+                             os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
+                             os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
+                             os.path.join(district_2, 'Uganda_Kasese_36MGR.tif')
+                         ]))
+        self.assertEqual(Slope.find_files(region='Uganda',
+                                          district='Kibaale'), sorted([
+            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
+            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif')
+        ]))
+        self.assertEqual(Slope.find_files(region='Uganda',
+                                          district='Kibaale', mgrs='35MRV'), sorted([
+            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif')
+        ]))
+        self.assertEqual(Slope.find_files(region='Rwanda',
+                                          district='all', mgrs='35MRV'),
+                         sorted([
+                             os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
+                         ]))
+        self.assertEqual(Slope.find_files(region='Rwanda', district='all', mgrs='37MRV'), [])
+
+
+class TestOSMFile(TestFileTypes):
+    @classmethod
+    def setUpClass(cls):
+        TestFileTypes.setUpClass()
+        OSM._ROOT_DATA_DIR = os.path.join(cls.TEST_DATA_DIR, 'osm')
+
+    def test_init(self):
+        osm_file = OSM(region='Uganda', district='Kasese', mgrs='35MRV')
+        self.assertIsNotNone(osm_file)
+        self.assertEqual(osm_file.region, 'Uganda')
+        self.assertEqual(osm_file.district, 'Kasese')
+        self.assertEqual(osm_file.mgrs, '35MRV')
+
+        osm_file = OSM(region='Rwanda', district='all', mgrs='36MRV')
+        self.assertIsNotNone(osm_file)
+        self.assertEqual(osm_file.region, 'Rwanda')
+        self.assertEqual(osm_file.district, 'all')
+        self.assertEqual(osm_file.mgrs, '36MRV')
+
+    def test_name(self):
+        osm_file = OSM(region='Uganda', district='Kasese', mgrs='35MRV')
+        self.assertEqual(osm_file.name, 'Uganda_Kasese_35MRV.tif')
+
+        osm_file = OSM(region='Rwanda', district='all', mgrs='36MRV')
+        self.assertEqual(osm_file.name, 'Rwanda_all_36MRV.tif')
+
+    def test_archive_path(self):
+        osm_file = OSM(region='Uganda', district='Kasese', mgrs='35MRV')
+        self.assertEqual(osm_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'osm', 'Uganda', 'Kasese',
+                                                             'Uganda_Kasese_35MRV.tif'))
+
+        osm_file = OSM(region='Rwanda', district='all', mgrs='36MRV')
+        self.assertEqual(osm_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'osm', 'Rwanda', 'all',
+                                                             'Rwanda_all_36MRV.tif'))
+
+    def test_create(self):
+        osm_file = OSM(region='Uganda', district='Kasese', mgrs='35MRV')
+        osm_file_create = OSM.create(osm_file.name)
+        self.assertIsInstance(osm_file_create, OSM)
+        self.assertEqual(osm_file_create.region, 'Uganda')
+        self.assertEqual(osm_file_create.district, 'Kasese')
+        self.assertEqual(osm_file_create.mgrs, '35MRV')
+
+        osm_file_create = OSM.create(osm_file.archive_path)
+        self.assertIsInstance(osm_file_create, OSM)
+        self.assertEqual(osm_file_create.region, 'Uganda')
+        self.assertEqual(osm_file_create.district, 'Kasese')
+        self.assertEqual(osm_file_create.mgrs, '35MRV')
+
+    def test_find_files(self):
+        district_1 = os.path.join(self.TEST_DATA_DIR, 'osm', 'Uganda', 'Kibaale')
+        os.makedirs(district_1)
+        for file in [
+            'Uganda_Kibaale_35MRV.tif',
+            'Uganda_Kibaale_36MGR.tif',
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_1, file))
+
+        district_2 = os.path.join(self.TEST_DATA_DIR, 'osm', 'Uganda', 'Kasese')
+        for file in [
+            'Uganda_Kasese_35MRV.tif',
+            'Uganda_Kasese_36MGR.tif',
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_2, file))
+
+        district_3 = os.path.join(self.TEST_DATA_DIR, 'osm', 'Rwanda', 'all')
+        for file in [
+            'Rwanda_all_35MRV.tif',
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_3, file))
+
+        self.assertEqual(OSM.find_files(), sorted([
+            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
+            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
+            os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
+            os.path.join(district_2, 'Uganda_Kasese_36MGR.tif'),
+            os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
+        ]))
+        self.assertEqual(OSM.find_files(region='Uganda'),
+                         sorted([
+                             os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
+                             os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
+                             os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
+                             os.path.join(district_2, 'Uganda_Kasese_36MGR.tif')
+                         ]))
+        self.assertEqual(OSM.find_files(region='Uganda',
+                                        district='Kibaale'), sorted([
+            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
+            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif')
+        ]))
+        self.assertEqual(OSM.find_files(region='Uganda',
+                                        district='Kibaale', mgrs='35MRV'), sorted([
+            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif')
+        ]))
+        self.assertEqual(OSM.find_files(region='Rwanda',
+                                        district='all', mgrs='35MRV'),
+                         sorted([
+                             os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
+                         ]))
+        self.assertEqual(OSM.find_files(region='Rwanda', district='all', mgrs='37MRV'), [])
+
+
+class TestSingleRegionTileMatch(TestFileTypes):
+    @classmethod
+    def setUpClass(cls):
+        TestFileTypes.setUpClass()
+        SingleRegionTileMatch._ROOT_DATA_DIR = os.path.join(cls.TEST_DATA_DIR, 'tiles')
+
+    def test_init(self):
+        tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400)
+        self.assertIsNotNone(tile_match)
+        self.assertEqual(tile_match.region, 'Uganda')
+        self.assertEqual(tile_match.tile_size, 400)
+        self.assertIsNone(tile_match.district)
+        self.assertIsNone(tile_match.mgrs)
+
+        tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400, district='Kabarole')
+        self.assertIsNotNone(tile_match)
+        self.assertEqual(tile_match.region, 'Uganda')
+        self.assertEqual(tile_match.tile_size, 400)
+        self.assertEqual(tile_match.district, 'Kabarole')
+        self.assertIsNone(tile_match.mgrs)
+
+        tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400, district='Kabarole', military_grid='35MRV')
+        self.assertIsNotNone(tile_match)
+        self.assertEqual(tile_match.region, 'Uganda')
+        self.assertEqual(tile_match.tile_size, 400)
+        self.assertEqual(tile_match.district, 'Kabarole')
+        self.assertEqual(tile_match.mgrs, '35MRV')
+
+    def test_name(self):
+        tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400)
+        self.assertEqual(tile_match.name, 'tile_match_Uganda_400.csv')
+
+        tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400, district='Kabarole')
+        self.assertEqual(tile_match.name, 'tile_match_Uganda_Kabarole_400.csv')
+
+        tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400, district='Kabarole', military_grid='35MRV')
+        self.assertEqual(tile_match.name, 'tile_match_Uganda_Kabarole_35MRV_400.csv')
+
+    def test_archive_path(self):
+        tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400)
+        self.assertEqual(tile_match.archive_path, os.path.join(self.TEST_DATA_DIR, 'tiles', 'Uganda',
+                                                               'tile_match_Uganda_400.csv'))
+
+        tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400, district='Kabarole')
+        self.assertEqual(tile_match.archive_path, os.path.join(self.TEST_DATA_DIR, 'tiles', 'Uganda', 'Kabarole',
+                                                               'tile_match_Uganda_Kabarole_400.csv'))
+
+        tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400, district='Kabarole', military_grid='35MRV')
+        self.assertEqual(tile_match.archive_path, os.path.join(self.TEST_DATA_DIR, 'tiles', 'Uganda', 'Kabarole',
+                                                               '35MRV', 'tile_match_Uganda_Kabarole_35MRV_400.csv'))
+
+    def test_create(self):
+        pass
+
+    def test_find_files(self):
+        pass

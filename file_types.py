@@ -333,7 +333,12 @@ class _BaseSentinel2File(File):
     @property
     def archive_path(self) -> str:
         return os.path.join(self._ROOT_DATA_DIR, self.region, self.district, self.mgrs_grid, self.date_str, self.name)
-    
+
+    @property
+    @abstractmethod
+    def name(self) -> None:
+        return
+
     @staticmethod
     def _mgrs_from_utm_lat_square(utm_code: str, latitude_band: str, square: str) -> str:
         return f'{utm_code}{latitude_band}{square}'
@@ -521,7 +526,7 @@ class OSM(_BaseNonOpticalBand):
 
 class SingleRegionTileMatch(File):
     _ROOT_DATA_DIR = TILE_DIR
-    regex = r'tile_match_(?P<region>[^_]+)_?((?P<district>[^_]+)_)?((?P<mgrs>[^_]+)_)(?P<tile_size>\d+)\.csv$'
+    regex = r'tile_match_(?P<region>[^_]+)_?(?P<district>[^_]+)?_?(?P<mgrs>[^_]+)?_(?P<tile_size>\d+)\.csv$'
 
     def __init__(self, region: str, tile_size: int, district: str = None, military_grid: str = None):
         self.region = region
@@ -562,9 +567,11 @@ class SingleRegionTileMatch(File):
             group_dict = match.groupdict()
             if region is not None and group_dict['region'].lower() != region.lower():
                 continue
-            if district is not None and group_dict['district'].lower() != district.lower():
+            if district is not None and (group_dict['district'] is None or group_dict['district'].lower()
+                                         != district.lower()):
                 continue
-            if military_grid is not None and group_dict['mgrs'].lower() != military_grid.lower():
+            if military_grid is not None and (group_dict['mgrs'] is None or group_dict['mgrs'].lower()
+                                              != military_grid.lower()):
                 continue
             if int(group_dict['tile_size']) != tile_size:
                 continue
@@ -586,7 +593,7 @@ class SingleRegionTileMatch(File):
 
 class MultiRegionTileMatch(File):
     _ROOT_DATA_DIR = MULTI_REGION_TILE_MATCH
-    regex = r'tile_match_(?P<regions>\w+(?:_\w+)*)_(?P<tile_size>\d+)\.csv$'
+    regex = r"tile_match_(?P<regions>[\w\s']+(?:_[\w\s']+)*)_(?P<tile_size>\d+)\.csv$"
 
     def __init__(self, regions: List[str], tile_size: int):
         self.regions = sorted(regions)
@@ -599,7 +606,7 @@ class MultiRegionTileMatch(File):
 
     @property
     def archive_path(self) -> str:
-        return os.path.join(self._ROOT_DATA_DIR, '_'.join(self.regions), self.name)
+        return os.path.join(self._ROOT_DATA_DIR, self.name)
         
     @staticmethod
     def find_files(regions: List[str] = None, tile_size: int = None):
@@ -703,7 +710,7 @@ class Tile(_BaseTileFile):
     @staticmethod
     def find_files(region: str = None, district: str = None, military_grid: str = None,
                    tile_size: int = None) -> List[str]:
-        return _BaseTileFile.__init__(Tile.regex, region, district, military_grid, tile_size)
+        return _BaseTileFile.find_files(Tile.regex, region, district, military_grid, tile_size)
 
     @classmethod
     def create(cls, file_path: str):
@@ -719,12 +726,12 @@ class PyTorch(_BaseTileFile):
 
     @property
     def name(self) -> str:
-        return f'{self.region}_{self.district}_{self.mgrs}_{self.tile_size}_{self.x_min}_{self.y_min}.tif'
+        return f'{self.region}_{self.district}_{self.mgrs}_{self.tile_size}_{self.x_min}_{self.y_min}.pt'
     
     @staticmethod
     def find_files(region: str = None, district: str = None, military_grid: str = None,
                    tile_size: int = None) -> List[str]:
-        return super().__init__(PyTorch.regex, region, district, military_grid, tile_size)
+        return _BaseTileFile.find_files(PyTorch.regex, region, district, military_grid, tile_size)
 
     @classmethod
     def create(cls, file_path: str):
@@ -822,9 +829,9 @@ class _BaseInferenceFiles(File):
 class TrainedModel(_BaseInferenceFiles):
     _ROOT_DATA_DIR = MODEL_DIR
     base_layers = _BaseInferenceFiles.base_layers
-    regex = rf'^(?P<regions>\w+(?:_\w+)*)_(?P<architecture>resnet\d+)_r(?P<ratio>\d+\.\d+)_ts(?P<tile_size>\d+)_\
+    regex = rf"^(?P<regions>[\w\s']+(?:_[\w\s']+)*)_(?P<architecture>resnet\d+)_r(?P<ratio>\d+\.\d+)_ts(?P<tile_size>\d+)_\
     (?P<layer_1>{base_layers})_?((?P<layer_2>{base_layers}_)?((?P<layer_3>{base_layers})_)epoch(?P<epoch>\d+)\
-    ?(?P<best>_best)\.tar$'
+    ?(?P<best>_best)\.tar$"
 
     def __init__(self, regions: List[str], architecture: str, layers: List[str], epoch: int, ratio: float,
                  tile_size: int, best: bool = False):
@@ -832,12 +839,12 @@ class TrainedModel(_BaseInferenceFiles):
 
     @property
     def name(self) -> str:
-        base_str = '_'.join(self.regions) + '_' + self.architecture + f'_r{self.ratio}_' + f'ts{self.tile_size}'
+        base_str = '_'.join(self.regions) + '_' + self.architecture + f'_r{self.ratio}_' + f'ts{self.tile_size}_'
 
         for layer in self.layers:
             base_str += layer + '_'
 
-        base_str += f'epoch{self.epoch}' + '_best' if self.best else '' + '.tar'
+        base_str += ('best' if self.best else f'epoch{self.epoch}') + '.tar'
         return base_str
     
     @staticmethod

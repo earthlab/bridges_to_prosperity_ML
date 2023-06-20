@@ -1142,7 +1142,361 @@ class TestSingleRegionTileMatch(TestFileTypes):
                                                                '35MRV', 'tile_match_Uganda_Kabarole_35MRV_400.csv'))
 
     def test_create(self):
-        pass
+        tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400)
+        tile_match_create = SingleRegionTileMatch.create(tile_match.name)
+        self.assertIsInstance(tile_match_create, SingleRegionTileMatch)
+        self.assertEqual(tile_match_create.region, 'Uganda')
+        self.assertEqual(tile_match_create.tile_size, 400)
+        self.assertIsNone(tile_match_create.district)
+        self.assertIsNone(tile_match_create.mgrs)
+
+        tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400, district='Kafefe')
+        tile_match_create = SingleRegionTileMatch.create(tile_match.name)
+        self.assertIsInstance(tile_match_create, SingleRegionTileMatch)
+        self.assertEqual(tile_match_create.region, 'Uganda')
+        self.assertEqual(tile_match_create.tile_size, 400)
+        self.assertEqual(tile_match_create.district, 'Kafefe')
+        self.assertIsNone(tile_match_create.mgrs)
+
+        tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400, district='Kafefe', military_grid='35MRV')
+        tile_match_create = SingleRegionTileMatch.create(tile_match.name)
+        self.assertIsInstance(tile_match_create, SingleRegionTileMatch)
+        self.assertEqual(tile_match_create.region, 'Uganda')
+        self.assertEqual(tile_match_create.tile_size, 400)
+        self.assertEqual(tile_match_create.district, 'Kafefe')
+        self.assertEqual(tile_match_create.mgrs, '35MRV')
+
+        tile_match = SingleRegionTileMatch(region="Cote d'Ivoire", tile_size=400, district='Kafefe', military_grid='35MRV')
+        tile_match_create = SingleRegionTileMatch.create(tile_match.name)
+        self.assertIsInstance(tile_match_create, SingleRegionTileMatch)
+        self.assertEqual(tile_match_create.region, "Cote d'Ivoire")
+        self.assertEqual(tile_match_create.tile_size, 400)
+        self.assertEqual(tile_match_create.district, 'Kafefe')
+        self.assertEqual(tile_match_create.mgrs, '35MRV')
 
     def test_find_files(self):
-        pass
+        district_1 = os.path.join(self.TEST_DATA_DIR, 'tiles', 'Uganda')
+        os.makedirs(district_1)
+        for file in [
+            'tile_match_Uganda_300.csv',
+            'tile_match_Uganda_400.csv',
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_1, file))
+
+        district_2 = os.path.join(self.TEST_DATA_DIR, 'tiles', 'Uganda', 'Kibaale')
+        os.makedirs(district_2)
+        for file in [
+            'tile_match_Uganda_Kibaale_300.csv',
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_2, file))
+
+        district_3 = os.path.join(self.TEST_DATA_DIR, 'tiles', 'Uganda', 'Kibaale', '35MRV')
+        os.makedirs(district_3)
+        for file in [
+            'tile_match_Uganda_Kibaale_35MRV_300.csv',
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_3, file))
+
+        self.assertEqual(SingleRegionTileMatch.find_files(tile_size=300), sorted([
+            os.path.join(district_1, 'tile_match_Uganda_300.csv',),
+            os.path.join(district_2, 'tile_match_Uganda_Kibaale_300.csv'),
+            os.path.join(district_3, 'tile_match_Uganda_Kibaale_35MRV_300.csv')
+        ]))
+
+        self.assertEqual(SingleRegionTileMatch.find_files(tile_size=400), sorted([
+            os.path.join(district_1, 'tile_match_Uganda_400.csv')
+        ]))
+
+        self.assertEqual(SingleRegionTileMatch.find_files(tile_size=300, region='Uganda'), sorted([
+            os.path.join(district_1, 'tile_match_Uganda_300.csv'),
+            os.path.join(district_2, 'tile_match_Uganda_Kibaale_300.csv'),
+            os.path.join(district_3, 'tile_match_Uganda_Kibaale_35MRV_300.csv')
+        ]))
+
+        self.assertEqual(SingleRegionTileMatch.find_files(tile_size=300, region='Uganda', district='Kibaale'), sorted([
+            os.path.join(district_2, 'tile_match_Uganda_Kibaale_300.csv'),
+            os.path.join(district_3, 'tile_match_Uganda_Kibaale_35MRV_300.csv')
+        ]))
+
+        self.assertEqual(SingleRegionTileMatch.find_files(tile_size=300, region='Uganda', district='Kibaale',
+                                                          military_grid='35MRV'), sorted([
+            os.path.join(district_3, 'tile_match_Uganda_Kibaale_35MRV_300.csv')
+        ]))
+
+
+class TestMultiRegionTileMatch(TestFileTypes):
+    @classmethod
+    def setUpClass(cls):
+        TestFileTypes.setUpClass()
+        MultiRegionTileMatch._ROOT_DATA_DIR = os.path.join(cls.TEST_DATA_DIR, 'multi_region_tile_match')
+
+    def test_init(self):
+        tile_match = MultiRegionTileMatch(regions=['Uganda', 'Rwanda'], tile_size=300)
+        self.assertIsNotNone(tile_match)
+        self.assertEqual(tile_match.regions, ['Rwanda', 'Uganda'])
+        self.assertEqual(tile_match.tile_size, 300)
+
+    def test_name(self):
+        tile_match = MultiRegionTileMatch(regions=['Uganda', 'Rwanda'], tile_size=300)
+        self.assertEqual(tile_match.name, 'tile_match_Rwanda_Uganda_300.csv')
+
+    def test_archive_path(self):
+        tile_match = MultiRegionTileMatch(regions=['Uganda', 'Rwanda'], tile_size=300)
+        self.assertEqual(tile_match.archive_path, os.path.join(self.TEST_DATA_DIR, 'multi_region_tile_match',
+                                                               'tile_match_Rwanda_Uganda_300.csv'))
+
+    def test_create(self):
+        tile_match = MultiRegionTileMatch(regions=['Uganda', 'Rwanda'], tile_size=300)
+        tile_match_created = MultiRegionTileMatch.create(tile_match.name)
+        self.assertIsInstance(tile_match_created, MultiRegionTileMatch)
+        self.assertEqual(tile_match_created.regions, ['Rwanda', 'Uganda'])
+        self.assertEqual(tile_match_created.tile_size, 300)
+
+        tile_match = MultiRegionTileMatch(regions=['Uganda', 'Rwanda'], tile_size=300)
+        tile_match_created = MultiRegionTileMatch.create(tile_match.archive_path)
+        self.assertIsInstance(tile_match_created, MultiRegionTileMatch)
+        self.assertEqual(tile_match_created.regions, ['Rwanda', 'Uganda'])
+        self.assertEqual(tile_match_created.tile_size, 300)
+
+    def test_find_files(self):
+        district_1 = os.path.join(self.TEST_DATA_DIR, 'multi_region_tile_match')
+        os.makedirs(district_1)
+        for file in [
+            'tile_match_Rwanda_Uganda_300.csv',
+            "tile_match_Cote d'Ivoire_Rwanda_Uganda_300.csv",
+            "tile_match_Cote d'Ivoire_Rwanda_Uganda_400.csv",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_1, file))
+        self.assertEqual(MultiRegionTileMatch.find_files(tile_size=300), sorted([
+            os.path.join(district_1, 'tile_match_Rwanda_Uganda_300.csv'),
+            os.path.join(district_1, "tile_match_Cote d'Ivoire_Rwanda_Uganda_300.csv"),
+        ]))
+
+
+class TestTile(TestFileTypes):
+    @classmethod
+    def setUpClass(cls):
+        TestFileTypes.setUpClass()
+        _BaseTileFile._ROOT_DATA_DIR = os.path.join(cls.TEST_DATA_DIR, 'tiles')
+    
+    def test_init(self):
+        tile = Tile(region="Cote D'Ivoire", district='Kafefe', military_grid='35MRV', tile_size=350, x_min=200, y_min=300)
+        self.assertIsNotNone(tile)
+        self.assertEqual(tile.region, "Cote D'Ivoire")
+        self.assertEqual(tile.district, 'Kafefe')
+        self.assertEqual(tile.mgrs, "35MRV")
+        self.assertEqual(tile.tile_size, 350)
+        self.assertEqual(tile.x_min, 200)
+        self.assertEqual(tile.y_min, 300)
+    
+    def test_name(self):
+        tile = Tile(region="Cote D'Ivoire", district='Kafefe', military_grid='35MRV', tile_size=350, x_min=200, y_min=300)
+        self.assertEqual(tile.name, "Cote D'Ivoire_Kafefe_35MRV_350_200_300.tif")
+
+    def test_archive_path(self):
+        tile = Tile(region="Cote D'Ivoire", district='Kafefe', military_grid='35MRV', tile_size=350, x_min=200, y_min=300)
+        self.assertEqual(tile.archive_path, os.path.join(self.TEST_DATA_DIR, 'tiles', "Cote D'Ivoire", 'Kafefe', '35MRV', '350',
+                                                          "Cote D'Ivoire_Kafefe_35MRV_350_200_300.tif"))
+    
+    def test_create(self):
+        tile = Tile(region="Cote D'Ivoire", district='Kafefe', military_grid='35MRV', tile_size=350, x_min=200, y_min=300)
+        tile_created = Tile.create(tile.name)
+        self.assertIsInstance(tile_created, Tile)
+        self.assertEqual(tile_created.region, "Cote D'Ivoire")
+        self.assertEqual(tile_created.district, 'Kafefe')
+        self.assertEqual(tile_created.mgrs, '35MRV')
+        self.assertEqual(tile_created.tile_size, 350)
+        self.assertEqual(tile_created.x_min, 200)
+        self.assertEqual(tile_created.y_min, 300)
+    
+    def test_find_files(self):
+        district_1 = os.path.join(self.TEST_DATA_DIR, 'tiles', 'Uganda', 'Kafefe', '35MRV', '350')
+        os.makedirs(district_1)
+        for file in [
+            "Uganda_Kafefe_35MRV_350_200_300.tif",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_1, file))
+
+        district_2 = os.path.join(self.TEST_DATA_DIR, 'tiles', 'Uganda', 'Kafefe', '35MRV', '400')
+        os.makedirs(district_2)
+        for file in [
+            "Uganda_Kafefe_35MRV_400_200_300.tif",
+            "Uganda_Kafefe_35MRV_400_300_400.tif",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_2, file))
+
+        district_3 = os.path.join(self.TEST_DATA_DIR, 'tiles', "Cote D'Ivoire", 'Kibaale', '36MRV', '300')
+        os.makedirs(district_3)
+        for file in [
+            "Cote D'Ivoire_Kibaale_36MRV_300_200_300.tif",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_3, file))
+        
+        self.assertEqual(Tile.find_files(), sorted([
+            os.path.join(district_1, "Uganda_Kafefe_35MRV_350_200_300.tif"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_200_300.tif"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_300_400.tif"),
+            os.path.join(district_3, "Cote D'Ivoire_Kibaale_36MRV_300_200_300.tif")
+        ]))
+
+        self.assertEqual(Tile.find_files(region='Uganda'), sorted([
+            os.path.join(district_1, "Uganda_Kafefe_35MRV_350_200_300.tif"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_200_300.tif"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_300_400.tif")
+        ]))
+
+        self.assertEqual(Tile.find_files(region='Uganda', district='Kafefe'), sorted([
+            os.path.join(district_1, "Uganda_Kafefe_35MRV_350_200_300.tif"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_200_300.tif"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_300_400.tif")
+        ]))
+
+        self.assertEqual(Tile.find_files(region='Uganda', district='Kafefe', military_grid='35MRV'), sorted([
+            os.path.join(district_1, "Uganda_Kafefe_35MRV_350_200_300.tif"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_200_300.tif"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_300_400.tif")
+        ]))
+
+        self.assertEqual(Tile.find_files(region='Uganda', district='Kafefe', military_grid='35MRV', tile_size=400), sorted([
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_200_300.tif"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_300_400.tif")
+        ]))
+
+
+class TestPyTorch(TestFileTypes):
+    @classmethod
+    def setUpClass(cls):
+        TestFileTypes.setUpClass()
+        _BaseTileFile._ROOT_DATA_DIR = os.path.join(cls.TEST_DATA_DIR, 'tiles')
+
+    def test_init(self):
+        tile = PyTorch(region="Cote D'Ivoire", district='Kafefe', military_grid='35MRV', tile_size=350, x_min=200, y_min=300)
+        self.assertIsNotNone(tile)
+        self.assertEqual(tile.region, "Cote D'Ivoire")
+        self.assertEqual(tile.district, 'Kafefe')
+        self.assertEqual(tile.mgrs, "35MRV")
+        self.assertEqual(tile.tile_size, 350)
+        self.assertEqual(tile.x_min, 200)
+        self.assertEqual(tile.y_min, 300)
+    
+    def test_name(self):
+        tile = PyTorch(region="Cote D'Ivoire", district='Kafefe', military_grid='35MRV', tile_size=350, x_min=200, y_min=300)
+        self.assertEqual(tile.name, "Cote D'Ivoire_Kafefe_35MRV_350_200_300.pt")
+
+    def test_archive_path(self):
+        tile = PyTorch(region="Cote D'Ivoire", district='Kafefe', military_grid='35MRV', tile_size=350, x_min=200, y_min=300)
+        self.assertEqual(tile.archive_path, os.path.join(self.TEST_DATA_DIR, 'tiles', "Cote D'Ivoire", 'Kafefe', '35MRV', '350',
+                                                         "Cote D'Ivoire_Kafefe_35MRV_350_200_300.pt"))
+    
+    def test_create(self):
+        tile = PyTorch(region="Cote D'Ivoire", district='Kafefe', military_grid='35MRV', tile_size=350, x_min=200, y_min=300)
+        tile_created = PyTorch.create(tile.name)
+        self.assertIsInstance(tile_created, PyTorch)
+        self.assertEqual(tile_created.region, "Cote D'Ivoire")
+        self.assertEqual(tile_created.district, 'Kafefe')
+        self.assertEqual(tile_created.mgrs, '35MRV')
+        self.assertEqual(tile_created.tile_size, 350)
+        self.assertEqual(tile_created.x_min, 200)
+        self.assertEqual(tile_created.y_min, 300)
+    
+    def test_find_files(self):
+        district_1 = os.path.join(self.TEST_DATA_DIR, 'tiles', 'Uganda', 'Kafefe', '35MRV', '350')
+        os.makedirs(district_1)
+        for file in [
+            "Uganda_Kafefe_35MRV_350_200_300.pt",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_1, file))
+
+        district_2 = os.path.join(self.TEST_DATA_DIR, 'tiles', 'Uganda', 'Kafefe', '35MRV', '400')
+        os.makedirs(district_2)
+        for file in [
+            "Uganda_Kafefe_35MRV_400_200_300.pt",
+            "Uganda_Kafefe_35MRV_400_300_400.pt",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_2, file))
+
+        district_3 = os.path.join(self.TEST_DATA_DIR, 'tiles', "Cote D'Ivoire", 'Kibaale', '36MRV', '300')
+        os.makedirs(district_3)
+        for file in [
+            "Cote D'Ivoire_Kibaale_36MRV_300_200_300.pt",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(district_3, file))
+        
+        self.assertEqual(PyTorch.find_files(), sorted([
+            os.path.join(district_1, "Uganda_Kafefe_35MRV_350_200_300.pt"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_200_300.pt"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_300_400.pt"),
+            os.path.join(district_3, "Cote D'Ivoire_Kibaale_36MRV_300_200_300.pt")
+        ]))
+
+        self.assertEqual(PyTorch.find_files(region='Uganda'), sorted([
+            os.path.join(district_1, "Uganda_Kafefe_35MRV_350_200_300.pt"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_200_300.pt"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_300_400.pt")
+        ]))
+
+        self.assertEqual(PyTorch.find_files(region='Uganda', district='Kafefe'), sorted([
+            os.path.join(district_1, "Uganda_Kafefe_35MRV_350_200_300.pt"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_200_300.pt"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_300_400.pt")
+        ]))
+
+        self.assertEqual(PyTorch.find_files(region='Uganda', district='Kafefe', military_grid='35MRV'), sorted([
+            os.path.join(district_1, "Uganda_Kafefe_35MRV_350_200_300.pt"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_200_300.pt"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_300_400.pt")
+        ]))
+
+        self.assertEqual(PyTorch.find_files(region='Uganda', district='Kafefe', military_grid='35MRV', tile_size=400), sorted([
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_200_300.pt"),
+            os.path.join(district_2, "Uganda_Kafefe_35MRV_400_300_400.pt")
+        ]))
+
+
+class TestTrainedModel(TestFileTypes):
+    @classmethod
+    def setUpClass(cls):
+        TestFileTypes.setUpClass()
+        TrainedModel._ROOT_DATA_DIR = os.path.join(cls.TEST_DATA_DIR, 'trained_models')
+    
+    def test_init(self):
+        trained_model_file = TrainedModel(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False)
+        self.assertIsNotNone(trained_model_file)
+        self.assertEqual(trained_model_file.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(trained_model_file.architecture, 'resnet18')
+        self.assertEqual(trained_model_file.layers, ['green', 'nir', 'osm-water'])
+        self.assertEqual(trained_model_file.epoch, 5)
+        self.assertEqual(trained_model_file.ratio, 5.0)
+        self.assertEqual(trained_model_file.tile_size, 300)
+        self.assertFalse(trained_model_file.best)
+
+        trained_model_file = TrainedModel(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        self.assertIsNotNone(trained_model_file)
+        self.assertEqual(trained_model_file.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(trained_model_file.architecture, 'resnet18')
+        self.assertEqual(trained_model_file.layers, ['green', 'nir', 'osm-water'])
+        self.assertEqual(trained_model_file.epoch, 5)
+        self.assertEqual(trained_model_file.ratio, 5.0)
+        self.assertEqual(trained_model_file.tile_size, 300)
+        self.assertTrue(trained_model_file.best)
+
+    def test_name(self):
+        trained_model_file = TrainedModel(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False)
+        self.assertEqual(trained_model_file.name, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.tar")
+
+        trained_model_file = TrainedModel(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        self.assertEqual(trained_model_file.name, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_best.tar")

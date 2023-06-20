@@ -5,7 +5,7 @@ from definitions import COMPOSITE_DIR, ELEVATION_DIR, SLOPE_DIR, SENTINEL_2_DIR,
     MODEL_DIR, INFERENCE_RESULTS_DIR, TILE_DIR, TRAIN_VALIDATE_SPLIT_DIR, MULTI_REGION_TILE_MATCH, DATA_DIR
 import glob
 from pathlib import Path
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, abstractmethod
 
 
 class File(ABC):
@@ -19,12 +19,14 @@ class File(ABC):
             if hasattr(subclass, 'regex') and re.match(subclass.regex, file_name):
                 return subclass.create(file_name)
         return None
-    
-    @abstractproperty
+
+    @property
+    @abstractmethod
     def name(self) -> str:
         pass
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def archive_path(self) -> str:
         pass
 
@@ -52,6 +54,11 @@ class _BaseCompositeFile(File):
     @property
     def s3_archive_path(self) -> str:
         return self.archive_path.replace(DATA_DIR + os.sep, '')
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
     
     @staticmethod
     def find_files(regex: str, region: str = None, district: str = None, mgrs: List[str] = None) -> List[str]:
@@ -67,7 +74,7 @@ class _BaseCompositeFile(File):
                 continue
             if district is not None and group_dict['district'].lower() != district.lower():
                 continue
-            if mgrs is not None and group_dict['mgrs'] not in [m.lower() for m in mgrs]:
+            if mgrs is not None and group_dict['mgrs'].lower() not in [m.lower() for m in mgrs]:
                 continue
             matching_files.append(f)
 
@@ -89,19 +96,19 @@ class OpticalComposite(_BaseCompositeFile):
         return base_string + '.tif'
 
     @staticmethod
-    def find_files(region: str = None, district: str = None, bands: List[str] = None, mgrs: List[str] = None) -> List[str]:
+    def find_files(region: str = None, district: str = None, bands: List[str] = None,
+                   mgrs: List[str] = None) -> List[str]:
         files = _BaseCompositeFile.find_files(OpticalComposite.regex, region, district, mgrs)
 
-        if bands is not None:
-            matching_files = []
-            for file in files:
-                match = re.match(OpticalComposite.regex, os.path.basename(file))
-                group_dict = match.groupdict()
-                if bands is not None and group_dict['bands'].split('_') != sorted(bands):
-                    continue
-                matching_files.append(file)
-            files = matching_files
-        return sorted(files)
+        matching_files = []
+        for file in files:
+            match = re.match(OpticalComposite.regex, os.path.basename(file))
+            group_dict = match.groupdict()
+            if bands is not None and group_dict['bands'].split('_') != sorted(bands):
+                continue
+            matching_files.append(file)
+
+        return sorted(matching_files)
 
     @classmethod
     def create(cls, file_path: str):
@@ -117,31 +124,39 @@ class OpticalComposite(_BaseCompositeFile):
 
 class OpticalCompositeSlice(_BaseCompositeFile):
     regex = r'optical_composite_slice_(?P<region>[^_]+)_(?P<district>[^_]+)_(?P<mgrs>[^_]+)_(?P<band>[^_]+)_(?P<left_bound>\d+)_(?P<right_bound>\d+)\.tif$'
+
     def __init__(self, region: str, district: str, military_grid: str, band: str, left_bound: int, right_bound: int):
         super().__init__(region, district, military_grid)
+        if left_bound > right_bound:
+            raise ValueError('Left bound must be less than right bound')
         self.band = band
         self.left_bound = left_bound
         self.right_bound = right_bound
 
     @property
     def name(self) -> str:
-        return f'optical_composite_slice_{self.region}_{self.district}_{self.mgrs}_{self.band}_{self.left_bound}_{self.right_bound}.tif'
+        return f'optical_composite_slice_{self.region}_{self.district}_{self.mgrs}_{self.band}_{self.left_bound}_' \
+               f'{self.right_bound}.tif'
 
     @staticmethod
-    def find_files(region: str = None, district: str = None, bands: List[str] = None, mgrs: List[str] = None) -> List[str]:
-        files = _BaseCompositeFile.find_files(OpticalComposite.regex, region, district, mgrs)
+    def find_files(region: str = None, district: str = None, band: str = None,
+                   mgrs: List[str] = None, left_bound: int = None, right_bound: int = None) -> List[str]:
+        files = _BaseCompositeFile.find_files(OpticalCompositeSlice.regex, region, district, mgrs)
 
-        if bands is not None:
-            matching_files = []
-            for file in files:
-                match = re.match(OpticalComposite.regex, os.path.basename(file))
-                group_dict = match.groupdict()
-                if bands is not None and group_dict['bands'].split('_') != sorted(bands):
-                    continue
-                matching_files.append(file)
-            files = matching_files
-        return sorted(files)
-    
+        matching_files = []
+        for file in files:
+            match = re.match(OpticalCompositeSlice.regex, os.path.basename(file))
+            group_dict = match.groupdict()
+            if band is not None and group_dict['band'].lower() != band.lower():
+                continue
+            if left_bound is not None and int(group_dict['left_bound']) != left_bound:
+                continue
+            if right_bound is not None and int(group_dict['right_bound']) != right_bound:
+                continue
+            matching_files.append(file)
+
+        return sorted(matching_files)
+
     @property
     def archive_path(self) -> str:
         return os.path.join(self._ROOT_DATA_DIR, self.region, self.district, self.mgrs, self.name)
@@ -153,13 +168,13 @@ class OpticalCompositeSlice(_BaseCompositeFile):
         if match:
             group_dict = match.groupdict()
             return cls(region=group_dict['region'], district=group_dict['district'], military_grid=group_dict['mgrs'],
-                       band=group_dict['band'], left_bound=int(group_dict['left_bound']), right_bound=int(group_dict['right_bound']))
+                       band=group_dict['band'], left_bound=int(group_dict['left_bound']),
+                       right_bound=int(group_dict['right_bound']))
         else:
             return None
 
 
 class MultiVariateComposite(_BaseCompositeFile):
-    _ROOT_DATA_DIR = COMPOSITE_DIR
     regex = r'multivariate_composite_(?P<region>[^_]+)_(?P<district>[^_]+)_(?P<mgrs>[^_]+)\.tif$'
 
     def __init__(self, region: str, district: str, military_grid: str):
@@ -167,8 +182,7 @@ class MultiVariateComposite(_BaseCompositeFile):
 
     @property
     def name(self):
-        base_string = f'multivariate_composite_{self.region}_{self.district}_{self.mgrs}'
-        return base_string + '.tif'
+        return f'multivariate_composite_{self.region}_{self.district}_{self.mgrs}.tif'
 
     @staticmethod
     def find_files(region: str = None, district: str = None, mgrs: List[str] = None):
@@ -180,7 +194,7 @@ class MultiVariateComposite(_BaseCompositeFile):
         match = re.match(cls.regex, name)
         if match:
             group_dict = match.groupdict()
-            return cls(region=group_dict['region'], district=group_dict['district'], mgrs=group_dict['mgrs'])
+            return cls(region=group_dict['region'], district=group_dict['district'], military_grid=group_dict['mgrs'])
         else:
             return None
         
@@ -188,8 +202,8 @@ class MultiVariateComposite(_BaseCompositeFile):
 class _BaseSentinel2File(File):
     _ROOT_DATA_DIR = SENTINEL_2_DIR
 
-    def __init__(self, region: str, district: str, utm_code: str, latitude_band: str, square: str, year: int, month: int, day: int, band: str,
-                 sequence: int = 0):
+    def __init__(self, region: str, district: str, utm_code: str, latitude_band: str, square: str, year: int,
+                 month: int, day: int, band: str, sequence: int = 0):
         super().__init__()
         self.region = region
         self.district = district
@@ -239,7 +253,8 @@ class _BaseSentinel2File(File):
             if not match:
                 continue
             group_dict = match.groupdict()
-            if mgrs is not None and _BaseSentinel2File._mgrs_from_utm_lat_square(group_dict['utm_code'], group_dict['latitude_band'], group_dict['square']) != mgrs:
+            if mgrs is not None and _BaseSentinel2File._mgrs_from_utm_lat_square(
+                    group_dict['utm_code'], group_dict['latitude_band'], group_dict['square']).lower() != mgrs.lower():
                 continue
             if region is not None and group_dict['region'].lower() != region.lower():
                 continue
@@ -253,7 +268,7 @@ class _BaseSentinel2File(File):
                 continue
             if sequence is not None and int(group_dict['sequence']) != sequence:
                 continue
-            if band is not None and group_dict['band'] != band:
+            if band is not None and group_dict['band'].lower() != band.lower():
                 continue
             matching_files.append(file)
 
@@ -265,9 +280,10 @@ class _BaseSentinel2File(File):
         match = re.match(cls.regex, name)
         if match:
             group_dict = match.groupdict()
-            return cls(region=group_dict['region'], district=group_dict['district'], utm_code=group_dict['utm_code'], latitude_band=group_dict['latitude_band'],
+            return cls(region=group_dict['region'], district=group_dict['district'], utm_code=group_dict['utm_code'],
+                       latitude_band=group_dict['latitude_band'],
                        square=group_dict['square'], year=int(group_dict['year']), month=int(group_dict['month']),
-                       day=int(group_dict['day']), sequence=int(group_dict['sequence']))
+                       day=int(group_dict['day']), sequence=int(group_dict['sequence']), band=group_dict['band'])
         else:
             return None
 
@@ -285,8 +301,8 @@ class Sentinel2Tile(_BaseSentinel2File):
                f'{self.sequence}_{self.band}.jp2'
 
     @staticmethod
-    def find_files(region: str = None, district: str = None, mgrs: str = None,
-                   year: int = None, month: int = None, day: int = None, sequence: int = None, band: str = None) -> List[str]:
+    def find_files(region: str = None, district: str = None, mgrs: str = None, year: int = None, month: int = None,
+                   day: int = None, sequence: int = None, band: str = None) -> List[str]:
         return _BaseSentinel2File.find_files(Sentinel2Tile.regex, region, district, mgrs, year,
                                              month, day, sequence, band)
 
@@ -296,20 +312,20 @@ class Sentinel2Tile(_BaseSentinel2File):
 
 
 class Sentinel2Cloud(_BaseSentinel2File):
-    regex = r'(?P<region>[^_]+)_(?P<district>[^_]+)_(?P<utm_code>\d+)_(?P<latitude_band>\S+)_(?P<square>\S+)_(?P<year>\d{4})_(?P<month>\d+)_(?P<day>\d+)_(?P<sequence>\d{1})_qi_MSK_CLOUDS_B00.gml'
+    regex = r'(?P<region>[^_]+)_(?P<district>[^_]+)_(?P<utm_code>\d+)_(?P<latitude_band>\S+)_(?P<square>\S+)_(?P<year>\d{4})_(?P<month>\d+)_(?P<day>\d+)_(?P<sequence>\d{1})_qi_MSK_CLOUDS_(?P<band>B\d{2}).gml'
 
     def __init__(self, region: str, district: str, utm_code: str, latitude_band: str, square: str, year: int, month: int, day: int,
-                 sequence: int = 0):
-        super().__init__(region, district, utm_code, latitude_band, square, year, month, day, 'B00', sequence)
+                 sequence: int = 0, band: str = 'B00'):
+        super().__init__(region, district, utm_code, latitude_band, square, year, month, day, band, sequence)
 
     @property
     def name(self) -> str:
         return f'{self.region}_{self.district}_{self.utm_code}_{self.latitude_band}_{self.square}_{self.year}_{self.month}_{self.day}_' \
-               f'{self.sequence}_qi_MSK_CLOUDS_B00.gml'
+               f'{self.sequence}_qi_MSK_CLOUDS_{self.band}.gml'
 
     @staticmethod
-    def find_files(region: str = None, district: str = None, mgrs: str = None,
-                   year: int = None, month: int = None, day: int = None, sequence: int = None) -> List[str]:
+    def find_files(region: str = None, district: str = None, mgrs: str = None, year: int = None, month: int = None,
+                   day: int = None, sequence: int = None) -> List[str]:
         return _BaseSentinel2File.find_files(Sentinel2Cloud.regex, region, district, mgrs, year,
                                              month, day, sequence)
 
@@ -330,10 +346,7 @@ class _BaseNonOpticalBand(File):
 
     @property
     def name(self) -> str:
-        base_string = f'{self.region}_{self.district}'
-        if self.mgrs is not None:
-            base_string += f'_{self.mgrs}'
-        return base_string + '.tif'
+        return f'{self.region}_{self.district}_{self.mgrs}.tif'
 
     @property
     def archive_path(self) -> str:
@@ -376,7 +389,7 @@ class Elevation(_BaseNonOpticalBand):
 
     @staticmethod
     def find_files(region: str = None, district: str = None, mgrs: str = None) -> List[str]:
-        return super().find_files(Elevation._ROOT_DATA_DIR, region, district, mgrs)
+        return _BaseNonOpticalBand.find_files(Elevation._ROOT_DATA_DIR, region, district, mgrs)
 
     @classmethod
     def create(cls, file_path: str):
@@ -388,7 +401,7 @@ class Slope(_BaseNonOpticalBand):
 
     @staticmethod
     def find_files(region: str = None, district: str = None, mgrs: str = None) -> List[str]:
-        return super().find_files(Slope._ROOT_DATA_DIR, region, district, mgrs)
+        return _BaseNonOpticalBand.find_files(Slope._ROOT_DATA_DIR, region, district, mgrs)
 
     @classmethod
     def create(cls, file_path: str):
@@ -400,7 +413,7 @@ class OSM(_BaseNonOpticalBand):
 
     @staticmethod
     def find_files(region: str = None, district: str = None, mgrs: str = None) -> List[str]:
-        return super().find_files(OSM._ROOT_DATA_DIR, region, district, mgrs)
+        return _BaseNonOpticalBand.find_files(OSM._ROOT_DATA_DIR, region, district, mgrs)
 
     @classmethod
     def create(cls, file_path: str):

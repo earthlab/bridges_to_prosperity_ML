@@ -40,8 +40,7 @@ DEFAULT_ARGS = Namespace(
     multiprocessing_distributed=False,
     dummy=False,
     best_acc1=0,
-    distributed=False,
-    layers=['osm-water','elevation', 'slope']
+    distributed=False
 )
 
 TFORM = transforms.Compose(

@@ -3,7 +3,6 @@ Uploads all the multivariate composite files found to s3 storage. Region, distri
 """
 import argparse
 
-from definitions import S3_COMPOSITE_DIR
 from src.utilities.config_reader import CONFIG
 
 import os
@@ -15,7 +14,15 @@ from src.api.sentinel2 import initialize_s3_bucket
 from file_types import MultiVariateComposite
 
 
-def upload_composites(s3_bucket_name: str, region: str = None, district: str = None, mgrs: List[str] = None):
+def upload_composites(s3_bucket_name: str, region: str = None, district: str = None, mgrs: List[str] = None) -> None:
+    """
+    Uploads all the multivariate composite files found to s3 storage. Region, district, and military grid can be specified to narrow the search
+    Args:
+        s3_bucket_name (str): Name of the AWS S3 bucket name to upload the files to. Defualts to bucket in project configuration
+        region (str): Name of the region to upload the composites for. If none specified, all regions are uploaded
+        district (str): Name of the district to upload. If none specified, all districts are uploaded
+        mgrs (list): List of military grid coordinates to upload. If none then all mgrs are uploaded
+    """
     comp_files = MultiVariateComposite.find_files(region, district, mgrs)
     s3 = initialize_s3_bucket(s3_bucket_name)
     for composite_file_path in tqdm(comp_files, leave=True, position=0):

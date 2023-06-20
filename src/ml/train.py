@@ -1,3 +1,8 @@
+"""
+Functions for training a classification model for a certain model architecture. The inputs for model training are multivariate tiles of a certain size.
+Each tile is classified as either bridge or no bridge.
+"""
+
 import os
 import shutil
 import time
@@ -19,13 +24,26 @@ from torch.utils.data import Subset
 
 from src.ml.util import AverageMeter, ProgressMeter, Summary, accuracy, B2PTruthDataset, TFORM, DEFAULT_ARGS
 from file_types import TrainedModel
+from argparse import Namespace
 
 BEST_ACC1 = 0
 
 
 def train_torch(train_csv_path: str, test_csv_path: str, regions: List[str], architecture: str,
                 bridge_no_bridge_ratio: Union[None, float], layers: List[str], tile_size: int,
-                seed: Union[None, int] = None):
+                seed: Union[None, int] = None) -> None:
+    """
+    Starts off the training of the model in parallel
+    Args:
+        train_csv_path (str): Path to the csv containing the training subset of the tile data
+        test_csv_path (str): Path to the csv containing the test / validation subset of the tile data
+        regions (list): The list of regions containing the tiles used in the train / validation data
+        architecture (str): Model architecture to use when training the model ex. resnet18
+        bridge_no_bridge_ratio (float): The ratio of no bridge tile examples to bridge tile examples to include when training
+        layers (list): The names of the layers to use from the multivariate tiles (red, green, osm-water, etc.)
+        tile_size (int): The size of the tiles used for training in meters
+        seed (int): Seed used for randomization in training
+    """
     # Configure the namespace for this run
     args = DEFAULT_ARGS
     args.train_csv_path = train_csv_path
@@ -68,7 +86,14 @@ def train_torch(train_csv_path: str, test_csv_path: str, regions: List[str], arc
         main_worker(args.gpu, ngpus_per_node, args)
 
 
-def main_worker(gpu, ngpus_per_node, args):
+def main_worker(gpu: bool, ngpus_per_node: int, args: Namespace) -> None:
+    """
+    Parallel task for training classification model
+    Args:
+        gpu (bool): If true and machine has GPU then it will be used for training
+        ngpus_per_node (int): Number of GPU per compute node if machine has GPUs
+        args (Namespace): Namespace defining run configuration
+    """
     global BEST_ACC1
     BEST_ACC1 = 0
     args.gpu = gpu
@@ -267,6 +292,9 @@ def main_worker(gpu, ngpus_per_node, args):
 
 
 def train(train_loader, model, criterion, optimizer, epoch, device, args):
+    """
+    Training portion of parallel process
+    """
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')

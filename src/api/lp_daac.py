@@ -11,18 +11,17 @@ import re
 import shutil
 import tempfile
 import urllib
-import zipfile
 from abc import ABC
 from argparse import Namespace
 from http.cookiejar import CookieJar
-from typing import Tuple, List, Any
+from typing import Tuple, List
 from src.utilities.imaging import get_utm_epsg
 
 import numpy as np
 import rasterio
 import yaml
 from netCDF4 import Dataset
-from osgeo import gdal, gdalconst
+from osgeo import gdal
 from osgeo import osr, ogr
 from rasterio.merge import merge
 from tqdm import tqdm

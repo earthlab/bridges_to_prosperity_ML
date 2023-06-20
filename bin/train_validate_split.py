@@ -1,6 +1,9 @@
+"""
+Creates a train / validation csv set from a single tile match file for a given ratio of training to validation data. The tile match file 
+for each region and tile size must already exist.
+"""
 import argparse
 import multiprocessing as mp
-import os
 import random
 from typing import List
 
@@ -13,6 +16,15 @@ CORES = mp.cpu_count() - 1
 
 
 def create_dset_csv(regions: List[str], ratio: int, tile_size: int) -> None:
+    """
+    Creates a train / validation csv set from a single tile match file for a given ratio of training to validation data. The tile match file 
+    for each region and tile size must already exist.
+    Args:
+        regions (list): List of regions to create the data set from. The tile match file for each of these regions will be concatenated into a single
+            multi-region tile match file
+        ratio (int): Ratio of training to validation data to use. A ratio of 70 will split the tile match file into a file with 70% training and 30% validation data
+        tile_size (int): The size of the tiles in meters to find the tile match file for in each region
+    """
     assert 100 > ratio > 0
 
     train_dfs = []

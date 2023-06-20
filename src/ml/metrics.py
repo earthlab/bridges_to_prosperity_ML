@@ -1,7 +1,5 @@
 """
 Contains classes and functions for calculating inference accuracy metrics
-
-Copyright 2023 by Erick Verleye, CU Boulder Earth Lab.
 """
 
 import warnings
@@ -39,11 +37,6 @@ def is_in_set_pnb(a, b):
         if a[i] in set_b:
             result[i] = True
     return result.reshape(shape)
-
-
-# TODO: Things could be sped up by leveraging past calculations / adding more input parameters. The pieces are here
-#  though
-# TODO: Needs unit tests
 
 
 class Metrics:
@@ -317,18 +310,16 @@ class Metrics:
         fpr, tpr, thresholds = metrics.roc_curve(self._validation_set[self._validation_column], positive_confidences)
         return fpr, tpr, thresholds
 
-    def plot_roc(self, outpath: str = None, confusionMatrix: bool = True, titleStr: Union[str, None] = None):
+    def plot_roc(self, outpath: str = None, confusionMatrix: bool = True, title_str: Union[str, None] = None):
         fpr, tpr, thresholds = self._get_fpr_trp_thresh()
         plt.subplots()
         plt.plot(fpr, tpr, label='ROC')
         if confusionMatrix:
-            thresholdOpt, gmeanOpt, fprOpt, tprOpt, precision, f1, acc = self.confusion_matrix(fpr=fpr, tpr=tpr,
-                                                                                               thresholds=thresholds)
+            _, _, fprOpt, tprOpt, _, _, _ = self.confusion_matrix(fpr=fpr, tpr=tpr, thresholds=thresholds)
             plt.plot(fprOpt, tprOpt, marker="*", markersize=10, markerfacecolor="red", label='Point At Threshold')
         plt.plot([0, 1], [0, 1], linestyle='--', label="Random Classifier")
-        if titleStr is None:
-            titleStr = 'Receiver operating characteristic (ROC) curve'
-        plt.title(titleStr)
+        title_str = 'Receiver operating characteristic (ROC) curve' if title_str is None else title_str
+        plt.title(title_str)
         plt.ylabel('True positive rate')
         plt.xlabel('False positive rate')
 

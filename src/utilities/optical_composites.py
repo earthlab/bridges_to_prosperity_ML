@@ -1,6 +1,10 @@
+"""
+File for creating optical only composites. Optical only composites are only made to facilitate the creation of multivariate composites. 
+For a given region, set of districts, and set of optical bands, a cloud and nan-median corrected composite tiff file will be created.
+"""
+
 from src.api.sentinel2 import SinergiseSentinelAPI
 import multiprocessing as mp
-import os
 import yaml
 from argparse import Namespace
 from typing import List

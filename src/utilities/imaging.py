@@ -79,28 +79,6 @@ def get_utm_epsg(lat, lon):
     return epsg_code
 
 
-def mgrs_to_bbox(mgrs_string: str):
-    m = mgrs.MGRS()
-    lat, lon = m.toLatLon(mgrs_string)
-    # Calculate the bounding box
-    sw_point = Point(latitude=lat, longitude=lon)
-    ne_point = distance(kilometers=109.8 * np.sqrt(2)).destination(sw_point, 45)
-    bounding_box = (sw_point.longitude, sw_point.latitude, ne_point.longitude, ne_point.latitude)
-    return list(bounding_box)
-
-
-def mgrs_to_bbox_for_polygon(mgrs_string: str):
-    m = mgrs.MGRS()
-    lat, lon = m.toLatLon(mgrs_string)
-    # Calculate the bounding box
-    sw_point = Point(latitude=lat, longitude=lon)
-    se_point = distance(kilometers=109.8).destination(sw_point, 90)
-    ne_point = distance(kilometers=109.8).destination(se_point, 180)
-    nw_point = distance(kilometers=109.8).destination(ne_point, 270)
-    return ((nw_point.longitude, nw_point.latitude), (ne_point.longitude, ne_point.latitude),
-            (se_point.longitude, se_point.latitude), (sw_point.longitude, sw_point.latitude))
-
-
 def get_img_from_file(img_path, g_ncols, dtype, row_bound=None):
     img = rasterio.open(img_path, driver='JP2OpenJPEG')
     ncols, nrows = img.meta['width'], img.meta['height']
@@ -149,23 +127,26 @@ def nan_clouds(pixels, cloud_channels, max_pixel_val: float = MAX_RGB_VAL):
     return cp
 
 
-def resolve_crs(lat, lon):
-    epsg_code = get_utm_epsg(lat, lon)
-    crs = osr.SpatialReference()
-    # Set the projection using the EPSG code
-    crs.ImportFromEPSG(epsg_code)
-    print(epsg_code)
-
-    return crs
-
-
-def create_optical_composite_from_s2(region: str, district: str, coord: str, bands: list, dtype: type, num_slices: int = 1,
+def create_optical_composite_from_s2(region: str, district: str, coord: str, bands: list, dtype: type, num_slices: int = 12,
                                      pbar: bool = True) -> str:
+    """
+    Creates a cloud cleaned optical composite from a set of sentinel 2 files. Can combine multiple optical bands
+    Args:
+        region (str): The region for which to create the composite for
+        district (str): The district within the region for which to create the composite for
+        coord (str): The military grid coordinate (35MGR, 36MTV, etc.) within the district to create the composite for 
+        bands (list): The optical bands for which to create the composite for (B02, B03, B08) etc.
+        dtype (type): The data type to save the band data as
+        num_slices (int): The amount of slices to split the composite up into while building it. More slices will use less RAM
+        pbar (bool): If true then a progress bar will be shown
+    Returns:
+        optical_composite_file.archive_path (str): Path to the output optical composite 
+    """
     print('Creating composite for', coord)
     optical_composite_file = OpticalComposite(region, district, coord, bands)
-    all_bands_archive_path = optical_composite_file.archive_path(create_dir=True)
-    if os.path.exists(all_bands_archive_path):
-        return all_bands_archive_path
+    if optical_composite_file.exists:
+        return optical_composite_file.archive_path
+    optical_composite_file.create_archive_dir()
 
     # Loop through each band, getting a median estimate for each
     crs = None
@@ -198,18 +179,18 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
         slice_bounds.append((slice_end_pts[-2], slice_end_pts[-1]))   
 
         single_band_composite = OpticalComposite(region, district, coord, [band])
-        single_band_composite_archive_path = single_band_composite.archive_path(create_dir=True)
-        if os.path.exists(single_band_composite_archive_path):
-            optical_composite_band_files.append(single_band_composite_archive_path)
+        if single_band_composite.exists:
+            optical_composite_band_files.append(single_band_composite.archive_path)
             continue
+        single_band_composite.create_archive_dir()
 
         # Median across time, slicing if necessary
         slice_files: List[OpticalCompositeSlice] = []
         for k, row_bound in tqdm(enumerate(slice_bounds), desc=f'band={band}', total=num_slices, position=2,
                                  disable=pbar):
             slice_file = OpticalCompositeSlice(region, district, coord, band, row_bound[0], row_bound[1])
-            slice_file_archive_path = slice_file.archive_path(create_dir=True)
-            if os.path.exists(slice_file_archive_path):
+            slice_file.create_archive_dir()
+            if slice_file.exists:
                 slice_files.append(slice_file)
                 continue
 
@@ -231,7 +212,7 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
             median_corrected = np.nanmedian(corrected_stack, axis=0, overwrite_input=True)
             median_corrected = median_corrected.reshape(cloud_correct_imgs[0].shape)
 
-            with rasterio.open(slice_file_archive_path, 'w', driver='Gtiff', width=g_ncols, height=g_nrows, count=1, crs=crs,
+            with rasterio.open(slice_file.archive_path, 'w', driver='Gtiff', width=g_ncols, height=g_nrows, count=1, crs=crs,
                                transform=transform, dtype=dtype) as wf:
                 wf.write(median_corrected.astype(dtype), 1)
                 slice_files.append(slice_file)
@@ -242,10 +223,10 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
             del corrected_stack
 
         # Combine slices
-        with rasterio.open(single_band_composite_archive_path, 'w', driver='GTiff', width=g_ncols, height=g_nrows, count=1, crs=crs,
+        with rasterio.open(single_band_composite.archive_path, 'w', driver='GTiff', width=g_ncols, height=g_nrows, count=1, crs=crs,
                             transform=transform, dtype=dtype) as wf:
             for slice_file in slice_files:
-                with rasterio.open(slice_file.archive_path(), 'r', driver='GTiff') as rf:
+                with rasterio.open(slice_file.archive_path, 'r', driver='GTiff') as rf:
                     wf.write(
                         rf.read(1),
                         window=Window.from_slices(
@@ -254,12 +235,12 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
                         ),
                         indexes=1
                     )
-                os.remove(slice_file.archive_path())
+                os.remove(slice_file.archive_path)
 
     # Combine Bands
     n_bands = len(optical_composite_band_files)
     with rasterio.open(
-            all_bands_archive_path,
+            optical_composite_file.archive_path,
             'w',
             driver='GTiff',
             width=g_ncols,
@@ -271,14 +252,13 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
     ) as wf:
         for band_file in tqdm(optical_composite_band_files, total=n_bands, desc='Combining bands...', leave=False, position=1, disable=pbar):
             j = BANDS_TO_IX[band_file.bands[0]]
-            band_file_path = band_file.archive_path()
-            with rasterio.open(band_file_path, 'r', driver='GTiff') as rf:
+            with rasterio.open(band_file.archive_path, 'r', driver='GTiff') as rf:
                 wf.write(rf.read(1), indexes=j)
-            os.remove(band_file_path)
+            os.remove(band_file.archive_path)
 
-    shutil.rmtree(os.path.dirname(slice_file.archive_path()))
+    shutil.rmtree(os.path.dirname(slice_file.archive_path))
 
-    return all_bands_archive_path
+    return optical_composite_file.archive_path
 
 
 def scale_multiband_composite(multiband_tiff: str):
@@ -302,7 +282,22 @@ def scale_multiband_composite(multiband_tiff: str):
     return scaled_tiff
 
 
-def composite_to_tiles(composite: MultiVariateComposite, bridge_locations, tqdm_pos=None, tqdm_update_rate=None, remove_tiff=True, tile_size: int = 300) -> pd.DataFrame:
+def composite_to_tiles(composite: MultiVariateComposite, bridge_locations: Union[None, gpd.array.GeometryArray], tqdm_pos: int = None, tqdm_update_rate: float = None, remove_tiff: bool = True, tile_size: int = 300) -> pd.DataFrame:
+    """
+    Splits up the input composite file into small chunks called tiles. The size of the tiles in meters is controlled by the tile_size input parameter.
+    If there is ground truth data for the input composite, each tile will be classified as either "bridge" or "no_bridge". A dataframe with this information as well 
+    as the geographic and file location of each tile will be output. Each tile will be saved as a PyTorch pt file which contains its normalized features as a tensor.
+    These pt files will be what is used to train models / run inference over.
+    Args:
+        composite (MultiVariateComposite): File object of the composite to split up into tiles
+        bridge_locations (gpd.array.GeometryArray): Contains the location of each bridge that there is ground truth data for
+        tqdm_pos (int): Progress pointer
+        tqdm_update_rate (float): Progress update rate
+        remove_tiff (bool): Defaults to true. If true then tiff files used to determine tile bounding boxes will be removed. These are only useful for visually inspecting tiles for validation
+        tile_size (int): Size that each tile should be in meters. For example, if tile_size is 300 then each tile will be 300x300 meters
+    Returns:
+        df (pd.DataFrame): Dataframe with file and geographic location of each tile, its bounding box, and if there was ground truth data, whether the tile contains a bridge or not
+    """
     grid_geoloc_file = SingleRegionTileMatch(tile_size)
 
     grid_geoloc_path = grid_geoloc_file.archive_path(composite.region, composite.district, composite.mgrs, create_dir=True)

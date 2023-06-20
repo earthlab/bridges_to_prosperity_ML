@@ -21,7 +21,7 @@ from src.utilities.imaging import elevation_to_slope, subsample_geo_tiff
 from bin.download_composites import download_composites
 from src.api.sentinel2 import SinergiseSentinelAPI
 from src.api.lp_daac import Elevation as ElevationAPI
-from src.api.osm import getOsm
+from src.api.osm import create_osm_composite
 from src.utilities.coords import tiff_to_bbox
 from src.utilities.optical_composites import create_composites as create_optical_composites
 
@@ -115,9 +115,7 @@ def mgrs_task(args: Namespace) -> None:
         numpy_array_to_raster(mgrs_elevation_outfile.archive_path, high_res_elevation, geo_transform, projection)
 
     # Create the OSM file
-    osm_file = OSMFile(region, district, four_band_optical.mgrs)
-    osm_file.create_archive_dir()
-    getOsm(four_band_optical.archive_path, osm_file.archive_path)
+    osm_file = create_osm_composite(four_band_optical)
 
     # Combine the files into the multivariate file
     multivariate_file = MultiVariateCompositeFile(region, district, four_band_optical.mgrs)

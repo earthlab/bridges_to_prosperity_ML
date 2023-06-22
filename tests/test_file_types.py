@@ -1,6 +1,6 @@
 import shutil
 from unittest import TestCase
-from file_types import _BaseCompositeFile, _BaseSentinel2File, _BaseNonOpticalBand, _BaseInferenceFiles, _BaseTileFile, \
+from file_types import _BaseCompositeFile, _BaseSentinel2File, _BaseTileFile, \
     _BaseDatasetSplit
 
 from file_types import *
@@ -24,6 +24,40 @@ class TestFileTypes(TestCase):
         with open(file_path, 'w') as file:
             pass
 
+
+class TestFileType(TestFileTypes):
+    file_type_inits = [
+            OpticalComposite(region='Uganda', district='Kibaale', military_grid='35MRV',
+                                                    bands=['B03', 'B02', 'B04']),
+            OpticalCompositeSlice(region='Uganda', district='Kibaale', military_grid='35MRV',
+                    band='B03', left_bound=0, right_bound=500),
+            MultiVariateComposite(region='Uganda', district='Kibaale', military_grid='35MRV'),
+            Sentinel2Tile(region='Uganda', district='Kafefe', utm_code='35', latitude_band='MR',
+                                                square='V', year=2020, month=1, day=1, band='B02'),
+            Sentinel2Cloud(region='Uganda', district='Kafefe', utm_code='35', latitude_band='MR',
+                square='V', year=2020, month=1, day=1),
+            Elevation(region='Uganda', district='Kasese', mgrs='35MRV'),
+            Slope(region='Uganda', district='Kasese', mgrs='35MRV'),
+            OSM(region='Uganda', district='Kasese', mgrs='35MRV'),
+            SingleRegionTileMatch(region='Uganda', tile_size=400),
+            MultiRegionTileMatch(regions=['Uganda', 'Rwanda'], tile_size=300),
+            Tile(region="Cote D'Ivoire", district='Kafefe', military_grid='35MRV', tile_size=350, x_min=200, y_min=300),
+            PyTorch(region="Cote D'Ivoire", district='Kafefe', military_grid='35MRV', tile_size=350, x_min=200, y_min=300),
+            TrainedModel(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                                layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False),
+            InferenceResultsCSV(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                                layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False),
+            InferenceResultsShapefile(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                                layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False),
+            TrainSplit(regions=["Cote D'Ivoire", 'Uganda', 'Rwanda'], ratio=70, tile_size=300),
+            ValidateSplit(regions=["Cote D'Ivoire", 'Uganda', 'Rwanda'], ratio=70, tile_size=300)
+        ]
+    
+    def test_create(self):
+        for file_type in self.file_type_inits:
+            created_file = File.create(file_type.name)
+            self.assertIsInstance(created_file, type(file_type))
+    
 
 class TestOpticalComposite(TestFileTypes):
 
@@ -796,19 +830,19 @@ class TestElevationFile(TestFileTypes):
 
     def test_name(self):
         elevation_file = Elevation(region='Uganda', district='Kasese', mgrs='35MRV')
-        self.assertEqual(elevation_file.name, 'Uganda_Kasese_35MRV.tif')
+        self.assertEqual(elevation_file.name, 'elevation_Uganda_Kasese_35MRV.tif')
 
         elevation_file = Elevation(region='Rwanda', district='all', mgrs='36MRV')
-        self.assertEqual(elevation_file.name, 'Rwanda_all_36MRV.tif')
+        self.assertEqual(elevation_file.name, 'elevation_Rwanda_all_36MRV.tif')
 
     def test_archive_path(self):
         elevation_file = Elevation(region='Uganda', district='Kasese', mgrs='35MRV')
         self.assertEqual(elevation_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'elevation', 'Uganda', 'Kasese',
-                                                                   'Uganda_Kasese_35MRV.tif'))
+                                                                   'elevation_Uganda_Kasese_35MRV.tif'))
 
         elevation_file = Elevation(region='Rwanda', district='all', mgrs='36MRV')
         self.assertEqual(elevation_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'elevation', 'Rwanda', 'all',
-                                                                   'Rwanda_all_36MRV.tif'))
+                                                                   'elevation_Rwanda_all_36MRV.tif'))
 
     def test_create(self):
         elevation_file = Elevation(region='Uganda', district='Kasese', mgrs='35MRV')
@@ -828,54 +862,54 @@ class TestElevationFile(TestFileTypes):
         district_1 = os.path.join(self.TEST_DATA_DIR, 'elevation', 'Uganda', 'Kibaale')
         os.makedirs(district_1)
         for file in [
-            'Uganda_Kibaale_35MRV.tif',
-            'Uganda_Kibaale_36MGR.tif',
+            'elevation_Uganda_Kibaale_35MRV.tif',
+            'elevation_Uganda_Kibaale_36MGR.tif',
             'off_nominal.txt'
         ]:
             self.create_blank_file(os.path.join(district_1, file))
 
         district_2 = os.path.join(self.TEST_DATA_DIR, 'elevation', 'Uganda', 'Kasese')
         for file in [
-            'Uganda_Kasese_35MRV.tif',
-            'Uganda_Kasese_36MGR.tif',
+            'elevation_Uganda_Kasese_35MRV.tif',
+            'elevation_Uganda_Kasese_36MGR.tif',
             'off_nominal.txt'
         ]:
             self.create_blank_file(os.path.join(district_2, file))
 
         district_3 = os.path.join(self.TEST_DATA_DIR, 'elevation', 'Rwanda', 'all')
         for file in [
-            'Rwanda_all_35MRV.tif',
+            'elevation_Rwanda_all_35MRV.tif',
             'off_nominal.txt'
         ]:
             self.create_blank_file(os.path.join(district_3, file))
 
         self.assertEqual(Elevation.find_files(), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
-            os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
-            os.path.join(district_2, 'Uganda_Kasese_36MGR.tif'),
-            os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
+            os.path.join(district_1, 'elevation_Uganda_Kibaale_35MRV.tif'),
+            os.path.join(district_1, 'elevation_Uganda_Kibaale_36MGR.tif'),
+            os.path.join(district_2, 'elevation_Uganda_Kasese_35MRV.tif'),
+            os.path.join(district_2, 'elevation_Uganda_Kasese_36MGR.tif'),
+            os.path.join(district_3, 'elevation_Rwanda_all_35MRV.tif'),
         ]))
         self.assertEqual(Elevation.find_files(region='Uganda'),
                          sorted([
-                             os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-                             os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
-                             os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
-                             os.path.join(district_2, 'Uganda_Kasese_36MGR.tif')
+                             os.path.join(district_1, 'elevation_Uganda_Kibaale_35MRV.tif'),
+                             os.path.join(district_1, 'elevation_Uganda_Kibaale_36MGR.tif'),
+                             os.path.join(district_2, 'elevation_Uganda_Kasese_35MRV.tif'),
+                             os.path.join(district_2, 'elevation_Uganda_Kasese_36MGR.tif')
                          ]))
         self.assertEqual(Elevation.find_files(region='Uganda',
                                               district='Kibaale'), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif')
+            os.path.join(district_1, 'elevation_Uganda_Kibaale_35MRV.tif'),
+            os.path.join(district_1, 'elevation_Uganda_Kibaale_36MGR.tif')
         ]))
         self.assertEqual(Elevation.find_files(region='Uganda',
                                               district='Kibaale', mgrs='35MRV'), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif')
+            os.path.join(district_1, 'elevation_Uganda_Kibaale_35MRV.tif')
         ]))
         self.assertEqual(Elevation.find_files(region='Rwanda',
                                               district='all', mgrs='35MRV'),
                          sorted([
-                             os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
+                             os.path.join(district_3, 'elevation_Rwanda_all_35MRV.tif'),
                          ]))
         self.assertEqual(Elevation.find_files(region='Rwanda', district='all', mgrs='37MRV'), [])
 
@@ -901,19 +935,19 @@ class TestSlopeFile(TestFileTypes):
 
     def test_name(self):
         slope_file = Slope(region='Uganda', district='Kasese', mgrs='35MRV')
-        self.assertEqual(slope_file.name, 'Uganda_Kasese_35MRV.tif')
+        self.assertEqual(slope_file.name, 'slope_Uganda_Kasese_35MRV.tif')
 
         slope_file = Slope(region='Rwanda', district='all', mgrs='36MRV')
-        self.assertEqual(slope_file.name, 'Rwanda_all_36MRV.tif')
+        self.assertEqual(slope_file.name, 'slope_Rwanda_all_36MRV.tif')
 
     def test_archive_path(self):
         slope_file = Slope(region='Uganda', district='Kasese', mgrs='35MRV')
         self.assertEqual(slope_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'slope', 'Uganda', 'Kasese',
-                                                               'Uganda_Kasese_35MRV.tif'))
+                                                               'slope_Uganda_Kasese_35MRV.tif'))
 
         slope_file = Slope(region='Rwanda', district='all', mgrs='36MRV')
         self.assertEqual(slope_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'slope', 'Rwanda', 'all',
-                                                               'Rwanda_all_36MRV.tif'))
+                                                               'slope_Rwanda_all_36MRV.tif'))
 
     def test_create(self):
         slope_file = Slope(region='Uganda', district='Kasese', mgrs='35MRV')
@@ -933,54 +967,54 @@ class TestSlopeFile(TestFileTypes):
         district_1 = os.path.join(self.TEST_DATA_DIR, 'slope', 'Uganda', 'Kibaale')
         os.makedirs(district_1)
         for file in [
-            'Uganda_Kibaale_35MRV.tif',
-            'Uganda_Kibaale_36MGR.tif',
-            'off_nominal.txt'
+            'slope_Uganda_Kibaale_35MRV.tif',
+            'slope_Uganda_Kibaale_36MGR.tif',
+            'slope_off_nominal.txt'
         ]:
             self.create_blank_file(os.path.join(district_1, file))
 
         district_2 = os.path.join(self.TEST_DATA_DIR, 'slope', 'Uganda', 'Kasese')
         for file in [
-            'Uganda_Kasese_35MRV.tif',
-            'Uganda_Kasese_36MGR.tif',
-            'off_nominal.txt'
+            'slope_Uganda_Kasese_35MRV.tif',
+            'slope_Uganda_Kasese_36MGR.tif',
+            'slope_off_nominal.txt'
         ]:
             self.create_blank_file(os.path.join(district_2, file))
 
         district_3 = os.path.join(self.TEST_DATA_DIR, 'slope', 'Rwanda', 'all')
         for file in [
-            'Rwanda_all_35MRV.tif',
-            'off_nominal.txt'
+            'slope_Rwanda_all_35MRV.tif',
+            'slope_off_nominal.txt'
         ]:
             self.create_blank_file(os.path.join(district_3, file))
 
         self.assertEqual(Slope.find_files(), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
-            os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
-            os.path.join(district_2, 'Uganda_Kasese_36MGR.tif'),
-            os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
+            os.path.join(district_1, 'slope_Uganda_Kibaale_35MRV.tif'),
+            os.path.join(district_1, 'slope_Uganda_Kibaale_36MGR.tif'),
+            os.path.join(district_2, 'slope_Uganda_Kasese_35MRV.tif'),
+            os.path.join(district_2, 'slope_Uganda_Kasese_36MGR.tif'),
+            os.path.join(district_3, 'slope_Rwanda_all_35MRV.tif'),
         ]))
         self.assertEqual(Slope.find_files(region='Uganda'),
                          sorted([
-                             os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-                             os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
-                             os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
-                             os.path.join(district_2, 'Uganda_Kasese_36MGR.tif')
+                             os.path.join(district_1, 'slope_Uganda_Kibaale_35MRV.tif'),
+                             os.path.join(district_1, 'slope_Uganda_Kibaale_36MGR.tif'),
+                             os.path.join(district_2, 'slope_Uganda_Kasese_35MRV.tif'),
+                             os.path.join(district_2, 'slope_Uganda_Kasese_36MGR.tif')
                          ]))
         self.assertEqual(Slope.find_files(region='Uganda',
                                           district='Kibaale'), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif')
+            os.path.join(district_1, 'slope_Uganda_Kibaale_35MRV.tif'),
+            os.path.join(district_1, 'slope_Uganda_Kibaale_36MGR.tif')
         ]))
         self.assertEqual(Slope.find_files(region='Uganda',
                                           district='Kibaale', mgrs='35MRV'), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif')
+            os.path.join(district_1, 'slope_Uganda_Kibaale_35MRV.tif')
         ]))
         self.assertEqual(Slope.find_files(region='Rwanda',
                                           district='all', mgrs='35MRV'),
                          sorted([
-                             os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
+                             os.path.join(district_3, 'slope_Rwanda_all_35MRV.tif'),
                          ]))
         self.assertEqual(Slope.find_files(region='Rwanda', district='all', mgrs='37MRV'), [])
 
@@ -1006,19 +1040,19 @@ class TestOSMFile(TestFileTypes):
 
     def test_name(self):
         osm_file = OSM(region='Uganda', district='Kasese', mgrs='35MRV')
-        self.assertEqual(osm_file.name, 'Uganda_Kasese_35MRV.tif')
+        self.assertEqual(osm_file.name, 'osm_Uganda_Kasese_35MRV.tif')
 
         osm_file = OSM(region='Rwanda', district='all', mgrs='36MRV')
-        self.assertEqual(osm_file.name, 'Rwanda_all_36MRV.tif')
+        self.assertEqual(osm_file.name, 'osm_Rwanda_all_36MRV.tif')
 
     def test_archive_path(self):
         osm_file = OSM(region='Uganda', district='Kasese', mgrs='35MRV')
         self.assertEqual(osm_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'osm', 'Uganda', 'Kasese',
-                                                             'Uganda_Kasese_35MRV.tif'))
+                                                             'osm_Uganda_Kasese_35MRV.tif'))
 
         osm_file = OSM(region='Rwanda', district='all', mgrs='36MRV')
         self.assertEqual(osm_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'osm', 'Rwanda', 'all',
-                                                             'Rwanda_all_36MRV.tif'))
+                                                             'osm_Rwanda_all_36MRV.tif'))
 
     def test_create(self):
         osm_file = OSM(region='Uganda', district='Kasese', mgrs='35MRV')
@@ -1038,54 +1072,54 @@ class TestOSMFile(TestFileTypes):
         district_1 = os.path.join(self.TEST_DATA_DIR, 'osm', 'Uganda', 'Kibaale')
         os.makedirs(district_1)
         for file in [
-            'Uganda_Kibaale_35MRV.tif',
-            'Uganda_Kibaale_36MGR.tif',
+            'osm_Uganda_Kibaale_35MRV.tif',
+            'osm_Uganda_Kibaale_36MGR.tif',
             'off_nominal.txt'
         ]:
             self.create_blank_file(os.path.join(district_1, file))
 
         district_2 = os.path.join(self.TEST_DATA_DIR, 'osm', 'Uganda', 'Kasese')
         for file in [
-            'Uganda_Kasese_35MRV.tif',
-            'Uganda_Kasese_36MGR.tif',
+            'osm_Uganda_Kasese_35MRV.tif',
+            'osm_Uganda_Kasese_36MGR.tif',
             'off_nominal.txt'
         ]:
             self.create_blank_file(os.path.join(district_2, file))
 
         district_3 = os.path.join(self.TEST_DATA_DIR, 'osm', 'Rwanda', 'all')
         for file in [
-            'Rwanda_all_35MRV.tif',
+            'osm_Rwanda_all_35MRV.tif',
             'off_nominal.txt'
         ]:
             self.create_blank_file(os.path.join(district_3, file))
 
         self.assertEqual(OSM.find_files(), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
-            os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
-            os.path.join(district_2, 'Uganda_Kasese_36MGR.tif'),
-            os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
+            os.path.join(district_1, 'osm_Uganda_Kibaale_35MRV.tif'),
+            os.path.join(district_1, 'osm_Uganda_Kibaale_36MGR.tif'),
+            os.path.join(district_2, 'osm_Uganda_Kasese_35MRV.tif'),
+            os.path.join(district_2, 'osm_Uganda_Kasese_36MGR.tif'),
+            os.path.join(district_3, 'osm_Rwanda_all_35MRV.tif'),
         ]))
         self.assertEqual(OSM.find_files(region='Uganda'),
                          sorted([
-                             os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-                             os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif'),
-                             os.path.join(district_2, 'Uganda_Kasese_35MRV.tif'),
-                             os.path.join(district_2, 'Uganda_Kasese_36MGR.tif')
+                             os.path.join(district_1, 'osm_Uganda_Kibaale_35MRV.tif'),
+                             os.path.join(district_1, 'osm_Uganda_Kibaale_36MGR.tif'),
+                             os.path.join(district_2, 'osm_Uganda_Kasese_35MRV.tif'),
+                             os.path.join(district_2, 'osm_Uganda_Kasese_36MGR.tif')
                          ]))
         self.assertEqual(OSM.find_files(region='Uganda',
                                         district='Kibaale'), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif'),
-            os.path.join(district_1, 'Uganda_Kibaale_36MGR.tif')
+            os.path.join(district_1, 'osm_Uganda_Kibaale_35MRV.tif'),
+            os.path.join(district_1, 'osm_Uganda_Kibaale_36MGR.tif')
         ]))
         self.assertEqual(OSM.find_files(region='Uganda',
                                         district='Kibaale', mgrs='35MRV'), sorted([
-            os.path.join(district_1, 'Uganda_Kibaale_35MRV.tif')
+            os.path.join(district_1, 'osm_Uganda_Kibaale_35MRV.tif')
         ]))
         self.assertEqual(OSM.find_files(region='Rwanda',
                                         district='all', mgrs='35MRV'),
                          sorted([
-                             os.path.join(district_3, 'Rwanda_all_35MRV.tif'),
+                             os.path.join(district_3, 'osm_Rwanda_all_35MRV.tif'),
                          ]))
         self.assertEqual(OSM.find_files(region='Rwanda', district='all', mgrs='37MRV'), [])
 
@@ -1120,26 +1154,26 @@ class TestSingleRegionTileMatch(TestFileTypes):
 
     def test_name(self):
         tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400)
-        self.assertEqual(tile_match.name, 'tile_match_Uganda_400.csv')
+        self.assertEqual(tile_match.name, 'sr_tile_match_Uganda_400.csv')
 
         tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400, district='Kabarole')
-        self.assertEqual(tile_match.name, 'tile_match_Uganda_Kabarole_400.csv')
+        self.assertEqual(tile_match.name, 'sr_tile_match_Uganda_Kabarole_400.csv')
 
         tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400, district='Kabarole', military_grid='35MRV')
-        self.assertEqual(tile_match.name, 'tile_match_Uganda_Kabarole_35MRV_400.csv')
+        self.assertEqual(tile_match.name, 'sr_tile_match_Uganda_Kabarole_35MRV_400.csv')
 
     def test_archive_path(self):
         tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400)
         self.assertEqual(tile_match.archive_path, os.path.join(self.TEST_DATA_DIR, 'tiles', 'Uganda',
-                                                               'tile_match_Uganda_400.csv'))
+                                                               'sr_tile_match_Uganda_400.csv'))
 
         tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400, district='Kabarole')
         self.assertEqual(tile_match.archive_path, os.path.join(self.TEST_DATA_DIR, 'tiles', 'Uganda', 'Kabarole',
-                                                               'tile_match_Uganda_Kabarole_400.csv'))
+                                                               'sr_tile_match_Uganda_Kabarole_400.csv'))
 
         tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400, district='Kabarole', military_grid='35MRV')
         self.assertEqual(tile_match.archive_path, os.path.join(self.TEST_DATA_DIR, 'tiles', 'Uganda', 'Kabarole',
-                                                               '35MRV', 'tile_match_Uganda_Kabarole_35MRV_400.csv'))
+                                                               '35MRV', 'sr_tile_match_Uganda_Kabarole_35MRV_400.csv'))
 
     def test_create(self):
         tile_match = SingleRegionTileMatch(region='Uganda', tile_size=400)
@@ -1178,8 +1212,8 @@ class TestSingleRegionTileMatch(TestFileTypes):
         district_1 = os.path.join(self.TEST_DATA_DIR, 'tiles', 'Uganda')
         os.makedirs(district_1)
         for file in [
-            'tile_match_Uganda_300.csv',
-            'tile_match_Uganda_400.csv',
+            'sr_tile_match_Uganda_300.csv',
+            'sr_tile_match_Uganda_400.csv',
             'off_nominal.txt'
         ]:
             self.create_blank_file(os.path.join(district_1, file))
@@ -1187,7 +1221,7 @@ class TestSingleRegionTileMatch(TestFileTypes):
         district_2 = os.path.join(self.TEST_DATA_DIR, 'tiles', 'Uganda', 'Kibaale')
         os.makedirs(district_2)
         for file in [
-            'tile_match_Uganda_Kibaale_300.csv',
+            'sr_tile_match_Uganda_Kibaale_300.csv',
             'off_nominal.txt'
         ]:
             self.create_blank_file(os.path.join(district_2, file))
@@ -1195,35 +1229,35 @@ class TestSingleRegionTileMatch(TestFileTypes):
         district_3 = os.path.join(self.TEST_DATA_DIR, 'tiles', 'Uganda', 'Kibaale', '35MRV')
         os.makedirs(district_3)
         for file in [
-            'tile_match_Uganda_Kibaale_35MRV_300.csv',
+            'sr_tile_match_Uganda_Kibaale_35MRV_300.csv',
             'off_nominal.txt'
         ]:
             self.create_blank_file(os.path.join(district_3, file))
 
         self.assertEqual(SingleRegionTileMatch.find_files(tile_size=300), sorted([
-            os.path.join(district_1, 'tile_match_Uganda_300.csv',),
-            os.path.join(district_2, 'tile_match_Uganda_Kibaale_300.csv'),
-            os.path.join(district_3, 'tile_match_Uganda_Kibaale_35MRV_300.csv')
+            os.path.join(district_1, 'sr_tile_match_Uganda_300.csv',),
+            os.path.join(district_2, 'sr_tile_match_Uganda_Kibaale_300.csv'),
+            os.path.join(district_3, 'sr_tile_match_Uganda_Kibaale_35MRV_300.csv')
         ]))
 
         self.assertEqual(SingleRegionTileMatch.find_files(tile_size=400), sorted([
-            os.path.join(district_1, 'tile_match_Uganda_400.csv')
+            os.path.join(district_1, 'sr_tile_match_Uganda_400.csv')
         ]))
 
         self.assertEqual(SingleRegionTileMatch.find_files(tile_size=300, region='Uganda'), sorted([
-            os.path.join(district_1, 'tile_match_Uganda_300.csv'),
-            os.path.join(district_2, 'tile_match_Uganda_Kibaale_300.csv'),
-            os.path.join(district_3, 'tile_match_Uganda_Kibaale_35MRV_300.csv')
+            os.path.join(district_1, 'sr_tile_match_Uganda_300.csv'),
+            os.path.join(district_2, 'sr_tile_match_Uganda_Kibaale_300.csv'),
+            os.path.join(district_3, 'sr_tile_match_Uganda_Kibaale_35MRV_300.csv')
         ]))
 
         self.assertEqual(SingleRegionTileMatch.find_files(tile_size=300, region='Uganda', district='Kibaale'), sorted([
-            os.path.join(district_2, 'tile_match_Uganda_Kibaale_300.csv'),
-            os.path.join(district_3, 'tile_match_Uganda_Kibaale_35MRV_300.csv')
+            os.path.join(district_2, 'sr_tile_match_Uganda_Kibaale_300.csv'),
+            os.path.join(district_3, 'sr_tile_match_Uganda_Kibaale_35MRV_300.csv')
         ]))
 
         self.assertEqual(SingleRegionTileMatch.find_files(tile_size=300, region='Uganda', district='Kibaale',
                                                           military_grid='35MRV'), sorted([
-            os.path.join(district_3, 'tile_match_Uganda_Kibaale_35MRV_300.csv')
+            os.path.join(district_3, 'sr_tile_match_Uganda_Kibaale_35MRV_300.csv')
         ]))
 
 
@@ -1241,12 +1275,12 @@ class TestMultiRegionTileMatch(TestFileTypes):
 
     def test_name(self):
         tile_match = MultiRegionTileMatch(regions=['Uganda', 'Rwanda'], tile_size=300)
-        self.assertEqual(tile_match.name, 'tile_match_Rwanda_Uganda_300.csv')
+        self.assertEqual(tile_match.name, 'mr_tile_match_Rwanda_Uganda_300.csv')
 
     def test_archive_path(self):
         tile_match = MultiRegionTileMatch(regions=['Uganda', 'Rwanda'], tile_size=300)
         self.assertEqual(tile_match.archive_path, os.path.join(self.TEST_DATA_DIR, 'multi_region_tile_match',
-                                                               'tile_match_Rwanda_Uganda_300.csv'))
+                                                               'mr_tile_match_Rwanda_Uganda_300.csv'))
 
     def test_create(self):
         tile_match = MultiRegionTileMatch(regions=['Uganda', 'Rwanda'], tile_size=300)
@@ -1265,15 +1299,15 @@ class TestMultiRegionTileMatch(TestFileTypes):
         district_1 = os.path.join(self.TEST_DATA_DIR, 'multi_region_tile_match')
         os.makedirs(district_1)
         for file in [
-            'tile_match_Rwanda_Uganda_300.csv',
-            "tile_match_Cote d'Ivoire_Rwanda_Uganda_300.csv",
-            "tile_match_Cote d'Ivoire_Rwanda_Uganda_400.csv",
+            'mr_tile_match_Rwanda_Uganda_300.csv',
+            "mr_tile_match_Cote d'Ivoire_Rwanda_Uganda_300.csv",
+            "mr_tile_match_Cote d'Ivoire_Rwanda_Uganda_400.csv",
             'off_nominal.txt'
         ]:
             self.create_blank_file(os.path.join(district_1, file))
         self.assertEqual(MultiRegionTileMatch.find_files(tile_size=300), sorted([
-            os.path.join(district_1, 'tile_match_Rwanda_Uganda_300.csv'),
-            os.path.join(district_1, "tile_match_Cote d'Ivoire_Rwanda_Uganda_300.csv"),
+            os.path.join(district_1, 'mr_tile_match_Rwanda_Uganda_300.csv'),
+            os.path.join(district_1, "mr_tile_match_Cote d'Ivoire_Rwanda_Uganda_300.csv"),
         ]))
 
 
@@ -1499,4 +1533,762 @@ class TestTrainedModel(TestFileTypes):
 
         trained_model_file = TrainedModel(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
                                            layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=True)
-        self.assertEqual(trained_model_file.name, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_best.tar")
+        self.assertEqual(trained_model_file.name, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5_best.tar")
+
+    def test_archive_path(self):
+        trained_model_file = TrainedModel(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False)
+        self.assertEqual(trained_model_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'trained_models', "Cote D'Ivoire_Rwanda_Uganda", 'resnet18', 'r5.0',
+                         "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.tar"))
+
+        trained_model_file = TrainedModel(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        self.assertEqual(trained_model_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'trained_models', "Cote D'Ivoire_Rwanda_Uganda", 'resnet18', 'r5.0',
+                                                               "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5_best.tar"))
+        
+    def test_create(self):
+        trained_model_file = TrainedModel(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False)
+        trained_model_created = TrainedModel.create(trained_model_file.name)
+        self.assertIsInstance(trained_model_created, TrainedModel)
+        self.assertEqual(trained_model_created.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(trained_model_created.architecture, 'resnet18')
+        self.assertEqual(trained_model_created.layers, ['green', 'nir', 'osm-water'])
+        self.assertEqual(trained_model_created.epoch, 5)
+        self.assertEqual(trained_model_created.ratio, 5.0)
+        self.assertEqual(trained_model_created.tile_size, 300)
+        self.assertFalse(trained_model_created.best)
+
+        trained_model_file = TrainedModel(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['red'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        trained_model_created = TrainedModel.create(trained_model_file.name)
+        self.assertIsInstance(trained_model_created, TrainedModel)
+        self.assertEqual(trained_model_created.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(trained_model_created.architecture, 'resnet18')
+        self.assertEqual(trained_model_created.layers, ['red'])
+        self.assertEqual(trained_model_created.epoch, 5)
+        self.assertEqual(trained_model_created.ratio, 5.0)
+        self.assertEqual(trained_model_created.tile_size, 300)
+        self.assertTrue(trained_model_created.best)
+
+        trained_model_file = TrainedModel(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['blue', 'osm-boundary'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        trained_model_created = TrainedModel.create(trained_model_file.name)
+        self.assertIsInstance(trained_model_created, TrainedModel)
+        self.assertEqual(trained_model_created.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(trained_model_created.architecture, 'resnet18')
+        self.assertEqual(trained_model_created.layers, ['blue', 'osm-boundary'])
+        self.assertEqual(trained_model_created.epoch, 5)
+        self.assertEqual(trained_model_created.ratio, 5.0)
+        self.assertEqual(trained_model_created.tile_size, 300)
+        self.assertTrue(trained_model_created.best)
+
+        trained_model_file = TrainedModel(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['elevation', 'slope'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        trained_model_created = TrainedModel.create(trained_model_file.name)
+        self.assertIsInstance(trained_model_created, TrainedModel)
+        self.assertEqual(trained_model_created.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(trained_model_created.architecture, 'resnet18')
+        self.assertEqual(trained_model_created.layers, ['elevation', 'slope'])
+        self.assertEqual(trained_model_created.epoch, 5)
+        self.assertEqual(trained_model_created.ratio, 5.0)
+        self.assertEqual(trained_model_created.tile_size, 300)
+        self.assertTrue(trained_model_created.best)
+
+    def test_find_files(self):
+        dir_1 = os.path.join(self.TEST_DATA_DIR, 'trained_models', "Cote D'Ivoire_Rwanda_Uganda", 'resnet18', 'r5.0')
+        os.makedirs(dir_1)
+        for file in [
+            "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.tar",
+            "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.tar",
+            "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_epoch5.tar",
+            "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_elevation_nir_slope_epoch5.tar",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(dir_1, file))
+
+        dir_2 = os.path.join(self.TEST_DATA_DIR, 'trained_models', "Cote D'Ivoire", 'resnet18', 'r5.0')
+        os.makedirs(dir_2)
+        for file in [
+            "Cote D'Ivoire_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.tar",
+            "Cote D'Ivoire_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.tar",
+            "Cote D'Ivoire_resnet18_r5.0_ts300_green_epoch5.tar",
+            "Cote D'Ivoire_resnet18_r5.0_ts300_elevation_nir_slope_epoch5.tar",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(dir_2, file))
+
+        dir_3 = os.path.join(self.TEST_DATA_DIR, 'trained_models', "Cote D'Ivoire", 'resnet50', 'r5.0')
+        os.makedirs(dir_3)
+        for file in [
+            "Cote D'Ivoire_resnet50_r5.0_ts300_green_nir_osm-water_epoch5.tar",
+            "Cote D'Ivoire_resnet50_r5.0_ts300_green_nir_osm-water_epoch10.tar",
+            "Cote D'Ivoire_resnet50_r5.0_ts300_green_epoch5.tar",
+            "Cote D'Ivoire_resnet50_r5.0_ts300_elevation_nir_slope_epoch5.tar",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(dir_3, file))
+        
+        dir_4 = os.path.join(self.TEST_DATA_DIR, 'trained_models', "Cote D'Ivoire", 'resnet50', 'r10.0')
+        os.makedirs(dir_4)
+        for file in [
+            "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch5.tar",
+            "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch10.tar",
+            "Cote D'Ivoire_resnet50_r10.0_ts300_green_epoch5.tar",
+            "Cote D'Ivoire_resnet50_r10.0_ts300_elevation_nir_slope_epoch5.tar",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(dir_4, file))
+
+        self.assertEqual(TrainedModel.find_files(), sorted([
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.tar"),
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.tar"),
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_epoch5.tar"),
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_elevation_nir_slope_epoch5.tar"),
+
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.tar"),
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.tar"),
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_green_epoch5.tar"),
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_elevation_nir_slope_epoch5.tar"),
+
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_nir_osm-water_epoch5.tar"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_nir_osm-water_epoch10.tar"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_epoch5.tar"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_elevation_nir_slope_epoch5.tar"),
+
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch5.tar"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch10.tar"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_epoch5.tar"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_elevation_nir_slope_epoch5.tar")
+        ]))
+
+        self.assertEqual(TrainedModel.find_files(regions=['Uganda', 'rwanda', "Cote D'Ivoire"]), sorted([
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.tar"),
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.tar"),
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_epoch5.tar"),
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_elevation_nir_slope_epoch5.tar")
+        ]))
+
+        self.assertEqual(TrainedModel.find_files(regions=['Uganda', 'rwanda', "Cote D'Ivoire"], layers=['osm-water', 'nir', 'green']), sorted([
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.tar"),
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.tar")
+        ]))
+
+        self.assertEqual(TrainedModel.find_files(regions=['Uganda', 'rwanda', "Cote D'Ivoire"], layers=['elevation', 'nir', 'slope']), sorted([
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_elevation_nir_slope_epoch5.tar")
+        ]))
+
+        self.assertEqual(TrainedModel.find_files(regions=['Uganda', 'rwanda', "Cote D'Ivoire"], layers=['green']), sorted([]))
+
+        self.assertEqual(TrainedModel.find_files(regions=[ "Cote D'Ivoire"]), sorted([
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.tar"),
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.tar"),
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_green_epoch5.tar"),
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_elevation_nir_slope_epoch5.tar"),
+
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_nir_osm-water_epoch5.tar"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_nir_osm-water_epoch10.tar"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_epoch5.tar"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_elevation_nir_slope_epoch5.tar"),
+
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch5.tar"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch10.tar"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_epoch5.tar"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_elevation_nir_slope_epoch5.tar")
+
+        ]))
+
+        self.assertEqual(TrainedModel.find_files(architecture='resnet50'), sorted([
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_nir_osm-water_epoch5.tar"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_nir_osm-water_epoch10.tar"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_epoch5.tar"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_elevation_nir_slope_epoch5.tar"),
+
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch5.tar"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch10.tar"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_epoch5.tar"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_elevation_nir_slope_epoch5.tar")
+        ]))
+
+        self.assertEqual(TrainedModel.find_files(ratio=10), sorted([
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch5.tar"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch10.tar"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_epoch5.tar"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_elevation_nir_slope_epoch5.tar")
+        ]))
+
+class TestInferenceResultsCSV(TestFileTypes):
+    @classmethod
+    def setUpClass(cls):
+        TestFileTypes.setUpClass()
+        InferenceResultsCSV._ROOT_DATA_DIR = os.path.join(cls.TEST_DATA_DIR, 'inference_results')
+
+    def test_init(self):
+        ir_file = InferenceResultsCSV(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False)
+        self.assertIsNotNone(ir_file)
+        self.assertEqual(ir_file.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(ir_file.architecture, 'resnet18')
+        self.assertEqual(ir_file.layers, ['green', 'nir', 'osm-water'])
+        self.assertEqual(ir_file.epoch, 5)
+        self.assertEqual(ir_file.ratio, 5.0)
+        self.assertEqual(ir_file.tile_size, 300)
+        self.assertFalse(ir_file.best)
+
+        ir_file = InferenceResultsCSV(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        self.assertIsNotNone(ir_file)
+        self.assertEqual(ir_file.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(ir_file.architecture, 'resnet18')
+        self.assertEqual(ir_file.layers, ['green', 'nir', 'osm-water'])
+        self.assertEqual(ir_file.epoch, 5)
+        self.assertEqual(ir_file.ratio, 5.0)
+        self.assertEqual(ir_file.tile_size, 300)
+        self.assertTrue(ir_file.best)
+
+    def test_name(self):
+        ir_file = InferenceResultsCSV(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False)
+        self.assertEqual(ir_file.name, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.csv")
+
+        ir_file = InferenceResultsCSV(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        self.assertEqual(ir_file.name, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5_best.csv")
+
+    def test_archive_path(self):
+        ir_file = InferenceResultsCSV(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False)
+        self.assertEqual(ir_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire_Rwanda_Uganda", 'resnet18', 'r5.0',
+                         "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.csv"))
+
+        ir_file = InferenceResultsCSV(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        self.assertEqual(ir_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire_Rwanda_Uganda", 'resnet18', 'r5.0',
+                                                               "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5_best.csv"))
+        
+    def test_create(self):
+        ir_file = InferenceResultsCSV(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False)
+        ir_file_created = InferenceResultsCSV.create(ir_file.name)
+        self.assertIsInstance(ir_file_created, InferenceResultsCSV)
+        self.assertEqual(ir_file_created.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(ir_file_created.architecture, 'resnet18')
+        self.assertEqual(ir_file_created.layers, ['green', 'nir', 'osm-water'])
+        self.assertEqual(ir_file_created.epoch, 5)
+        self.assertEqual(ir_file_created.ratio, 5.0)
+        self.assertEqual(ir_file_created.tile_size, 300)
+        self.assertFalse(ir_file_created.best)
+
+        ir_file = InferenceResultsCSV(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['red'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        ir_file_created = InferenceResultsCSV.create(ir_file.name)
+        self.assertIsInstance(ir_file_created, InferenceResultsCSV)
+        self.assertEqual(ir_file_created.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(ir_file_created.architecture, 'resnet18')
+        self.assertEqual(ir_file_created.layers, ['red'])
+        self.assertEqual(ir_file_created.epoch, 5)
+        self.assertEqual(ir_file_created.ratio, 5.0)
+        self.assertEqual(ir_file_created.tile_size, 300)
+        self.assertTrue(ir_file_created.best)
+
+        ir_file = InferenceResultsCSV(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['blue', 'osm-boundary'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        ir_file_created = InferenceResultsCSV.create(ir_file.name)
+        self.assertIsInstance(ir_file_created, InferenceResultsCSV)
+        self.assertEqual(ir_file_created.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(ir_file_created.architecture, 'resnet18')
+        self.assertEqual(ir_file_created.layers, ['blue', 'osm-boundary'])
+        self.assertEqual(ir_file_created.epoch, 5)
+        self.assertEqual(ir_file_created.ratio, 5.0)
+        self.assertEqual(ir_file_created.tile_size, 300)
+        self.assertTrue(ir_file_created.best)
+
+        ir_file = InferenceResultsCSV(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['elevation', 'slope'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        ir_file_created = InferenceResultsCSV.create(ir_file.name)
+        self.assertIsInstance(ir_file_created, InferenceResultsCSV)
+        self.assertEqual(ir_file_created.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(ir_file_created.architecture, 'resnet18')
+        self.assertEqual(ir_file_created.layers, ['elevation', 'slope'])
+        self.assertEqual(ir_file_created.epoch, 5)
+        self.assertEqual(ir_file_created.ratio, 5.0)
+        self.assertEqual(ir_file_created.tile_size, 300)
+        self.assertTrue(ir_file_created.best)
+
+    def test_find_files(self):
+        dir_1 = os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire_Rwanda_Uganda", 'resnet18', 'r5.0')
+        os.makedirs(dir_1)
+        for file in [
+            "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.csv",
+            "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.csv",
+            "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_epoch5.csv",
+            "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_elevation_nir_slope_epoch5.csv",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(dir_1, file))
+
+        dir_2 = os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire", 'resnet18', 'r5.0')
+        os.makedirs(dir_2)
+        for file in [
+            "Cote D'Ivoire_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.csv",
+            "Cote D'Ivoire_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.csv",
+            "Cote D'Ivoire_resnet18_r5.0_ts300_green_epoch5.csv",
+            "Cote D'Ivoire_resnet18_r5.0_ts300_elevation_nir_slope_epoch5.csv",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(dir_2, file))
+
+        dir_3 = os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire", 'resnet50', 'r5.0')
+        os.makedirs(dir_3)
+        for file in [
+            "Cote D'Ivoire_resnet50_r5.0_ts300_green_nir_osm-water_epoch5.csv",
+            "Cote D'Ivoire_resnet50_r5.0_ts300_green_nir_osm-water_epoch10.csv",
+            "Cote D'Ivoire_resnet50_r5.0_ts300_green_epoch5.csv",
+            "Cote D'Ivoire_resnet50_r5.0_ts300_elevation_nir_slope_epoch5.csv",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(dir_3, file))
+        
+        dir_4 = os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire", 'resnet50', 'r10.0')
+        os.makedirs(dir_4)
+        for file in [
+            "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch5.csv",
+            "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch10.csv",
+            "Cote D'Ivoire_resnet50_r10.0_ts300_green_epoch5.csv",
+            "Cote D'Ivoire_resnet50_r10.0_ts300_elevation_nir_slope_epoch5.csv",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(dir_4, file))
+
+        self.assertEqual(InferenceResultsCSV.find_files(), sorted([
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.csv"),
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.csv"),
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_epoch5.csv"),
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_elevation_nir_slope_epoch5.csv"),
+
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.csv"),
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.csv"),
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_green_epoch5.csv"),
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_elevation_nir_slope_epoch5.csv"),
+
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_nir_osm-water_epoch5.csv"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_nir_osm-water_epoch10.csv"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_epoch5.csv"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_elevation_nir_slope_epoch5.csv"),
+
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch5.csv"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch10.csv"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_epoch5.csv"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_elevation_nir_slope_epoch5.csv")
+        ]))
+
+        self.assertEqual(InferenceResultsCSV.find_files(regions=['Uganda', 'rwanda', "Cote D'Ivoire"]), sorted([
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.csv"),
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.csv"),
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_epoch5.csv"),
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_elevation_nir_slope_epoch5.csv")
+        ]))
+
+        self.assertEqual(InferenceResultsCSV.find_files(regions=['Uganda', 'rwanda', "Cote D'Ivoire"], layers=['osm-water', 'nir', 'green']), sorted([
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.csv"),
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.csv")
+        ]))
+
+        self.assertEqual(InferenceResultsCSV.find_files(regions=['Uganda', 'rwanda', "Cote D'Ivoire"], layers=['elevation', 'nir', 'slope']), sorted([
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_elevation_nir_slope_epoch5.csv")
+        ]))
+
+        self.assertEqual(InferenceResultsCSV.find_files(regions=['Uganda', 'rwanda', "Cote D'Ivoire"], layers=['green']), sorted([]))
+
+        self.assertEqual(InferenceResultsCSV.find_files(regions=[ "Cote D'Ivoire"]), sorted([
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.csv"),
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.csv"),
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_green_epoch5.csv"),
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_elevation_nir_slope_epoch5.csv"),
+
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_nir_osm-water_epoch5.csv"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_nir_osm-water_epoch10.csv"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_epoch5.csv"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_elevation_nir_slope_epoch5.csv"),
+
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch5.csv"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch10.csv"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_epoch5.csv"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_elevation_nir_slope_epoch5.csv")
+
+        ]))
+
+        self.assertEqual(InferenceResultsCSV.find_files(architecture='resnet50'), sorted([
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_nir_osm-water_epoch5.csv"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_nir_osm-water_epoch10.csv"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_epoch5.csv"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_elevation_nir_slope_epoch5.csv"),
+
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch5.csv"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch10.csv"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_epoch5.csv"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_elevation_nir_slope_epoch5.csv")
+        ]))
+
+        self.assertEqual(InferenceResultsCSV.find_files(ratio=10), sorted([
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch5.csv"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_nir_osm-water_epoch10.csv"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_green_epoch5.csv"),
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_elevation_nir_slope_epoch5.csv")
+        ]))
+
+
+class TestInferenceResultsShapefile(TestFileTypes):
+    @classmethod
+    def setUpClass(cls):
+        TestFileTypes.setUpClass()
+        InferenceResultsShapefile._ROOT_DATA_DIR = os.path.join(cls.TEST_DATA_DIR, 'inference_results')
+
+    def tearDown(self) -> None:
+        shutil.rmtree(os.path.join(self.TEST_DATA_DIR, 'inference_results'))
+        return super().tearDown()
+    
+    def setUp(self) -> None:
+        Path(os.path.join(self.TEST_DATA_DIR, 'inference_results')).mkdir(parents=True, exist_ok=True)
+        return super().setUp()
+
+    def test_init(self):
+        ir_file = InferenceResultsShapefile(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False)
+        self.assertIsNotNone(ir_file)
+        self.assertEqual(ir_file.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(ir_file.architecture, 'resnet18')
+        self.assertEqual(ir_file.layers, ['green', 'nir', 'osm-water'])
+        self.assertEqual(ir_file.epoch, 5)
+        self.assertEqual(ir_file.ratio, 5.0)
+        self.assertEqual(ir_file.tile_size, 300)
+        self.assertFalse(ir_file.best)
+
+        ir_file = InferenceResultsShapefile(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        self.assertIsNotNone(ir_file)
+        self.assertEqual(ir_file.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(ir_file.architecture, 'resnet18')
+        self.assertEqual(ir_file.layers, ['green', 'nir', 'osm-water'])
+        self.assertEqual(ir_file.epoch, 5)
+        self.assertEqual(ir_file.ratio, 5.0)
+        self.assertEqual(ir_file.tile_size, 300)
+        self.assertTrue(ir_file.best)
+
+    def test_name(self):
+        ir_file = InferenceResultsShapefile(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False)
+        self.assertEqual(ir_file.name, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.shp")
+
+        ir_file = InferenceResultsShapefile(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        self.assertEqual(ir_file.name, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5_best.shp")
+
+    def test_archive_path(self):
+        ir_file = InferenceResultsShapefile(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False)
+        self.assertEqual(ir_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire_Rwanda_Uganda", 'resnet18', 'r5.0',
+                                                            'green_nir_osm-water_epoch5_shapefile',
+                         "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.shp"))
+
+        ir_file = InferenceResultsShapefile(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        self.assertEqual(ir_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire_Rwanda_Uganda", 'resnet18', 'r5.0',
+                                                            'green_nir_osm-water_epoch5_best_shapefile',
+                                                               "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5_best.shp"))
+        
+    def test_create(self):
+        ir_file = InferenceResultsShapefile(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False)
+        ir_file_created = InferenceResultsShapefile.create(ir_file.name)
+        self.assertIsInstance(ir_file_created, InferenceResultsShapefile)
+        self.assertEqual(ir_file_created.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(ir_file_created.architecture, 'resnet18')
+        self.assertEqual(ir_file_created.layers, ['green', 'nir', 'osm-water'])
+        self.assertEqual(ir_file_created.epoch, 5)
+        self.assertEqual(ir_file_created.ratio, 5.0)
+        self.assertEqual(ir_file_created.tile_size, 300)
+        self.assertFalse(ir_file_created.best)
+
+        ir_file = InferenceResultsShapefile(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['red'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        ir_file_created = InferenceResultsShapefile.create(ir_file.name)
+        self.assertIsInstance(ir_file_created, InferenceResultsShapefile)
+        self.assertEqual(ir_file_created.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(ir_file_created.architecture, 'resnet18')
+        self.assertEqual(ir_file_created.layers, ['red'])
+        self.assertEqual(ir_file_created.epoch, 5)
+        self.assertEqual(ir_file_created.ratio, 5.0)
+        self.assertEqual(ir_file_created.tile_size, 300)
+        self.assertTrue(ir_file_created.best)
+
+        ir_file = InferenceResultsShapefile(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['blue', 'osm-boundary'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        ir_file_created = InferenceResultsShapefile.create(ir_file.name)
+        self.assertIsInstance(ir_file_created, InferenceResultsShapefile)
+        self.assertEqual(ir_file_created.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(ir_file_created.architecture, 'resnet18')
+        self.assertEqual(ir_file_created.layers, ['blue', 'osm-boundary'])
+        self.assertEqual(ir_file_created.epoch, 5)
+        self.assertEqual(ir_file_created.ratio, 5.0)
+        self.assertEqual(ir_file_created.tile_size, 300)
+        self.assertTrue(ir_file_created.best)
+
+        ir_file = InferenceResultsShapefile(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['elevation', 'slope'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        ir_file_created = InferenceResultsShapefile.create(ir_file.name)
+        self.assertIsInstance(ir_file_created, InferenceResultsShapefile)
+        self.assertEqual(ir_file_created.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(ir_file_created.architecture, 'resnet18')
+        self.assertEqual(ir_file_created.layers, ['elevation', 'slope'])
+        self.assertEqual(ir_file_created.epoch, 5)
+        self.assertEqual(ir_file_created.ratio, 5.0)
+        self.assertEqual(ir_file_created.tile_size, 300)
+        self.assertTrue(ir_file_created.best)
+
+    def test_find_files(self):
+        dir_1 = os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire_Rwanda_Uganda", 'resnet18', 'r5.0', 'green_nir_osm-water_epoch5_shapefile')
+        os.makedirs(dir_1)
+        for file in [
+            "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.shp",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(dir_1, file))
+
+        dir_2 = os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire", 'resnet18', 'r5.0', 'green_nir_osm-water_epoch10_shapefile')
+        os.makedirs(dir_2)
+        for file in [
+            "Cote D'Ivoire_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.shp",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(dir_2, file))
+
+        dir_3 = os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire", 'resnet50', 'r5.0', 'green_epoch5_shapefile')
+        os.makedirs(dir_3)
+        for file in [
+            "Cote D'Ivoire_resnet50_r5.0_ts300_green_epoch5.shp",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(dir_3, file))
+        
+        dir_4 = os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire", 'resnet50', 'r10.0', 'elevation_nir_slope_epoch5_best_shapefile')
+        os.makedirs(dir_4)
+        for file in [
+            "Cote D'Ivoire_resnet50_r10.0_ts300_elevation_nir_slope_epoch5_best.shp",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(dir_4, file))
+
+        self.assertEqual(InferenceResultsShapefile.find_files(), sorted([
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.shp"),
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.shp"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_epoch5.shp")
+        ]))
+
+        self.assertEqual(InferenceResultsShapefile.find_files(regions=['Uganda', 'rwanda', "Cote D'Ivoire"]), sorted([
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.shp"),
+        ]))
+
+        self.assertEqual(InferenceResultsShapefile.find_files(regions=['Uganda', 'rwanda', "Cote D'Ivoire"], layers=['osm-water', 'nir', 'green']), sorted([
+            os.path.join(dir_1, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.shp")
+        ]))
+
+        self.assertEqual(InferenceResultsShapefile.find_files(regions=['Uganda', 'rwanda', "Cote D'Ivoire"], layers=['elevation', 'nir', 'slope']), sorted([]))
+
+        self.assertEqual(InferenceResultsShapefile.find_files(regions=['Uganda', 'rwanda', "Cote D'Ivoire"], layers=['green']), sorted([]))
+
+        self.assertEqual(InferenceResultsShapefile.find_files(regions=[ "Cote D'Ivoire"]), sorted([
+            os.path.join(dir_2, "Cote D'Ivoire_resnet18_r5.0_ts300_green_nir_osm-water_epoch10.shp"),
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_epoch5.shp")
+        ]))
+
+        self.assertEqual(InferenceResultsShapefile.find_files(architecture='resnet50'), sorted([
+            os.path.join(dir_3, "Cote D'Ivoire_resnet50_r5.0_ts300_green_epoch5.shp")
+        ]))
+
+        self.assertEqual(InferenceResultsShapefile.find_files(ratio=10, best=True), sorted([
+            os.path.join(dir_4, "Cote D'Ivoire_resnet50_r10.0_ts300_elevation_nir_slope_epoch5_best.shp")
+        ]))
+
+    def test_tarfile_name(self):
+        ir_file = InferenceResultsShapefile(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False)
+        self.assertEqual(ir_file.tarfile_name, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.tar")
+
+        ir_file = InferenceResultsShapefile(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        self.assertEqual(ir_file.tarfile_name, "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5_best.tar")
+    
+    def test_tarfile_archive_path(self):
+        ir_file = InferenceResultsShapefile(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False)
+        self.assertEqual(ir_file.tarfile_archive_path, os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire_Rwanda_Uganda", 'resnet18', 'r5.0',
+                         "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.tar"))
+
+        ir_file = InferenceResultsShapefile(regions=['Rwanda', 'Uganda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=True)
+        self.assertEqual(ir_file.tarfile_archive_path, os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire_Rwanda_Uganda", 'resnet18', 'r5.0',
+                                                               "Cote D'Ivoire_Rwanda_Uganda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5_best.tar"))
+    
+    def test_create_tar_file(self):
+        dir_1 = os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire_Rwanda", 'resnet18', 'r5.0', 'green_nir_osm-water_epoch5_shapefile')
+        os.makedirs(dir_1)
+        for file in [
+            "Cote D'Ivoire_Rwanda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.shp",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(dir_1, file))
+        
+        file = InferenceResultsShapefile(regions=['Rwanda', "Cote D'Ivoire"], architecture='resnet18',
+                                           layers=['osm-water', 'nir', 'green'], epoch=5, ratio=5.0, tile_size=300, best=False)
+        self.assertFalse(os.path.exists(os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire_Rwanda", 'resnet18', 'r5.0',
+                                                      "Cote D'Ivoire_Rwanda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.tar")))
+        file.create_tar_file()
+        self.assertTrue(os.path.exists(os.path.join(self.TEST_DATA_DIR, 'inference_results', "Cote D'Ivoire_Rwanda", 'resnet18', 'r5.0',
+                                                      "Cote D'Ivoire_Rwanda_resnet18_r5.0_ts300_green_nir_osm-water_epoch5.tar")))
+
+
+class TestTrainSplit(TestFileTypes):
+    @classmethod
+    def setUpClass(cls):
+        TestFileTypes.setUpClass()
+        _BaseDatasetSplit._ROOT_DATA_DIR = os.path.join(cls.TEST_DATA_DIR, 'train_validate_splits')
+
+    def test_init(self):
+        dataset_file = TrainSplit(regions=["Cote D'Ivoire", 'Uganda', 'Rwanda'], ratio=70, tile_size=300)
+        self.assertIsNotNone(dataset_file)
+        self.assertEqual(dataset_file.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(dataset_file.ratio, 70)
+        self.assertEqual(dataset_file.tile_size, 300)
+    
+    def test_name(self):
+        dataset_file = TrainSplit(regions=["Cote D'Ivoire", 'Uganda', 'Rwanda'], ratio=70, tile_size=300)
+        self.assertEqual(dataset_file.name, "train_Cote D'Ivoire_Rwanda_Uganda_70_ts300.csv")
+    
+    def test_archive_path(self):
+        dataset_file = TrainSplit(regions=["Cote D'Ivoire", 'Uganda', 'Rwanda'], ratio=70, tile_size=300)
+        self.assertEqual(dataset_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'train_validate_splits', "train_Cote D'Ivoire_Rwanda_Uganda_70_ts300.csv"))
+    
+    def test_create(self):
+        dataset_file = TrainSplit(regions=["Cote D'Ivoire", 'Uganda', 'Rwanda'], ratio=70, tile_size=300)
+        dataset_file_created = TrainSplit.create(dataset_file.name)
+        self.assertIsInstance(dataset_file_created, TrainSplit)
+        self.assertEqual(dataset_file_created.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(dataset_file_created.ratio, 70)
+        self.assertEqual(dataset_file_created.tile_size, 300)
+
+        dataset_file_created = TrainSplit.create(dataset_file.archive_path)
+        self.assertIsInstance(dataset_file_created, TrainSplit)
+        self.assertEqual(dataset_file_created.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(dataset_file_created.ratio, 70)
+        self.assertEqual(dataset_file_created.tile_size, 300)
+
+    def test_find_files(self):
+        dir_1 = os.path.join(self.TEST_DATA_DIR, 'train_validate_splits')
+        os.makedirs(dir_1)
+        for file in [
+            "train_Cote D'Ivoire_Rwanda_Uganda_70_ts300.csv",
+            "validate_Cote D'Ivoire_Rwanda_Uganda_30_ts300.csv",
+            "train_Cote D'Ivoire_Rwanda_Uganda_70_ts500.csv",
+            "validate_Cote D'Ivoire_Rwanda_Uganda_30_ts500.csv",
+            "train_Uganda_70_ts500.csv",
+            "validate_Uganda_30_ts500.csv",
+            "train_Uganda_60_ts500.csv",
+            "validate_Uganda_40_ts500.csv",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(dir_1, file))
+
+
+        self.assertEqual(TrainSplit.find_files(), sorted([
+            os.path.join(dir_1, "train_Cote D'Ivoire_Rwanda_Uganda_70_ts300.csv"),
+            os.path.join(dir_1, "train_Cote D'Ivoire_Rwanda_Uganda_70_ts500.csv"),
+            os.path.join(dir_1, "train_Uganda_70_ts500.csv"),
+            os.path.join(dir_1, "train_Uganda_60_ts500.csv")
+        ]))
+
+        self.assertEqual(TrainSplit.find_files(regions=["Cote D'Ivoire", 'Rwanda', 'Uganda']), sorted([
+            os.path.join(dir_1, "train_Cote D'Ivoire_Rwanda_Uganda_70_ts300.csv"),
+            os.path.join(dir_1, "train_Cote D'Ivoire_Rwanda_Uganda_70_ts500.csv")
+        ]))
+
+        self.assertEqual(TrainSplit.find_files(regions=["Cote D'Ivoire", 'Rwanda', 'Uganda'], tile_size=500), sorted([
+            os.path.join(dir_1, "train_Cote D'Ivoire_Rwanda_Uganda_70_ts500.csv")
+        ]))
+
+        self.assertEqual(TrainSplit.find_files(regions=['Uganda'], tile_size=500, ratio=60), sorted([
+            os.path.join(dir_1, "train_Uganda_60_ts500.csv")
+        ]))
+
+
+class TestValidateSplit(TestFileTypes):
+    @classmethod
+    def setUpClass(cls):
+        TestFileTypes.setUpClass()
+        _BaseDatasetSplit._ROOT_DATA_DIR = os.path.join(cls.TEST_DATA_DIR, 'train_validate_splits')
+
+    def test_init(self):
+        dataset_file = ValidateSplit(regions=["Cote D'Ivoire", 'Uganda', 'Rwanda'], ratio=70, tile_size=300)
+        self.assertIsNotNone(dataset_file)
+        self.assertEqual(dataset_file.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(dataset_file.ratio, 70)
+        self.assertEqual(dataset_file.tile_size, 300)
+    
+    def test_name(self):
+        dataset_file = ValidateSplit(regions=["Cote D'Ivoire", 'Uganda', 'Rwanda'], ratio=70, tile_size=300)
+        self.assertEqual(dataset_file.name, "validate_Cote D'Ivoire_Rwanda_Uganda_70_ts300.csv")
+    
+    def test_archive_path(self):
+        dataset_file = ValidateSplit(regions=["Cote D'Ivoire", 'Uganda', 'Rwanda'], ratio=70, tile_size=300)
+        self.assertEqual(dataset_file.archive_path, os.path.join(self.TEST_DATA_DIR, 'train_validate_splits', "validate_Cote D'Ivoire_Rwanda_Uganda_70_ts300.csv"))
+    
+    def test_create(self):
+        dataset_file = ValidateSplit(regions=["Cote D'Ivoire", 'Uganda', 'Rwanda'], ratio=70, tile_size=300)
+        dataset_file_created = ValidateSplit.create(dataset_file.name)
+        self.assertIsInstance(dataset_file_created, ValidateSplit)
+        self.assertEqual(dataset_file_created.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(dataset_file_created.ratio, 70)
+        self.assertEqual(dataset_file_created.tile_size, 300)
+
+        dataset_file_created = ValidateSplit.create(dataset_file.archive_path)
+        self.assertIsInstance(dataset_file_created, ValidateSplit)
+        self.assertEqual(dataset_file_created.regions, ["Cote D'Ivoire", 'Rwanda', 'Uganda'])
+        self.assertEqual(dataset_file_created.ratio, 70)
+        self.assertEqual(dataset_file_created.tile_size, 300)
+
+    def test_find_files(self):
+        dir_1 = os.path.join(self.TEST_DATA_DIR, 'train_validate_splits')
+        os.makedirs(dir_1)
+        for file in [
+            "train_Cote D'Ivoire_Rwanda_Uganda_70_ts300.csv",
+            "validate_Cote D'Ivoire_Rwanda_Uganda_30_ts300.csv",
+            "train_Cote D'Ivoire_Rwanda_Uganda_70_ts500.csv",
+            "validate_Cote D'Ivoire_Rwanda_Uganda_30_ts500.csv",
+            "train_Uganda_70_ts500.csv",
+            "validate_Uganda_30_ts500.csv",
+            "train_Uganda_60_ts500.csv",
+            "validate_Uganda_40_ts500.csv",
+            'off_nominal.txt'
+        ]:
+            self.create_blank_file(os.path.join(dir_1, file))
+
+
+        self.assertEqual(ValidateSplit.find_files(), sorted([
+            os.path.join(dir_1, "validate_Cote D'Ivoire_Rwanda_Uganda_30_ts300.csv"),
+            os.path.join(dir_1, "validate_Cote D'Ivoire_Rwanda_Uganda_30_ts500.csv"),
+            os.path.join(dir_1, "validate_Uganda_30_ts500.csv"),
+            os.path.join(dir_1, "validate_Uganda_40_ts500.csv")
+        ]))
+
+        self.assertEqual(ValidateSplit.find_files(regions=["Cote D'Ivoire", 'Rwanda', 'Uganda']), sorted([
+            os.path.join(dir_1, "validate_Cote D'Ivoire_Rwanda_Uganda_30_ts300.csv"),
+            os.path.join(dir_1, "validate_Cote D'Ivoire_Rwanda_Uganda_30_ts500.csv")
+        ]))
+
+        self.assertEqual(ValidateSplit.find_files(regions=["Cote D'Ivoire", 'Rwanda', 'Uganda'], tile_size=500), sorted([
+            os.path.join(dir_1, "validate_Cote D'Ivoire_Rwanda_Uganda_30_ts500.csv")
+        ]))
+
+        self.assertEqual(ValidateSplit.find_files(regions=['Uganda'], tile_size=500, ratio=40), sorted([
+            os.path.join(dir_1, "validate_Uganda_40_ts500.csv")
+        ]))

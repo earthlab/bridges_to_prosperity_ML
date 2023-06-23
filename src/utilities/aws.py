@@ -43,8 +43,8 @@ def s3_download_task(location_request_info: Tuple[str, int, int, str]) -> None:
             position (int): Position in the download queue
             bucket_name (str): Name of the s3 bucket that the composite object is in
     """
-    bucket = initialize_s3_bucket(bucket_name)
-    for file_path, destination, position, bucket_name in location_request_info:
+    bucket = initialize_s3_bucket(location_request_info[0][3])
+    for file_path, destination, position, _ in location_request_info:
         if os.path.exists(destination):
             return 
         obj = bucket.objects.filter(Prefix=file_path)[0]

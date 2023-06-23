@@ -59,4 +59,6 @@ if __name__ == "__main__":
     else:
         raise ValueError('Missing first positional argument for file type. Must be one of [composites, models, inference_results]')
 
+    print(f'Found {len(files)} files to upload')
+
     upload_files([File.create(f) for f in files], args.s3_bucket_name)

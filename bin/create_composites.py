@@ -13,23 +13,40 @@ import yaml
 from tqdm.contrib.concurrent import process_map
 from osgeo import gdal
 from PIL import Image
+import numpy as np
 
 from definitions import REGION_FILE_PATH
 from src.utilities.imaging import numpy_array_to_raster
 from src.utilities.config_reader import CONFIG
 from src.utilities.imaging import elevation_to_slope, subsample_geo_tiff
-from bin.download_s3 import download_composites
 from src.api.sentinel2 import SinergiseSentinelAPI
 from src.api.lp_daac import Elevation as ElevationAPI
 from src.api.osm import create_osm_composite
 from src.utilities.coords import tiff_to_bbox
+from src.utilities.aws import list_s3_files, s3_download_task
 from src.utilities.optical_composites import create_composites as create_optical_composites
 
-from file_types import OpticalComposite, Elevation as ElevationFile, Slope as SlopeFile, OSM as OSMFile,\
+from file_types import OpticalComposite, Elevation as ElevationFile, Slope as SlopeFile,\
     MultiVariateComposite as MultiVariateCompositeFile
 
 CORES = mp.cpu_count() - 1
 Image.MAX_IMAGE_PIXELS = None
+
+
+def download_optical_composites(region: str, district: str, s3_bucket_name: str, cores: int, mgrs: List[str],
+                                bands: List[str]):
+    s3_files = list_s3_files(OpticalComposite.ROOT_S3_DIR, s3_bucket_name)
+    files_to_download = OpticalComposite.filter_files(s3_files, region, district, bands, mgrs)
+    
+    parallel_inputs = []
+    for i, s3_file_path in enumerate(np.array_split(files_to_download, cores)):
+        file_class = OpticalComposite.create(s3_file_path)
+        parallel_inputs.append((s3_file_path, file_class.archive_path, str(i + 1), s3_bucket_name))
+    process_map(
+        s3_download_task,
+        parallel_inputs,
+        max_workers=cores
+    )
 
 
 def combine_bands(source_file_path: str, target_file_path: str, new_bands: int) -> None:
@@ -163,16 +180,16 @@ def create_multivariate_compsites(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores
         mgrs_grids = sentinel2_api.bounds_to_mgrs(bbox) if mgrs is None else mgrs
 
         # Load any 4-band optical composites from S3
-        download_composites(region=region, districts=[district], s3_bucket_name=s3_bucket_name, cores=cores, mgrs=mgrs_grids,
-                             bands=['B02', 'B03', 'B04', 'B08'])
+        download_optical_composites(region=region, district=district, s3_bucket_name=s3_bucket_name, cores=cores, mgrs=mgrs_grids,
+                                    bands=['B02', 'B03', 'B04', 'B08'])
         
         # Load any RGB optical composites from S3
-        download_composites(region=region, districts=[district], s3_bucket_name=s3_bucket_name, cores=cores, mgrs=mgrs_grids,
-                             bands=['B02', 'B03', 'B04'])
+        download_optical_composites(region=region, district=district, s3_bucket_name=s3_bucket_name, cores=cores, mgrs=mgrs_grids,
+                                    bands=['B02', 'B03', 'B04'])
         
         # Load any IR optical composites from S3
-        download_composites(region=region, districts=[district], s3_bucket_name=s3_bucket_name, cores=cores, mgrs=mgrs_grids,
-                             bands=['B08'])
+        download_optical_composites(region=region, district=district, s3_bucket_name=s3_bucket_name, cores=cores, mgrs=mgrs_grids,
+                                    bands=['B08'])
 
         task_args = []
         for mgrs_grid in mgrs_grids:

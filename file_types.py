@@ -6,7 +6,7 @@ archive paths, and search for files throughout the rest of the project.
 
 import os
 import re
-from typing import List, Set, Type
+from typing import List, Set, Type, Union
 from definitions import COMPOSITE_DIR, ELEVATION_DIR, SLOPE_DIR, SENTINEL_2_DIR, OSM_DIR, \
     MODEL_DIR, INFERENCE_RESULTS_DIR, TILE_DIR, TRAIN_VALIDATE_SPLIT_DIR, MULTI_REGION_TILE_MATCH, DATA_DIR
 import glob
@@ -83,13 +83,14 @@ class File(ABC):
         Creates all the directories to the archive path
         """
         Path(os.path.dirname(self.archive_path)).mkdir(parents=True, exist_ok=True)
-    
+
 
 class _BaseCompositeFile(File):
     """
     Base attributes and methods for optical, multivariate, and slices composite files
     """
     _ROOT_DATA_DIR = COMPOSITE_DIR
+    ROOT_S3_DIR = os.path.basename(_ROOT_DATA_DIR)
 
     def __init__(self, region: str, district: str, military_grid: str):
         """
@@ -128,6 +129,24 @@ class _BaseCompositeFile(File):
         pass
     
     @staticmethod
+    def filter_files(input_files: List[str], regex: str, region: str = None, district: str = None, mgrs: List[str] = None) -> List[str]:
+        matching_files = []
+        for f in input_files:
+            match = re.match(regex, os.path.basename(f))
+            if not match:
+                continue
+            group_dict = match.groupdict()
+            if region is not None and group_dict['region'].lower() != region.lower():
+                continue
+            if district is not None and group_dict['district'].lower() != district.lower():
+                continue
+            if mgrs is not None and group_dict['mgrs'].lower() not in [m.lower() for m in mgrs]:
+                continue
+            matching_files.append(f)
+
+        return sorted(matching_files)
+
+    @staticmethod
     def find_files(regex: str, region: str = None, district: str = None, mgrs: List[str] = None) -> List[str]:
         """
         Searches for files in the root data directory for the file type. Additional arguments can be added to filter
@@ -142,21 +161,7 @@ class _BaseCompositeFile(File):
         """
         files = glob.glob(_BaseCompositeFile._ROOT_DATA_DIR + '/**/*', recursive=True)
 
-        matching_files = []
-        for f in files:
-            match = re.match(regex, os.path.basename(f))
-            if not match:
-                continue
-            group_dict = match.groupdict()
-            if region is not None and group_dict['region'].lower() != region.lower():
-                continue
-            if district is not None and group_dict['district'].lower() != district.lower():
-                continue
-            if mgrs is not None and group_dict['mgrs'].lower() not in [m.lower() for m in mgrs]:
-                continue
-            matching_files.append(f)
-
-        return sorted(matching_files)
+        return _BaseCompositeFile.filter_files(files, regex, region, district, mgrs)
     
 
 class OpticalComposite(_BaseCompositeFile):
@@ -187,6 +192,20 @@ class OpticalComposite(_BaseCompositeFile):
             base_string += band + ('_' if band != self.bands[-1] else '')
         return base_string + '.tif'
 
+    @staticmethod 
+    def filter_files(input_files: List[str], region: str = None, district: str = None, bands: List[str] = None,
+                     mgrs: List[str] = None) -> List[str]:
+        input_files = _BaseCompositeFile.filter_files(input_files, OpticalComposite.regex, region, district, mgrs)
+        matching_files = []
+        for file in input_files:
+            match = re.match(OpticalComposite.regex, os.path.basename(file))
+            group_dict = match.groupdict()
+            if bands is not None and group_dict['bands'].split('_') != ci_str_sort(bands):
+                continue
+            matching_files.append(file)
+
+        return sorted(matching_files)
+
     @staticmethod
     def find_files(region: str = None, district: str = None, bands: List[str] = None,
                    mgrs: List[str] = None) -> List[str]:
@@ -203,15 +222,7 @@ class OpticalComposite(_BaseCompositeFile):
         """
         files = _BaseCompositeFile.find_files(OpticalComposite.regex, region, district, mgrs)
 
-        matching_files = []
-        for file in files:
-            match = re.match(OpticalComposite.regex, os.path.basename(file))
-            group_dict = match.groupdict()
-            if bands is not None and group_dict['bands'].split('_') != ci_str_sort(bands):
-                continue
-            matching_files.append(file)
-
-        return sorted(matching_files)
+        return OpticalComposite.filter_files(files, region, district, bands, mgrs)
 
     @classmethod
     def create(cls, file_path: str):
@@ -295,6 +306,10 @@ class MultiVariateComposite(_BaseCompositeFile):
     @property
     def name(self):
         return f'multivariate_composite_{self.region}_{self.district}_{self.mgrs}.tif'
+
+    @staticmethod
+    def filter_files(input_files: List[str], region: str = None, district: str = None, mgrs: List[str] = None) -> List[str]:
+        return _BaseCompositeFile.filter_files(input_files, MultiVariateComposite.regex, region, district, mgrs)
 
     @staticmethod
     def find_files(region: str = None, district: str = None, mgrs: List[str] = None):
@@ -790,20 +805,16 @@ class _BaseInferenceFiles(File):
     def name(self):
         return
 
+    @property
     def s3_archive_path(self) -> str:
         return self.archive_path.replace(DATA_DIR + os.sep, '')
-    
-    @staticmethod
-    def find_files(in_dir: str, regex: str, regions: List[str] = None, architecture: str = None,
-                   layers: List[str] = None, epoch: int= None, ratio: float = None, tile_size: int = None,
-                   best: bool = False) -> List[str]:
-        if layers is not None and not 0 < len(layers) <= 3:
-            raise ValueError('Must only between 1 and 3 layer(s)')
-        
-        files = glob.glob(in_dir + '/**/*', recursive=True)
 
+    @staticmethod
+    def filter_files(input_files: List[str], regex: str, regions: List[str] = None, architecture: str = None,
+                     layers: List[str] = None, epoch: int= None, ratio: float = None, tile_size: int = None,
+                     best: bool = False) -> List[str]:
         matching_files = []
-        for file in files:
+        for file in input_files:
             match = re.match(regex, os.path.basename(file))
             if not match:
                 continue
@@ -820,15 +831,25 @@ class _BaseInferenceFiles(File):
                 continue
             if ratio is not None and float(group_dict['ratio']) != ratio:
                 continue 
-            if (best and group_dict['best'] is None) or (not best and group_dict['best'] is not None):
+            if best and group_dict['best'] is None:
                 continue
             if epoch is not None and epoch != group_dict['epoch']:
                 continue
             if tile_size is not None and tile_size != int(group_dict['tile_size']):
                 continue
             matching_files.append(file)
-
+        
         return sorted(matching_files)
+
+    @staticmethod
+    def find_files(in_dir: str, regex: str, regions: List[str] = None, architecture: str = None,
+                   layers: List[str] = None, epoch: int= None, ratio: float = None, tile_size: int = None,
+                   best: bool = False) -> List[str]:
+        if layers is not None and not 0 < len(layers) <= 3:
+            raise ValueError('Must only between 1 and 3 layer(s)')
+        files = glob.glob(in_dir + '/**/*', recursive=True)
+
+        return _BaseInferenceFiles.filter_files(files, regex, regions, architecture, layers, epoch, ratio, tile_size, best)
     
     @classmethod
     def create(cls, file_path: str):
@@ -851,6 +872,7 @@ class _BaseInferenceFiles(File):
 
 class TrainedModel(_BaseInferenceFiles):
     _ROOT_DATA_DIR = MODEL_DIR
+    ROOT_S3_DIR = os.path.basename(_ROOT_DATA_DIR)
     base_layers = _BaseInferenceFiles.base_layers
     regex = rf"^(?P<regions>[\w\s']+(?:_[\w\s']+)*)_(?P<architecture>resnet\d+)_r(?P<ratio>\d+\.\d+)_ts(?P<tile_size>\d+)_(?P<layer_1>{base_layers})_(?P<layer_2>{base_layers})?[_]?(?P<layer_3>{base_layers})?[_]?(epoch(?P<epoch>\d+))[_]?(?P<best>best)?\.tar$"
 
@@ -869,6 +891,12 @@ class TrainedModel(_BaseInferenceFiles):
         return base_str
     
     @staticmethod
+    def filter_files(input_files: List[str], regions: List[str] = None, architecture: str = None,
+                     layers: List[str] = None, epoch: int= None, ratio: float = None, tile_size: int = None,
+                     best: bool = False) -> List[str]:
+        return _BaseInferenceFiles.filter_files(input_files, TrainedModel.regex, regions, architecture, layers, epoch, ratio, tile_size, best)
+
+    @staticmethod
     def find_files(regions: List[str] = None, architecture: str = None, layers: List[str] = None, epoch: int = None,
                    ratio: float = None, tile_size: int = None, best: bool = False) -> List[str]:
         return _BaseInferenceFiles.find_files(TrainedModel._ROOT_DATA_DIR, TrainedModel.regex, regions, architecture, layers,
@@ -881,6 +909,7 @@ class TrainedModel(_BaseInferenceFiles):
 
 class InferenceResultsCSV(_BaseInferenceFiles):
     _ROOT_DATA_DIR = INFERENCE_RESULTS_DIR
+    ROOT_S3_DIR = os.path.basename(_ROOT_DATA_DIR)
     base_layers = _BaseInferenceFiles.base_layers
     regex = rf"^(?P<regions>[\w\s']+(?:_[\w\s']+)*)_(?P<architecture>resnet\d+)_r(?P<ratio>\d+\.\d+)_ts(?P<tile_size>\d+)_(?P<layer_1>{base_layers})_(?P<layer_2>{base_layers})?[_]?(?P<layer_3>{base_layers})?[_]?(epoch(?P<epoch>\d+))[_]?(?P<best>best)?\.csv$"
 
@@ -896,6 +925,12 @@ class InferenceResultsCSV(_BaseInferenceFiles):
 
         base_str += f'epoch{self.epoch}' + ('_best' if self.best else '') + '.csv'
         return base_str
+    
+    @staticmethod
+    def filter_files(input_files: List[str], regions: List[str] = None, architecture: str = None,
+                     layers: List[str] = None, epoch: int= None, ratio: float = None, tile_size: int = None,
+                     best: bool = False) -> List[str]:
+        return _BaseInferenceFiles.filter_files(input_files, InferenceResultsCSV.regex, regions, architecture, layers, epoch, ratio, tile_size, best)
 
     @staticmethod
     def find_files(regions: List[str] = None, architecture: str = None, layers: List[str] = None, epoch: str = None,
@@ -910,12 +945,14 @@ class InferenceResultsCSV(_BaseInferenceFiles):
 
 class InferenceResultsShapefile(_BaseInferenceFiles):
     _ROOT_DATA_DIR = INFERENCE_RESULTS_DIR
+    ROOT_S3_DIR = os.path.basename(_ROOT_DATA_DIR)
     base_layers = _BaseInferenceFiles.base_layers
     regex = rf"^(?P<regions>[\w\s']+(?:_[\w\s']+)*)_(?P<architecture>resnet\d+)_r(?P<ratio>\d+\.\d+)_ts(?P<tile_size>\d+)_(?P<layer_1>{base_layers})_(?P<layer_2>{base_layers})?[_]?(?P<layer_3>{base_layers})?[_]?(epoch(?P<epoch>\d+))[_]?(?P<best>best)?\.shp$"
 
     def __init__(self, regions: List[str], architecture: str, layers: List[str], epoch: int, ratio: float,
                  tile_size: int, best: bool = False):
         super().__init__(regions, architecture, layers, epoch, ratio, tile_size, best)
+        self.tar_file = InferenceResultsTarfile(regions=self.regions, architecture=self.architecture, layers=self.layers, epoch=self.epoch, ratio=self.ratio, tile_size=self.tile_size, best=self.best)
 
     @property
     def name(self) -> str:
@@ -928,17 +965,8 @@ class InferenceResultsShapefile(_BaseInferenceFiles):
         return base_str
     
     def create_tar_file(self):
-        archive_dir = os.path.dirname(self.archive_path)
-        with tarfile.open(self.tarfile_archive_path, "w") as tar:
-            tar.add(archive_dir, arcname="")
-
-    @property
-    def tarfile_name(self) -> str:
-        return self.name.replace('.shp', '.tar')
-
-    @property
-    def tarfile_archive_path(self) -> str:
-        return os.path.join(os.path.dirname(os.path.dirname(self.archive_path)), self.tarfile_name)
+        with tarfile.open(self.tar_file.archive_path, "w") as tar:
+            tar.add(os.path.dirname(self.archive_path), arcname="")
 
     @property
     def archive_path(self) -> str:
@@ -956,6 +984,47 @@ class InferenceResultsShapefile(_BaseInferenceFiles):
     @classmethod
     def create(cls, file_path: str):
         return super(InferenceResultsShapefile, cls).create(file_path)
+    
+
+class InferenceResultsTarfile(_BaseInferenceFiles):
+    _ROOT_DATA_DIR = INFERENCE_RESULTS_DIR
+    ROOT_S3_DIR = os.path.basename(_ROOT_DATA_DIR)
+    base_layers = _BaseInferenceFiles.base_layers
+    regex = rf"^(?P<regions>[\w\s']+(?:_[\w\s']+)*)_(?P<architecture>resnet\d+)_r(?P<ratio>\d+\.\d+)_ts(?P<tile_size>\d+)_(?P<layer_1>{base_layers})_(?P<layer_2>{base_layers})?[_]?(?P<layer_3>{base_layers})?[_]?(epoch(?P<epoch>\d+))[_]?(?P<best>best)?\.tar$"
+
+    def __init__(self, regions: List[str], architecture: str, layers: List[str], epoch: int, ratio: float,
+                 tile_size: int, best: bool = False):
+        super().__init__(regions, architecture, layers, epoch, ratio, tile_size, best)
+
+    @property
+    def name(self) -> str:
+        base_str = '_'.join(self.regions) + '_' + self.architecture + f'_r{self.ratio}_' + f'ts{self.tile_size}_'
+
+        for layer in self.layers:
+            base_str += layer + '_'
+
+        base_str += f'epoch{self.epoch}' + ('_best' if self.best else '') + '.tar'
+        return base_str
+
+    @property
+    def archive_path(self) -> str:
+        return os.path.join(self._ROOT_DATA_DIR, '_'.join(self.regions), self.architecture, f'r{self.ratio}', self.name)
+    
+    @staticmethod
+    def filter_files(input_files: List[str], regions: List[str] = None, architecture: str = None,
+                     layers: List[str] = None, epoch: int= None, ratio: float = None, tile_size: int = None,
+                     best: bool = False) -> List[str]:
+        return _BaseInferenceFiles.filter_files(input_files, InferenceResultsCSV.regex, regions, architecture, layers, epoch, ratio, tile_size, best)
+
+    @staticmethod
+    def find_files(regions: List[str] = None, architecture: str = None, layers: List[str] = None, epoch: str = None,
+                   ratio: float = None, tile_size: int = None, best: bool = False) -> List[str]:
+        return _BaseInferenceFiles.find_files(InferenceResultsTarfile._ROOT_DATA_DIR, InferenceResultsTarfile.regex, regions,
+                                              architecture, layers, epoch, ratio, tile_size, best)
+
+    @classmethod
+    def create(cls, file_path: str):
+        return super(InferenceResultsTarfile, cls).create(file_path)
 
 
 class _BaseDatasetSplit(File):

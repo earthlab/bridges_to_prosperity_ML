@@ -19,9 +19,6 @@ OSM_DIR = os.path.join(DATA_DIR, 'osm')
 SECRETS_FILE_PATH = os.path.join(B2P_DIR, 'secrets.yaml')
 MGRS_INDEX_FILE = os.path.join(DATA_DIR, 'mgrs_index.json')
 
-# S3
-S3_COMPOSITE_DIR = 'composites'
-
 # Order of data cube layers
 LAYER_TO_IX = [
     'red',

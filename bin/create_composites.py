@@ -18,7 +18,7 @@ from definitions import REGION_FILE_PATH
 from src.utilities.imaging import numpy_array_to_raster
 from src.utilities.config_reader import CONFIG
 from src.utilities.imaging import elevation_to_slope, subsample_geo_tiff
-from bin.download_composites import download_composites
+from bin.download_s3 import download_composites
 from src.api.sentinel2 import SinergiseSentinelAPI
 from src.api.lp_daac import Elevation as ElevationAPI
 from src.api.osm import create_osm_composite

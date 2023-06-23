@@ -1,11 +1,10 @@
 import getpass
 import json
 
-import botocore
 import multiprocessing as mp
 import os
 import pathlib
-import re
+
 import subprocess as sp
 from argparse import Namespace
 from datetime import datetime, timedelta
@@ -18,87 +17,11 @@ from shapely.geometry import Polygon
 
 from definitions import MGRS_INDEX_FILE
 from src.utilities.config_reader import CONFIG
+from src.utilities.aws import initialize_s3_client, parse_aws_credentials
 
 from file_types import Sentinel2Tile, Sentinel2Cloud
 
 PATH = os.path.dirname(__file__)
-
-
-def _no_iam_auth_bucket(bucket_name: str):
-    try:
-        s3_resource = boto3.resource(
-            's3',
-            aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
-            aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
-            aws_session_token=os.environ['AWS_SESSION_TOKEN'] if 'AWS_SESSION_TOKEN' in os.environ else ''
-        )
-        s3_resource.meta.client.head_bucket(Bucket=bucket_name)
-        return s3_resource.Bucket(bucket_name)
-    except botocore.exceptions.ClientError:
-        raise ValueError(f'Invalid AWS credentials or bucket {bucket_name} does not exist.')
-
-
-def _no_iam_auth_client(bucket_name: str):
-    try:
-        s3_resource = boto3.resource(
-            's3',
-            aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
-            aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
-            aws_session_token=os.environ['AWS_SESSION_TOKEN'] if 'AWS_SESSION_TOKEN' in os.environ else ''
-        )
-        s3_resource.meta.client.head_bucket(Bucket=bucket_name)
-        return boto3.client(
-            's3',
-            aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
-            aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
-            aws_session_token=os.environ['AWS_SESSION_TOKEN'] if 'AWS_SESSION_TOKEN' in os.environ else ''
-        )
-    except botocore.exceptions.ClientError:
-        raise ValueError(f'Invalid AWS credentials or bucket {bucket_name} does not exist.')
-
-
-def initialize_s3_bucket(bucket_name: str = CONFIG.AWS.BUCKET):
-    # First try to authenticate with properly configured IAM profile
-    try:
-        s3 = boto3.resource('s3')
-        s3.meta.client.head_bucket(Bucket=bucket_name)
-        return boto3.resource('s3').Bucket(bucket_name)
-
-    # If that doesn't work try to get credentials from ~/.aws/credentials file and start a new session
-    except botocore.exceptions.NoCredentialsError:
-        try:
-            return _no_iam_auth_bucket(bucket_name)
-        except KeyError:
-            APIAuth.parse_aws_credentials()
-            try:
-                return _no_iam_auth_bucket(bucket_name)
-            except KeyError:
-                raise KeyError(
-                    'Could not find AWS credentials in environment variables. Please either access s3 from an '
-                    'EC2 instance with S3 IAM permissions or use the aws CLI to authenticate and set the '
-                    'following environment variables:\n AWS_ACCESS_KEY_ID\n AWS_SECRET_ACCESS_KEY')
-
-
-def initialize_s3_client(bucket_name: str = CONFIG.AWS.BUCKET):
-    # First try to authenticate with properly configured IAM profile
-    try:
-        s3 = boto3.resource('s3')
-        s3.meta.client.head_bucket(Bucket=bucket_name)
-        return boto3.client('s3')
-
-    # If that doesn't work try to get credentials from ~/.aws/credentials file and start a new session
-    except botocore.exceptions.NoCredentialsError:
-        try:
-            return _no_iam_auth_client(bucket_name)
-        except KeyError:
-            APIAuth.parse_aws_credentials()
-            try:
-                return _no_iam_auth_client(bucket_name)
-            except KeyError:
-                raise KeyError(
-                    'Could not find AWS credentials in environment variables. Please either access s3 from an '
-                    'EC2 instance with S3 IAM permissions or use the aws CLI to authenticate and set the '
-                    'following environment variables:\n AWS_ACCESS_KEY_ID\n AWS_SECRET_ACCESS_KEY')
 
 
 def _download_task(namespace: Namespace) -> None:
@@ -178,7 +101,7 @@ class APIAuth:
                 f'--role={self.ACCOUNT_TO_ARN[aws_account]}', '--skip-prompt', '--force'
             ])
 
-            self.parse_aws_credentials()
+            parse_aws_credentials()
 
             return boto3.client(
                 's3',
@@ -190,33 +113,6 @@ class APIAuth:
         except FileNotFoundError:
             print(self.SAML2AWS_INSTALL_ERROR_STR)
             return
-
-    @staticmethod
-    def parse_aws_credentials():
-        with open(os.path.join(pathlib.Path().home(), '.aws', 'credentials'), 'r') as f:
-            start = False
-
-            f1 = False
-            f2 = False
-            f3 = False
-            for line in f.readlines():
-                if line == '[saml]\n':
-                    start = True
-                if not start:
-                    continue
-
-                if line.startswith('aws_access_key_id'):
-                    os.environ['AWS_ACCESS_KEY_ID'] = str(line.split('= ')[1].strip('\n'))
-                    f1 = True
-                elif line.startswith('aws_secret_access_key'):
-                    os.environ['AWS_SECRET_ACCESS_KEY'] = str(line.split('= ')[1].strip('\n'))
-                    f2 = True
-                elif line.startswith('aws_security_token'):
-                    os.environ['AWS_SESSION_TOKEN'] = str(line.split('= ')[1].strip('\n'))
-                    f3 = True
-
-                if f1 and f2 and f3:
-                    break
 
     def _configure_session_ttl(self, ttl: int) -> None:
         """

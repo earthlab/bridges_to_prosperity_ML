@@ -40,7 +40,7 @@ class File(ABC):
     
     @classmethod
     @abstractmethod
-    def create(cls, file_name: str) -> Type:
+    def create(cls, file_path: str) -> Type:
         """
         Tries to match the input file name with each child class's regex. Once the regex matches, an instance of that
         class created with the input file name is returned
@@ -49,8 +49,8 @@ class File(ABC):
         """
         child_classes_with_regex = find_child_classes_with_attribute(cls, 'regex')
         for child_class in child_classes_with_regex:
-            if re.match(child_class.regex, file_name) is not None:
-                return child_class.create(file_name)
+            if re.match(child_class.regex, os.path.basename(file_path)) is not None:
+                return child_class.create(os.path.basename(file_path))
         return None
 
     @property
@@ -900,7 +900,7 @@ class TrainedModel(_BaseInferenceFiles):
     def find_files(regions: List[str] = None, architecture: str = None, layers: List[str] = None, epoch: int = None,
                    ratio: float = None, tile_size: int = None, best: bool = False) -> List[str]:
         return _BaseInferenceFiles.find_files(TrainedModel._ROOT_DATA_DIR, TrainedModel.regex, regions, architecture, layers,
-                                  epoch, ratio, tile_size, best)
+                                              epoch, ratio, tile_size, best)
 
     @classmethod
     def create(cls, file_path: str):

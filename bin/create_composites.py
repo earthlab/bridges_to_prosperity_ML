@@ -39,9 +39,12 @@ def download_optical_composites(region: str, district: str, s3_bucket_name: str,
     files_to_download = OpticalComposite.filter_files(s3_files, region, district, bands, mgrs)
     
     parallel_inputs = []
-    for i, s3_file_path in enumerate(np.array_split(files_to_download, cores)):
-        file_class = OpticalComposite.create(s3_file_path)
-        parallel_inputs.append((s3_file_path, file_class.archive_path, str(i + 1), s3_bucket_name))
+    for i, s3_file_path_group in enumerate(np.array_split(files_to_download, cores)):
+        group_params = []
+        for s3_file_path in s3_file_path_group:
+            file_class = OpticalComposite.create(s3_file_path)
+            group_params.append((s3_file_path, file_class.archive_path, str(i + 1), s3_bucket_name))
+        parallel_inputs.append(group_params)
     process_map(
         s3_download_task,
         parallel_inputs,

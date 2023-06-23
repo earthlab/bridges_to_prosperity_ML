@@ -5,51 +5,14 @@ Downloads are done in parallel by default but can be changed with cores paramete
 """
 import argparse
 import multiprocessing as mp
-import os
-from typing import List, Tuple
 
 import numpy as np
-from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
 from src.utilities.config_reader import CONFIG
-from src.utilities.aws import initialize_s3_bucket
+from src.utilities.aws import list_s3_files, s3_download_task
 from file_types import OpticalComposite, MultiVariateComposite, InferenceResultsCSV, InferenceResultsTarfile, TrainedModel, File
 
-
-
-def s3_download_task(location_request_info: Tuple[str, int, int, str]) -> None:
-    """
-    Downloads file from s3 storage given s3 path and local destination path.
-    Args:
-        location_request_info (tuple):
-            location_path (str): Path to composite object in s3 storage relative to the s3 bucket name
-            composite_size (int): Size of the composite object in bytes
-            destination (str): Local path where the downloaded composite object will be written to
-            position (int): Position in the download queue
-            bucket_name (str): Name of the s3 bucket that the composite object is in
-    """
-    bucket = initialize_s3_bucket(bucket_name)
-    for file_path, destination, position, bucket_name in location_request_info:
-        if os.path.exists(destination):
-            return 
-        obj = bucket.objects.filter(Prefix=file_path)[0]
-        with tqdm(total=int(obj.size), unit='B', unit_scale=True, desc=file_path, leave=False,
-                  position=int(position)) as pbar:
-            bucket.download_file(Key=file_path, Filename=destination,
-                                 Callback=lambda bytes_transferred: pbar.update(bytes_transferred))
-    return
-
-
-def list_s3_files(s3_dir: str, s3_bucket_name: str) -> List[str]:
-    """ 
-    """
-    s3 = initialize_s3_bucket(s3_bucket_name)
-    files = []
-    for obj in s3.objects.filter(Prefix=s3_dir):
-        files.append(obj.key)
-    
-    return files
 
 
 if __name__ == "__main__":

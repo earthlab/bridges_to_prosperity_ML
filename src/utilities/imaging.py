@@ -241,7 +241,11 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
                         ),
                         indexes=1
                     )
-                os.remove(slice_file.archive_path)
+
+        for slice_file in slice_files:
+            os.remove(slice_file.archive_path)
+
+        optical_composite_band_files.append(single_band_composite)
 
     # Combine Bands
     n_bands = len(optical_composite_band_files)

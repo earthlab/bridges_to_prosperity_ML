@@ -35,18 +35,6 @@ def _composite_task(task_args: Namespace):
     return None
 
 
-def split_list(lst, n):
-    # create a list of sublists of size n
-    sublists = [lst[i:i + n] for i in range(0, len(lst), n)]
-
-    # handle the remainder if the final sublist is smaller than n
-    if len(sublists[-1]) < n:
-        last = sublists.pop()
-        sublists[-1].extend(last)
-
-    return sublists
-
-
 def sentinel2_to_composite(region: str, district: str, slices: int, n_cores: int, bands: List[str], 
                            mgrs: List[str] = None):
     if mgrs is not None:
@@ -77,7 +65,7 @@ def sentinel2_to_composite(region: str, district: str, slices: int, n_cores: int
             _composite_task(arg)
     else:
         with mp.Pool(n_cores) as pool:
-            parallel_batches = split_list(args, n_cores) if n_cores > len(args) else args
+            parallel_batches = np.array_split(args, n_cores)
             print(parallel_batches)
             print(n_cores)
             print('\tUsing multiprocessing...')
@@ -106,4 +94,4 @@ def create_composites(region: str, bands: List[str], buffer: int, slices: int, n
         for date in dates:
             download_sentinel2(region, district, bounds, date[0], date[1], buffer, bands)
 
-        sentinel2_to_composite(region, district, slices, n_cores, bands, region, mgrs=mgrs)
+        sentinel2_to_composite(region, district, slices, n_cores, bands, mgrs)

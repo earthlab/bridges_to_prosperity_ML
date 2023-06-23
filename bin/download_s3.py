@@ -74,6 +74,7 @@ if __name__ == "__main__":
     parallel_inputs = []
     for i, s3_file_path in enumerate(np.array_split(files_to_download, args.cores)):
         file_class = File.create(s3_file_path)
+        file_class.create_archive_dir()
         parallel_inputs.append((s3_file_path, file_class.archive_path, str(i + 1), args.s3_bucket_name))
     process_map(
         s3_download_task,

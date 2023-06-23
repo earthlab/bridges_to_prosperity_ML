@@ -235,4 +235,3 @@ dependencies:
     - tzdata==2023.3
     - urllib3==1.26.15
     - xarray==2023.4.2
-prefix: /home/ec2-user/anaconda3/envs/b2p

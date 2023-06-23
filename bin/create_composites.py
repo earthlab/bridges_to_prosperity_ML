@@ -43,6 +43,7 @@ def download_optical_composites(region: str, district: str, s3_bucket_name: str,
         group_params = []
         for s3_file_path in s3_file_path_group:
             file_class = OpticalComposite.create(s3_file_path)
+            file_class.create_archive_dir()
             group_params.append((s3_file_path, file_class.archive_path, str(i + 1), s3_bucket_name))
         parallel_inputs.append(group_params)
     process_map(
@@ -93,11 +94,13 @@ def combine_bands(source_file_path: str, target_file_path: str, new_bands: int) 
 def mgrs_task(args: Namespace) -> None:
     """
     Task to be run in parallel for creating a multivariate composite for a single region, district, and mgrs tile. 
-    Multivariate composites are comprised of Sentinel2 red, green, blue, infrared, osm water, osm admin boundaries, elevation, and slope data bands respectively
+    Multivariate composites are comprised of Sentinel2 red, green, blue, infrared, osm water, osm admin boundaries,
+    elevation, and slope data bands respectively
     Args:
         args.region (str): Region to create the multivariate tile for 
         args.district (str): District to create the multivariate tile for
-        args.four_band_optical (str): Path to the four band (r,g,b,ir) optical composite to be used as the base of the multivariate composite
+        args.four_band_optical (str): Path to the four band (r,g,b,ir) optical composite to be used as the base of the
+         multivariate composite
     """
     elevation_api = ElevationAPI()
     four_band_optical = OpticalComposite.create(args.four_band_optical)
@@ -146,18 +149,25 @@ def mgrs_task(args: Namespace) -> None:
     combine_bands(mgrs_slope_outfile.archive_path, multivariate_file.archive_path, new_bands=1)  # Band 8
 
 
-def create_multivariate_compsites(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORES, slices: int = 6,
-                                  regions: List[str] = None, districts: List[str] = None, mgrs: List[str] = None) -> None:
+def create_multivariate_composites(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores: int = CORES, slices: int = 6,
+                                   regions: List[str] = None, districts: List[str] = None,
+                                   mgrs: List[str] = None) -> None:
     """
-    Creates multivariate composites comprised of Sentinel2 red, green, blue, infrared, osm water, osm admin boundaries, elevation, and slope data respectively for a single region.
+    Creates multivariate composites comprised of Sentinel2 red, green, blue, infrared, osm water, osm admin boundaries,
+     elevation, and slope data respectively for a single region.
     Specific districts and mgrs tiles can be specified.
     Args:
-        s3_bucket_name (str): Name of the s3 bucket with any potentially existing sentinel2 optical composites. Default is config bucket.
+        s3_bucket_name (str): Name of the s3 bucket with any potentially existing sentinel2 optical composites. Default
+         is config bucket.
         cores (int): Number of cores to use for parallel processing. Default is cpu_count - 1
-        slices (int): Number of slices to use when creating optical composites. The more slices the less memory will be used at a time
-        regions (list): The regions to make the composites for. Must be in the regions_info.yaml file. Defualt is all the regions in the regions_info.yaml file
-        districts (list): The districts to make the composites for in each region. Must be in the regions_info.yaml file for at least on region. Defualt is all districts for every specified region
-        mgrs (list): The military grid tiles to make the composites for. Defualt is all the mgrs tiles for each specified region / district combination
+        slices (int): Number of slices to use when creating optical composites. The more slices the less memory will be
+         used at a time
+        regions (list): The regions to make the composites for. Must be in the regions_info.yaml file. Default is all
+         the regions in the regions_info.yaml file
+        districts (list): The districts to make the composites for in each region. Must be in the regions_info.yaml file
+         for at least on region. Default is all districts for every specified region
+        mgrs (list): The military grid tiles to make the composites for. Default is all the mgrs tiles for each
+         specified region / district combination
     """
     with open(REGION_FILE_PATH, 'r') as f:
         region_info = yaml.safe_load(f)
@@ -183,16 +193,16 @@ def create_multivariate_compsites(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores
         mgrs_grids = sentinel2_api.bounds_to_mgrs(bbox) if mgrs is None else mgrs
 
         # Load any 4-band optical composites from S3
-        download_optical_composites(region=region, district=district, s3_bucket_name=s3_bucket_name, cores=cores, mgrs=mgrs_grids,
-                                    bands=['B02', 'B03', 'B04', 'B08'])
+        download_optical_composites(region=region, district=district, s3_bucket_name=s3_bucket_name, cores=cores,
+                                    mgrs=mgrs_grids, bands=['B02', 'B03', 'B04', 'B08'])
         
         # Load any RGB optical composites from S3
-        download_optical_composites(region=region, district=district, s3_bucket_name=s3_bucket_name, cores=cores, mgrs=mgrs_grids,
-                                    bands=['B02', 'B03', 'B04'])
+        download_optical_composites(region=region, district=district, s3_bucket_name=s3_bucket_name, cores=cores,
+                                    mgrs=mgrs_grids, bands=['B02', 'B03', 'B04'])
         
         # Load any IR optical composites from S3
-        download_optical_composites(region=region, district=district, s3_bucket_name=s3_bucket_name, cores=cores, mgrs=mgrs_grids,
-                                    bands=['B08'])
+        download_optical_composites(region=region, district=district, s3_bucket_name=s3_bucket_name, cores=cores,
+                                    mgrs=mgrs_grids, bands=['B08'])
 
         task_args = []
         for mgrs_grid in mgrs_grids:
@@ -209,19 +219,20 @@ def create_multivariate_compsites(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores
                 ir_optical = OpticalComposite(region, district, military_grid=mgrs_grid, bands=['B08'])
 
                 if not rgb_optical.exists and not ir_optical.exists:
-                    create_optical_composites(region, bands=['B02', 'B03', 'B04', 'B08'], mgrs=mgrs_grid,
+                    create_optical_composites(region, bands=['B02', 'B03', 'B04', 'B08'], mgrs=[mgrs_grid],
                                               districts=[district], buffer=0, slices=slices, n_cores=cores)
                 else:
                     if not rgb_optical.exists:
-                        create_optical_composites(region, bands=['B02', 'B03', 'B04'], mgrs=mgrs_grid,
+                        create_optical_composites(region, bands=['B02', 'B03', 'B04'], mgrs=[mgrs_grid],
                                                   districts=[district], buffer=0, slices=slices, n_cores=cores)
                     else:
-                        create_optical_composites(region, bands=['B08'], mgrs=mgrs_grid, districts=[district], buffer=0,
-                                                  slices=slices, n_cores=cores)
+                        create_optical_composites(region, bands=['B08'], mgrs=[mgrs_grid], districts=[district],
+                                                  buffer=0, slices=slices, n_cores=cores)
                     combine_bands(rgb_optical.archive_path, four_band_optical.archive_path, 3)
                     combine_bands(ir_optical.archive_path, four_band_optical.archive_path, 1)
 
-            task_args.append(Namespace(four_band_optical=four_band_optical.archive_path, region=region, district=district))
+            task_args.append(Namespace(four_band_optical=four_band_optical.archive_path, region=region,
+                                       district=district))
 
         process_map(
             mgrs_task,
@@ -232,15 +243,22 @@ def create_multivariate_compsites(s3_bucket_name: str = CONFIG.AWS.BUCKET, cores
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--regions', '-r', type=str, required=False, nargs='+', help='Name of the composite region (Ex Uganda). Default is all regions in region_info.yaml file')
-    parser.add_argument('--districts', '-d', type=str, nargs='+', required=False, help='Name of the composite district(s) (Ex. Fafan Ibanda). Default is all districts for region.')
-    parser.add_argument('--mgrs', '-m', type=str, nargs='+', required=False, help='Name of the mgrs tiles to make tiles for. Default is all mgrs for each district')
-    parser.add_argument('--s3_bucket_name', '-b', required=False, default=CONFIG.AWS.BUCKET, type=str, help='Name of s3 bucket to search for composites in. Default is from project config, which is currently set to {CONFIG.AWS.BUCKET}')
+    parser.add_argument('--regions', '-r', type=str, required=False, nargs='+',
+                        help='Name of the composite region (Ex Uganda). Default is all regions in region_info.yaml'
+                             ' file')
+    parser.add_argument('--districts', '-d', type=str, nargs='+', required=False,
+                        help='Name of the composite district(s) (Ex. Fafan Ibanda). Default is all districts for '
+                             'region.')
+    parser.add_argument('--mgrs', '-m', type=str, nargs='+', required=False,
+                        help='Name of the mgrs tiles to make tiles for. Default is all mgrs for each district')
+    parser.add_argument('--s3_bucket_name', '-b', required=False, default=CONFIG.AWS.BUCKET, type=str,
+                        help='Name of s3 bucket to search for composites in. Default is from project config, which is '
+                             'currently set to {CONFIG.AWS.BUCKET}')
     parser.add_argument('--cores', required=False, type=int, default=mp.cpu_count() - 1,
                         help='Number of cores to use when making tiles in parallel. Default is cpu_count - 1')
     parser.add_argument('--slices', required=False, type=int, default=12,
                         help='Number of slices to use when making composites. Default is 12')
     args = parser.parse_args()
 
-    create_multivariate_compsites(s3_bucket_name=args.s3_bucket_name, cores=args.cores, slices=args.slices, regions=args.regions,
-                                  districts=args.districts, mgrs=args.mgrs)
+    create_multivariate_composites(s3_bucket_name=args.s3_bucket_name, cores=args.cores, slices=args.slices,
+                                   regions=args.regions, districts=args.districts, mgrs=args.mgrs)

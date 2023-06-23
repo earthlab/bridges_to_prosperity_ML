@@ -33,7 +33,6 @@ def _download_task(namespace: Namespace) -> None:
         Each value in the namespace must be a pickle-izable type (i.e. str).
     """
     s3 = initialize_s3_client(CONFIG.AWS.BUCKET)
-    os.makedirs(namespace.outdir, exist_ok=True)
     s3.download_file(namespace.bucket_name, namespace.available_file,
                      namespace.dest,
                      ExtraArgs={'RequestPayer': 'requester'}
@@ -208,18 +207,15 @@ class SinergiseSentinelAPI:
         bounds[3] += buffer
 
         available_files = self._find_available_files(bounds, start_date, end_date, bands)
-        total_data = 0
-        for file in available_files:
-            total_data += file[1]
-        total_data /= 1E9
 
         args = []
+        total_data = 0
         for file_info in available_files:
             file_path = file_info[0]
             if '/preview/' in file_path:
                 continue
 
-            created_file_path = f"{region}_{district}_{file_path.replace('_qi_', '').replace('/', '_').replace('tile_', '')}"
+            created_file_path = f"{region}_{district}_{file_path.replace('_qi_', '').replace('/', '_').replace('tiles_', '')}"
 
             file = Sentinel2Tile.create(created_file_path)
             if file is None:
@@ -232,12 +228,15 @@ class SinergiseSentinelAPI:
             if file.exists:
                 continue
 
+            total_data += file_info[1]
+
             args.append(Namespace(available_file=file_path, bucket_name=self._bucket_name, dest=file.archive_path))
 
+        total_data /= 1E9
         print(f'Found {len(args)} files for download. Total size of files is'
               f' {round(total_data, 2)}GB and estimated cost will be ${round(0.09 * total_data, 2)}'
               )
-        # if proceed == 'y':
+
         with mp.Pool(mp.cpu_count() - 1) as pool:
             for _ in tqdm.tqdm(pool.imap_unordered(_download_task, args), total=len(args)):
                 pass

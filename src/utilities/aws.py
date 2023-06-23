@@ -49,8 +49,10 @@ def s3_download_task(location_request_info: Tuple[str, int, int, str]) -> None:
             return 
         if bucket is None:
             bucket = initialize_s3_bucket(bucket_name)
-        obj = bucket.objects.filter(Prefix=file_path)[0]
-        with tqdm(total=int(obj.size), unit='B', unit_scale=True, desc=file_path, leave=False,
+        size = None
+        for obj in bucket.objects.filter(Prefix=file_path):
+            size = obj.size
+        with tqdm(total=int(size), unit='B', unit_scale=True, desc=file_path, leave=False,
                   position=int(position)) as pbar:
             bucket.download_file(Key=file_path, Filename=destination,
                                  Callback=lambda bytes_transferred: pbar.update(bytes_transferred))

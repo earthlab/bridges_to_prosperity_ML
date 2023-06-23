@@ -127,8 +127,8 @@ def nan_clouds(pixels, cloud_channels, max_pixel_val: float = MAX_RGB_VAL):
     return cp
 
 
-def create_optical_composite_from_s2(region: str, district: str, coord: str, bands: list, dtype: type, num_slices: int = 12,
-                                     pbar: bool = True) -> str:
+def create_optical_composite_from_s2(region: str, district: str, coord: str, bands: list, dtype: type,
+                                     num_slices: int = 12, pbar: bool = True) -> str:
     """
     Creates a cloud cleaned optical composite from a set of sentinel 2 files. Can combine multiple optical bands
     Args:
@@ -151,11 +151,12 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
     # Loop through each band, getting a median estimate for each
     crs = None
     transform = None
-    optical_composite_band_files: List[OpticalComposite] =[]
+    optical_composite_band_files: List[OpticalComposite] = []
     for band in tqdm(bands, desc=f'Processing {coord}', leave=True, position=1, total=len(bands), disable=pbar):
         band_files = Sentinel2Tile.find_files(region=region, district=district, band=band, mgrs=coord)
         if not band_files:
-            raise LookupError(f'No sentinel2 files found for region: {region} district: {district} band: {band} mgrs: {mgrs}')
+            raise LookupError(f'No sentinel2 files found for region: {region} district: {district} band: {band} '
+                              f'mgrs: {mgrs}')
 
         crs = None
         transform = None
@@ -163,15 +164,20 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
         g_ncols = None
         for file in band_files:
             with rasterio.open(file, 'r', driver='JP2OpenJPEG') as rf:
-                g_nrows, g_ncols = rf.meta['width'], rf.meta['height']
-                crs = rf.crs
-                transform = rf.transform
+                g_nrows = rf.meta['width'] if g_nrows is None else g_nrows
+                g_ncols = rf.meta['height'] if g_ncols is None else g_ncols
+                crs = rf.crs if crs is None else crs
+                transform = rf.transform if transform is None else transform
             if crs is not None and transform is not None and g_nrows is not None and g_ncols is not None:
                 break
         
         if crs is None or transform is None or g_nrows is None or g_ncols is None:
-            raise LookupError(f'Could not determine the following projection attributes from the available sentinel2 files in {os.path.dirname(file)}: \n' \
-                              f'{"CRS" if crs is None else ""} {"Transform" if transform is None else ""} {"Number of rows" if g_nrows is None else ""} {"Number of columns" if g_ncols is None else ""}')
+            raise LookupError(f'Could not determine the following projection attributes from the available '
+                              f'sentinel2 files in {os.path.dirname(os.path.dirname(file))}: \n' \
+                              f'{"CRS" if crs is None else ""} '
+                              f'{"Transform" if transform is None else ""} '
+                              f'{"Number of rows" if g_nrows is None else ""} '
+                              f'{"Number of columns" if g_ncols is None else ""}')
 
         slice_width = g_nrows / num_slices
         slice_end_pts = [int(i) for i in np.arange(0, g_nrows + slice_width, slice_width)]
@@ -180,7 +186,7 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
 
         single_band_composite = OpticalComposite(region, district, coord, [band])
         if single_band_composite.exists:
-            optical_composite_band_files.append(single_band_composite.archive_path)
+            optical_composite_band_files.append(single_band_composite)
             continue
         single_band_composite.create_archive_dir()
 
@@ -212,8 +218,8 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
             median_corrected = np.nanmedian(corrected_stack, axis=0, overwrite_input=True)
             median_corrected = median_corrected.reshape(cloud_correct_imgs[0].shape)
 
-            with rasterio.open(slice_file.archive_path, 'w', driver='Gtiff', width=g_ncols, height=g_nrows, count=1, crs=crs,
-                               transform=transform, dtype=dtype) as wf:
+            with rasterio.open(slice_file.archive_path, 'w', driver='Gtiff', width=g_ncols, height=g_nrows, count=1,
+                               crs=crs, transform=transform, dtype=dtype) as wf:
                 wf.write(median_corrected.astype(dtype), 1)
                 slice_files.append(slice_file)
             # release mem
@@ -223,8 +229,8 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
             del corrected_stack
 
         # Combine slices
-        with rasterio.open(single_band_composite.archive_path, 'w', driver='GTiff', width=g_ncols, height=g_nrows, count=1, crs=crs,
-                            transform=transform, dtype=dtype) as wf:
+        with rasterio.open(single_band_composite.archive_path, 'w', driver='GTiff', width=g_ncols, height=g_nrows,
+                           count=1, crs=crs, transform=transform, dtype=dtype) as wf:
             for slice_file in slice_files:
                 with rasterio.open(slice_file.archive_path, 'r', driver='GTiff') as rf:
                     wf.write(

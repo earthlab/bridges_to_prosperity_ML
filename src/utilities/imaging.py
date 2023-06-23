@@ -263,7 +263,7 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
         for band_file in tqdm(optical_composite_band_files, total=n_bands, desc='Combining bands...', leave=False,
                               position=1, disable=pbar):
             j = BANDS_TO_IX[band_file.bands[0]]
-            with rasterio.open(str(band_file.archive_path), 'r', driver='GTiff') as rf:
+            with rasterio.open(f"{band_file.archive_path}", 'r', driver='GTiff') as rf:
                 wf.write(rf.read(1), indexes=j)
             os.remove(band_file.archive_path)
 

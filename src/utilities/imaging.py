@@ -128,7 +128,7 @@ def nan_clouds(pixels, cloud_channels, max_pixel_val: float = MAX_RGB_VAL):
 
 
 def create_optical_composite_from_s2(region: str, district: str, coord: str, bands: list, dtype: type,
-                                     num_slices: int = 12, pbar: bool = True) -> str:
+                                     num_slices: int = 12) -> str:
     """
     Creates a cloud cleaned optical composite from a set of sentinel 2 files. Can combine multiple optical bands
     Args:
@@ -137,8 +137,8 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
         coord (str): The military grid coordinate (35MGR, 36MTV, etc.) within the district to create the composite for 
         bands (list): The optical bands for which to create the composite for (B02, B03, B08) etc.
         dtype (type): The data type to save the band data as
-        num_slices (int): The amount of slices to split the composite up into while building it. More slices will use less RAM
-        pbar (bool): If true then a progress bar will be shown
+        num_slices (int): The amount of slices to split the composite up into while building it.
+        More slices will use less RAM
     Returns:
         optical_composite_file.archive_path (str): Path to the output optical composite 
     """
@@ -152,7 +152,7 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
     crs = None
     transform = None
     optical_composite_band_files: List[OpticalComposite] = []
-    for band in tqdm(bands, desc=f'Processing {coord}', leave=True, position=1, total=len(bands), disable=pbar):
+    for band in tqdm(bands, desc=f'Processing {coord}', leave=True, position=1, total=len(bands)):
         band_files = Sentinel2Tile.find_files(region=region, district=district, band=band, mgrs=coord)
         if not band_files:
             raise LookupError(f'No sentinel2 files found for region: {region} district: {district} band: {band} '
@@ -192,8 +192,7 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
 
         # Median across time, slicing if necessary
         slice_files: List[OpticalCompositeSlice] = []
-        for k, row_bound in tqdm(enumerate(slice_bounds), desc=f'band={band}', total=num_slices, position=2,
-                                 disable=pbar):
+        for k, row_bound in tqdm(enumerate(slice_bounds), desc=f'band={band}', total=num_slices, position=2):
             slice_file = OpticalCompositeSlice(region, district, coord, band, row_bound[0], row_bound[1])
             slice_file.create_archive_dir()
             if slice_file.exists:
@@ -201,7 +200,7 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
                 continue
 
             cloud_correct_imgs = []
-            for img_path in tqdm(band_files, desc=f'slice {k + 1}', leave=False, position=3, disable=pbar):
+            for img_path in tqdm(band_files, desc=f'slice {k + 1}', leave=False, position=3):
                 # Get data from files
                 pixels = get_img_from_file(img_path, g_ncols, dtype, row_bound)
                 date_dir = os.path.dirname(img_path)
@@ -261,7 +260,9 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
             dtype=dtype
     ) as wf:
         for band_file in tqdm(optical_composite_band_files, total=n_bands, desc='Combining bands...', leave=False,
-                              position=1, disable=pbar):
+                              position=1):
+            if optical_composite_file.archive_path == band_file.archive_path:
+                break
             j = BANDS_TO_IX[band_file.bands[0]]
             with rasterio.open(f"{band_file.archive_path}", 'r', driver='GTiff') as rf:
                 wf.write(rf.read(1), indexes=j)

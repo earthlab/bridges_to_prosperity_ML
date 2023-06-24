@@ -1,4 +1,5 @@
 from src.utilities.config_reader import CONFIG
+from definitions import B2P_DIR
 
 import os
 from typing import List, Type, Tuple
@@ -7,17 +8,19 @@ import pathlib
 from tqdm import tqdm
 import botocore
 import boto3
-
+import json
+import yaml
 
 
 def upload_files(files: List[Type], s3_bucket_name: str) -> None:
     """
-    Uploads all the multivariate composite files found to s3 storage. Region, district, and military grid can be specified to narrow the search
+    Uploads all the multivariate composite files found to s3 storage. Region, district, and military grid can be
+     specified to narrow the search
     Args:
-        s3_bucket_name (str): Name of the AWS S3 bucket name to upload the files to. Defualts to bucket in project configuration
-        region (str): Name of the region to upload the composites for. If none specified, all regions are uploaded
-        district (str): Name of the district to upload. If none specified, all districts are uploaded
-        mgrs (list): List of military grid coordinates to upload. If none then all mgrs are uploaded
+        files (list): List of local file paths to upload to s3
+        s3_bucket_name (str): Name of the AWS S3 bucket name to upload the files to. Defaults to bucket in project
+         configuration
+
     """
     s3 = initialize_s3_bucket(s3_bucket_name)
     for file_object in tqdm(files, leave=True, position=0):
@@ -104,6 +107,9 @@ def _no_iam_auth_client(bucket_name: str):
 
 
 def initialize_s3_bucket(bucket_name: str = CONFIG.AWS.BUCKET):
+    if bucket_name == '':
+        configure_s3_bucket_name()
+
     # First try to authenticate with properly configured IAM profile
     try:
         s3 = boto3.resource('s3')
@@ -125,7 +131,21 @@ def initialize_s3_bucket(bucket_name: str = CONFIG.AWS.BUCKET):
                     'following environment variables:\n AWS_ACCESS_KEY_ID\n AWS_SECRET_ACCESS_KEY')
 
 
+def configure_s3_bucket_name():
+    bucket_name = input('Please input AWS s3 bucket name to configure to project:')
+    with open(os.path.join(B2P_DIR, 'config.yaml'), 'r') as f:
+        configurations = yaml.safe_load(f)
+
+    configurations['aws']['bucket'] = json.dumps(bucket_name).replace('"', "")
+
+    with open(os.path.join(B2P_DIR, 'config.yaml'), 'w') as f:
+        yaml.dump(configurations, f)
+
+
 def initialize_s3_client(bucket_name: str = CONFIG.AWS.BUCKET):
+    if bucket_name == '':
+        configure_s3_bucket_name()
+
     # First try to authenticate with properly configured IAM profile
     try:
         s3 = boto3.resource('s3')
@@ -148,27 +168,27 @@ def initialize_s3_client(bucket_name: str = CONFIG.AWS.BUCKET):
             
 
 def parse_aws_credentials():
-        with open(os.path.join(pathlib.Path().home(), '.aws', 'credentials'), 'r') as f:
-            start = False
+    with open(os.path.join(pathlib.Path().home(), '.aws', 'credentials'), 'r') as f:
+        start = False
 
-            f1 = False
-            f2 = False
-            f3 = False
-            for line in f.readlines():
-                if line == '[saml]\n':
-                    start = True
-                if not start:
-                    continue
+        f1 = False
+        f2 = False
+        f3 = False
+        for line in f.readlines():
+            if line == '[saml]\n':
+                start = True
+            if not start:
+                continue
 
-                if line.startswith('aws_access_key_id'):
-                    os.environ['AWS_ACCESS_KEY_ID'] = str(line.split('= ')[1].strip('\n'))
-                    f1 = True
-                elif line.startswith('aws_secret_access_key'):
-                    os.environ['AWS_SECRET_ACCESS_KEY'] = str(line.split('= ')[1].strip('\n'))
-                    f2 = True
-                elif line.startswith('aws_security_token'):
-                    os.environ['AWS_SESSION_TOKEN'] = str(line.split('= ')[1].strip('\n'))
-                    f3 = True
+            if line.startswith('aws_access_key_id'):
+                os.environ['AWS_ACCESS_KEY_ID'] = str(line.split('= ')[1].strip('\n'))
+                f1 = True
+            elif line.startswith('aws_secret_access_key'):
+                os.environ['AWS_SECRET_ACCESS_KEY'] = str(line.split('= ')[1].strip('\n'))
+                f2 = True
+            elif line.startswith('aws_security_token'):
+                os.environ['AWS_SESSION_TOKEN'] = str(line.split('= ')[1].strip('\n'))
+                f3 = True
 
-                if f1 and f2 and f3:
-                    break
+            if f1 and f2 and f3:
+                break

@@ -234,11 +234,14 @@ def create_multivariate_composites(s3_bucket_name: str = CONFIG.AWS.BUCKET, core
             task_args.append(Namespace(four_band_optical=four_band_optical.archive_path, region=region,
                                        district=district))
 
-        process_map(
-            mgrs_task,
-            task_args,
-            max_workers=cores
-        )
+        for arg in task_args:
+            mgrs_task(arg)
+
+        # process_map(
+        #     mgrs_task,
+        #     task_args,
+        #     max_workers=cores
+        # )
 
 
 if __name__ == "__main__":

@@ -29,8 +29,7 @@ def _composite_task(task_args: Namespace):
         task_args.coord,
         task_args.bands,
         np.float32,
-        task_args.slices,
-        task_args.n_cores > 1
+        task_args.slices
     )
     return None
 

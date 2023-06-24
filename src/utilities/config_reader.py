@@ -16,7 +16,7 @@ class CONFIG:
     configuration_dict = configurations
 
     class AWS:
-        BUCKET = configurations['aws']['bucket']
+        BUCKET = f"{configurations['aws']['bucket']}"
 
     class TORCH:
         class INFERENCE:

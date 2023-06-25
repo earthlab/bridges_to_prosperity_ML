@@ -30,7 +30,7 @@ class TestFileType(TestFileTypes):
             OpticalComposite(region='Uganda', district='Kibaale', military_grid='35MRV',
                                                     bands=['B03', 'B02', 'B04']),
             OpticalCompositeSlice(region='Uganda', district='Kibaale', military_grid='35MRV',
-                    band='B03', left_bound=0, right_bound=500),
+                    band='B03', top_bound=0, bottom_bound=500),
             MultiVariateComposite(region='Uganda', district='Kibaale', military_grid='35MRV'),
             Sentinel2Tile(region='Uganda', district='Kafefe', utm_code='35', latitude_band='MR',
                                                 square='V', year=2020, month=1, day=1, band='B02'),
@@ -203,28 +203,28 @@ class TestOpticalCompositeSlice(TestFileTypes):
 
     def test_init(self):
         optical_composite_slice = OpticalCompositeSlice(region='Uganda', district='Kibaale', military_grid='35MRV',
-                                                        band='B03', left_bound=0, right_bound=500)
+                                                        band='B03', top_bound=0, bottom_bound=500)
         self.assertIsNotNone(optical_composite_slice)
 
         self.assertEqual(optical_composite_slice.region, 'Uganda')
         self.assertEqual(optical_composite_slice.district, 'Kibaale')
         self.assertEqual(optical_composite_slice.mgrs, '35MRV')
         self.assertEqual(optical_composite_slice.band, 'B03')
-        self.assertEqual(optical_composite_slice.left_bound, 0)
-        self.assertEqual(optical_composite_slice.right_bound, 500)
+        self.assertEqual(optical_composite_slice.top_bound, 0)
+        self.assertEqual(optical_composite_slice.bottom_bound, 500)
 
     def test_name(self):
         optical_composite_slice = OpticalCompositeSlice(region='Uganda', district='Kibaale', military_grid='35MRV',
-                                                        band='B03', left_bound=0, right_bound=500)
+                                                        band='B03', top_bound=0, bottom_bound=500)
         self.assertEqual(optical_composite_slice.name, 'optical_composite_slice_Uganda_Kibaale_35MRV_B03_0_500.tif')
 
         optical_composite_slice = OpticalCompositeSlice(region='Rwanda', district='all', military_grid='36MRK',
-                                                        band='B01', left_bound=1000, right_bound=1500)
+                                                        band='B01', top_bound=1000, bottom_bound=1500)
         self.assertEqual(optical_composite_slice.name, 'optical_composite_slice_Rwanda_all_36MRK_B01_1000_1500.tif')
 
     def test_archive_path(self):
         optical_composite_slice = OpticalCompositeSlice(region='Uganda', district='Kibaale', military_grid='35MRV',
-                                                        band='B03', left_bound=0, right_bound=500)
+                                                        band='B03', top_bound=0, bottom_bound=500)
         self.assertEqual(optical_composite_slice.archive_path, os.path.join(
             self.TEST_DATA_DIR, 'composites', 'Uganda', 'Kibaale', '35MRV',
             'optical_composite_slice_Uganda_Kibaale_35MRV_B03_0_500.tif'))
@@ -232,15 +232,15 @@ class TestOpticalCompositeSlice(TestFileTypes):
     def test_create(self):
         # Round trip
         optical_composite_slice = OpticalCompositeSlice(region='Uganda', district='Kibaale', military_grid='35MRV',
-                                                        band='B03', left_bound=0, right_bound=500)
+                                                        band='B03', top_bound=0, bottom_bound=500)
         optical_composite_create_name = OpticalCompositeSlice.create(optical_composite_slice.name)
         self.assertIsInstance(optical_composite_create_name, OpticalCompositeSlice)
         self.assertEqual(optical_composite_create_name.region, 'Uganda')
         self.assertEqual(optical_composite_create_name.district, 'Kibaale')
         self.assertEqual(optical_composite_create_name.mgrs, '35MRV')
         self.assertEqual(optical_composite_create_name.band, 'B03')
-        self.assertEqual(optical_composite_create_name.left_bound, 0)
-        self.assertEqual(optical_composite_create_name.right_bound, 500)
+        self.assertEqual(optical_composite_create_name.top_bound, 0)
+        self.assertEqual(optical_composite_create_name.bottom_bound, 500)
         self.assertEqual(optical_composite_create_name.name, optical_composite_slice.name)
 
         optical_composite_create_path = OpticalCompositeSlice.create(optical_composite_slice.archive_path)
@@ -249,8 +249,8 @@ class TestOpticalCompositeSlice(TestFileTypes):
         self.assertEqual(optical_composite_create_path.district, 'Kibaale')
         self.assertEqual(optical_composite_create_path.mgrs, '35MRV')
         self.assertEqual(optical_composite_create_path.band, 'B03')
-        self.assertEqual(optical_composite_create_path.left_bound, 0)
-        self.assertEqual(optical_composite_create_path.right_bound, 500)
+        self.assertEqual(optical_composite_create_path.top_bound, 0)
+        self.assertEqual(optical_composite_create_path.bottom_bound, 500)
         self.assertEqual(optical_composite_create_path.name, optical_composite_slice.name)
 
         self.assertIsNone(OpticalComposite.create('off_nominal.tif'))

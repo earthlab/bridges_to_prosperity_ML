@@ -122,20 +122,31 @@ def mgrs_task(args: Namespace) -> None:
         elevation_api.download_bbox(mgrs_elevation_outfile.archive_path, mgrs_bbox, buffer=5000)
         up_sample_elevation = True
 
-    # Calculate slope from elevation gradient before up-sampling elevation data
     mgrs_slope_outfile = SlopeFile(region, district, four_band_optical.mgrs)
     mgrs_slope_outfile.create_archive_dir()
-    if not mgrs_slope_outfile.exists:
-        elevation_to_slope(mgrs_elevation_outfile.archive_path, mgrs_slope_outfile.archive_path)
-        elevation_api.lat_lon_to_meters(mgrs_slope_outfile.archive_path)
-        high_res_slope = subsample_geo_tiff(mgrs_slope_outfile.archive_path, args.four_band_optical)
-        numpy_array_to_raster(mgrs_slope_outfile.archive_path, high_res_slope, geo_transform, projection)
 
-    # Up-sample elevation if it was just made
-    if up_sample_elevation:
-        elevation_api.lat_lon_to_meters(mgrs_elevation_outfile.archive_path)
-        high_res_elevation = subsample_geo_tiff(mgrs_elevation_outfile.archive_path, args.four_band_optical)
-        numpy_array_to_raster(mgrs_elevation_outfile.archive_path, high_res_elevation, geo_transform, projection)
+    # If the elevation file does not exist then there is no elevation. This is the case where the region is
+    #  entirely over water
+    if mgrs_elevation_outfile.exists:
+        # Calculate slope from elevation gradient before up-sampling elevation data
+        if not mgrs_slope_outfile.exists:
+            elevation_to_slope(mgrs_elevation_outfile.archive_path, mgrs_slope_outfile.archive_path)
+            elevation_api.lat_lon_to_meters(mgrs_slope_outfile.archive_path)
+            high_res_slope = subsample_geo_tiff(mgrs_slope_outfile.archive_path, args.four_band_optical)
+            numpy_array_to_raster(mgrs_slope_outfile.archive_path, high_res_slope, geo_transform, projection)
+
+        # Up-sample elevation if it was just made
+        if up_sample_elevation:
+            elevation_api.lat_lon_to_meters(mgrs_elevation_outfile.archive_path)
+            high_res_elevation = subsample_geo_tiff(mgrs_elevation_outfile.archive_path, args.four_band_optical)
+            numpy_array_to_raster(mgrs_elevation_outfile.archive_path, high_res_elevation, geo_transform, projection)
+
+    # Create elevation and slope file that are all 0
+    else:
+        shape = four_band_tiff.GetRasterBand(1).ReadAsArray().shape
+        data = np.zeros(shape, dtype=np.uint8)
+        numpy_array_to_raster(mgrs_elevation_outfile.archive_path, data, geo_transform, projection)
+        numpy_array_to_raster(mgrs_slope_outfile.archive_path, data, geo_transform, projection)
 
     # Create the OSM file
     osm_file = create_osm_composite(four_band_optical)

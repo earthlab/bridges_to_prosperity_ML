@@ -246,24 +246,24 @@ class OpticalComposite(_BaseCompositeFile):
 
 class OpticalCompositeSlice(_BaseCompositeFile):
     regex = r'optical_composite_slice_(?P<region>[^_]+)_(?P<district>[^_]+)_(?P<mgrs>[^_]+)_(?P<band>[^_]+)_' \
-            r'(?P<left_bound>\d+)_(?P<right_bound>\d+)\.tif$'
+            r'(?P<top_bound>\d+)_(?P<bottom_bound>\d+)\.tif$'
 
-    def __init__(self, region: str, district: str, military_grid: str, band: str, left_bound: int, right_bound: int):
+    def __init__(self, region: str, district: str, military_grid: str, band: str, top_bound: int, bottom_bound: int):
         super().__init__(region, district, military_grid)
-        if left_bound > right_bound:
-            raise ValueError('Left bound must be less than right bound')
+        if top_bound > bottom_bound:
+            raise ValueError('top bound must be less than bottom bound')
         self.band = band
-        self.left_bound = left_bound
-        self.right_bound = right_bound
+        self.top_bound = top_bound
+        self.bottom_bound = bottom_bound
 
     @property
     def name(self) -> str:
-        return f'optical_composite_slice_{self.region}_{self.district}_{self.mgrs}_{self.band}_{self.left_bound}_' \
-               f'{self.right_bound}.tif'
+        return f'optical_composite_slice_{self.region}_{self.district}_{self.mgrs}_{self.band}_{self.top_bound}_' \
+               f'{self.bottom_bound}.tif'
 
     @staticmethod
     def find_files(region: str = None, district: str = None, band: str = None,
-                   mgrs: List[str] = None, left_bound: int = None, right_bound: int = None) -> List[str]:
+                   mgrs: List[str] = None, top_bound: int = None, bottom_bound: int = None) -> List[str]:
         files = _BaseCompositeFile.find_files(OpticalCompositeSlice.regex, region, district, mgrs)
 
         matching_files = []
@@ -272,9 +272,9 @@ class OpticalCompositeSlice(_BaseCompositeFile):
             group_dict = match.groupdict()
             if band is not None and group_dict['band'].lower() != band.lower():
                 continue
-            if left_bound is not None and int(group_dict['left_bound']) != left_bound:
+            if top_bound is not None and int(group_dict['top_bound']) != top_bound:
                 continue
-            if right_bound is not None and int(group_dict['right_bound']) != right_bound:
+            if bottom_bound is not None and int(group_dict['bottom_bound']) != bottom_bound:
                 continue
             matching_files.append(file)
 
@@ -291,8 +291,8 @@ class OpticalCompositeSlice(_BaseCompositeFile):
         if match:
             group_dict = match.groupdict()
             return cls(region=group_dict['region'], district=group_dict['district'], military_grid=group_dict['mgrs'],
-                       band=group_dict['band'], left_bound=int(group_dict['left_bound']),
-                       right_bound=int(group_dict['right_bound']))
+                       band=group_dict['band'], top_bound=int(group_dict['top_bound']),
+                       bottom_bound=int(group_dict['bottom_bound']))
         else:
             return None
 

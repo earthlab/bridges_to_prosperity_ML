@@ -164,8 +164,8 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
         g_ncols = None
         for file in band_files:
             with rasterio.open(file, 'r', driver='JP2OpenJPEG') as rf:
-                g_nrows = rf.meta['width'] if g_nrows is None else g_nrows
-                g_ncols = rf.meta['height'] if g_ncols is None else g_ncols
+                g_nrows = rf.meta['height'] if g_nrows is None else g_nrows
+                g_ncols = rf.meta['width'] if g_ncols is None else g_ncols
                 crs = rf.crs if crs is None else crs
                 transform = rf.transform if transform is None else transform
             if crs is not None and transform is not None and g_nrows is not None and g_ncols is not None:
@@ -179,8 +179,8 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
                               f'{"Number of rows" if g_nrows is None else ""} '
                               f'{"Number of columns" if g_ncols is None else ""}')
 
-        slice_width = g_nrows / num_slices
-        slice_end_pts = [int(i) for i in np.arange(0, g_nrows + slice_width, slice_width)]
+        slice_height = g_nrows / num_slices
+        slice_end_pts = [int(i) for i in np.arange(0, g_nrows + slice_height, slice_height)]
         slice_bounds = [(slice_end_pts[i], slice_end_pts[i + 1] - 1) for i in range(num_slices - 1)]
         slice_bounds.append((slice_end_pts[-2], slice_end_pts[-1]))   
 
@@ -193,6 +193,7 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
         # Median across time, slicing if necessary
         slice_files: List[OpticalCompositeSlice] = []
         for k, row_bound in tqdm(enumerate(slice_bounds), desc=f'band={band}', total=num_slices, position=2):
+            # TODO: CHange to top and left bound
             slice_file = OpticalCompositeSlice(region, district, coord, band, row_bound[0], row_bound[1])
             slice_file.create_archive_dir()
             if slice_file.exists:
@@ -216,9 +217,8 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
             corrected_stack = np.vstack([img.ravel() for img in cloud_correct_imgs])
             median_corrected = np.nanmedian(corrected_stack, axis=0, overwrite_input=True)
             median_corrected = median_corrected.reshape(cloud_correct_imgs[0].shape)
-
-            with rasterio.open(slice_file.archive_path, 'w', driver='Gtiff', width=g_ncols, height=g_nrows, count=1,
-                               crs=crs, transform=transform, dtype=dtype) as wf:
+            with rasterio.open(slice_file.archive_path, 'w', driver='GTiff', width=g_ncols, height=g_nrows,
+                               count=1, crs=crs, transform=transform, dtype=dtype) as wf:
                 wf.write(median_corrected.astype(dtype), 1)
                 slice_files.append(slice_file)
             # release mem
@@ -235,7 +235,7 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
                     wf.write(
                         rf.read(1),
                         window=Window.from_slices(
-                            slice(slice_file.left_bound, slice_file.right_bound),
+                            slice(slice_file.top_bound, slice_file.bottom_bound),
                             slice(0, g_ncols)
                         ),
                         indexes=1
@@ -247,29 +247,28 @@ def create_optical_composite_from_s2(region: str, district: str, coord: str, ban
         optical_composite_band_files.append(single_band_composite)
 
     # Combine Bands
-    n_bands = len(optical_composite_band_files)
-    with rasterio.open(
-            optical_composite_file.archive_path,
-            'w',
-            driver='GTiff',
-            width=g_ncols,
-            height=g_nrows,
-            count=n_bands,
-            crs=crs,
-            transform=transform,
-            dtype=dtype
-    ) as wf:
-        for band_file in tqdm(optical_composite_band_files, total=n_bands, desc='Combining bands...', leave=False,
-                              position=1):
-            if optical_composite_file.archive_path == band_file.archive_path:
-                break
-            j = BANDS_TO_IX[band_file.bands[0]]
-            with rasterio.open(f"{band_file.archive_path}", 'r', driver='GTiff') as rf:
-                wf.write(rf.read(1), indexes=j)
-            os.remove(band_file.archive_path)
+    if not optical_composite_file.exists:
+        n_bands = len(optical_composite_band_files)
+        with rasterio.open(
+                optical_composite_file.archive_path,
+                'w',
+                driver='GTiff',
+                width=g_ncols,
+                height=g_nrows,
+                count=n_bands,
+                crs=crs,
+                transform=transform,
+                dtype=dtype
+        ) as wf:
+            for band_file in tqdm(optical_composite_band_files, total=n_bands, desc='Combining bands...', leave=False,
+                                  position=1):
+
+                j = BANDS_TO_IX[band_file.bands[0]] if len(optical_composite_band_files) > 1 else 1
+                with rasterio.open(f"{band_file.archive_path}", 'r', driver='GTiff') as rf:
+                    wf.write(rf.read(1), indexes=j)
+                os.remove(band_file.archive_path)
 
     shutil.rmtree(os.path.dirname(slice_file.archive_path))
-
     return optical_composite_file.archive_path
 
 

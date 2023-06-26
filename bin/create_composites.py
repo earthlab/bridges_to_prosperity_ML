@@ -141,15 +141,19 @@ def mgrs_task(args: Namespace) -> None:
             high_res_elevation = subsample_geo_tiff(mgrs_elevation_outfile.archive_path, args.four_band_optical)
             numpy_array_to_raster(mgrs_elevation_outfile.archive_path, high_res_elevation, geo_transform, projection)
 
-    # Create elevation and slope file that are all 0
+    # No elevation or slope, most likely won't be osm either so just skip this tile altogether
     else:
-        shape = four_band_tiff.GetRasterBand(1).ReadAsArray().shape
-        data = np.zeros(shape, dtype=np.uint8)
-        numpy_array_to_raster(mgrs_elevation_outfile.archive_path, data, geo_transform, projection)
-        numpy_array_to_raster(mgrs_slope_outfile.archive_path, data, geo_transform, projection)
+        return
+        # shape = four_band_tiff.GetRasterBand(1).ReadAsArray().shape
+        # data = np.zeros(shape, dtype=np.uint8)
+        # numpy_array_to_raster(mgrs_elevation_outfile.archive_path, data, geo_transform, projection)
+        # numpy_array_to_raster(mgrs_slope_outfile.archive_path, data, geo_transform, projection)
 
-    # Create the OSM file
-    osm_file = create_osm_composite(four_band_optical)
+    # Create the OSM file. If it fails then most likely the region is over water
+    try:
+        osm_file = create_osm_composite(four_band_optical)
+    except Exception as e:
+        print(str(e))
 
     # Combine the files into the multivariate file
     multivariate_file = MultiVariateCompositeFile(region, district, four_band_optical.mgrs)

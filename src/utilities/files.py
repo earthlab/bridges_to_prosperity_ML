@@ -3,7 +3,6 @@ import os
 from geopandas import GeoDataFrame
 from shapely.geometry import Polygon
 import pandas as pd
-from src.utilities.imaging import fix_crs
 import rasterio
 from osgeo import gdal, osr
 

@@ -363,6 +363,7 @@ def composite_to_tiles(composite: MultiVariateComposite, bridge_locations: Union
             for ymin in ysteps:
                 tile_tiff = Tile(region=composite.region, district=composite.district, military_grid=composite.mgrs,
                                  tile_size=tile_size, x_min=xmin, y_min=ymin)
+                tile_tiff.create_archive_dir()
                 pt_file = PyTorch(region=composite.region, district=composite.district, military_grid=composite.mgrs,
                                   tile_size=tile_size, x_min=xmin, y_min=ymin)
                 if not tile_tiff.exists:

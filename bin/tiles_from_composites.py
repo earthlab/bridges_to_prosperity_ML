@@ -84,10 +84,11 @@ def tiles_from_composites(no_truth: bool, cores: int, region: str, tile_size: in
         unique_bridge_locations.to_csv(tile_match_file.archive_path)
 
     regional_matched_df = pd.concat(dfs, ignore_index=True)
-    unique_bridge_locations = filter_non_unique_bridge_locations(regional_matched_df)
+    if not no_truth:
+        regional_matched_df = filter_non_unique_bridge_locations(regional_matched_df)
     regional_tile_match_file = SingleRegionTileMatch(region, tile_size)
     regional_tile_match_file.create_archive_dir()
-    unique_bridge_locations.to_csv(regional_tile_match_file.archive_path)
+    regional_matched_df.to_csv(regional_tile_match_file.archive_path)
 
 
 if __name__ == '__main__':

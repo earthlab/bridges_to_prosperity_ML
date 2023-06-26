@@ -375,7 +375,6 @@ class Elevation(BaseAPI):
                 )
             # If you make too many requests in parallel the server will stop you
             with mp.Pool(1) as pool:
-                print(task_args)
                 for _ in tqdm(pool.imap(_elevation_download_task, task_args), total=len(task_args)):
                     pass
 

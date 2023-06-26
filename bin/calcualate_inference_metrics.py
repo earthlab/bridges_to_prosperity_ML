@@ -7,12 +7,12 @@ from src.ml.metrics import Metrics
 
 def calculate_inference_metrics(inference_results_path: str, validation_set_path: str, out_path: str):
     """
-    Calculates and outputs the receiver operator characteristic curve for an inference results csv file. Also calcualates the optimal confidence threshold 
-    based on the G-Mean.
+    Calculates and outputs the receiver operator characteristic curve for an inference results csv file. Also
+    calculates the optimal confidence threshold based on the G-Mean.
     Args:
         inference_results_path (str): Path to the inference results csv file
         validation_set_path (str): Path to the set of validation data used to train the inference model
-        out_pat (str): Path to save the output ROC curve file to
+        out_path (str): Path to save the output ROC curve file to
     """
     metrics = Metrics(inference_results_path, validation_set_path)
     metrics.plot_roc(out_path)

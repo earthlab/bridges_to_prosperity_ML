@@ -6,7 +6,7 @@ archive paths, and search for files throughout the rest of the project.
 
 import os
 import re
-from typing import List, Set, Type, Union
+from typing import List, Set, Type
 from definitions import COMPOSITE_DIR, ELEVATION_DIR, SLOPE_DIR, SENTINEL_2_DIR, OSM_DIR, \
     MODEL_DIR, INFERENCE_RESULTS_DIR, TILE_DIR, TRAIN_VALIDATE_SPLIT_DIR, MULTI_REGION_TILE_MATCH, DATA_DIR
 import glob
@@ -45,7 +45,7 @@ class File(ABC):
         Tries to match the input file name with each child class's regex. Once the regex matches, an instance of that
         class created with the input file name is returned
         Args:
-            file_name (str): The name or path of the input file for which to create a file type object
+            file_path (str): The name or path of the input file for which to create a file type object
         """
         child_classes_with_regex = find_child_classes_with_attribute(cls, 'regex')
         for child_class in child_classes_with_regex:

@@ -293,25 +293,35 @@ def scale_multiband_composite(multiband_tiff: str):
     return scaled_tiff
 
 
-def composite_to_tiles(composite: MultiVariateComposite, bridge_locations: Union[None, gpd.array.GeometryArray], tqdm_pos: int = None, tqdm_update_rate: float = None, remove_tiff: bool = True, tile_size: int = 300) -> pd.DataFrame:
+def composite_to_tiles(composite: MultiVariateComposite, bridge_locations: Union[None, gpd.array.GeometryArray],
+                       tqdm_pos: int = None, tqdm_update_rate: float = None, remove_tiff: bool = True,
+                       tile_size: int = 300) -> pd.DataFrame:
     """
-    Splits up the input composite file into small chunks called tiles. The size of the tiles in meters is controlled by the tile_size input parameter.
-    If there is ground truth data for the input composite, each tile will be classified as either "bridge" or "no_bridge". A dataframe with this information as well 
-    as the geographic and file location of each tile will be output. Each tile will be saved as a PyTorch pt file which contains its normalized features as a tensor.
+    Splits up the input composite file into small chunks called tiles. The size of the tiles in meters is controlled by
+     the tile_size input parameter.
+    If there is ground truth data for the input composite, each tile will be classified as either "bridge" or
+    "no_bridge". A dataframe with this information as well
+    as the geographic and file location of each tile will be output. Each tile will be saved as a PyTorch pt file which
+     contains its normalized features as a tensor.
     These pt files will be what is used to train models / run inference over.
     Args:
         composite (MultiVariateComposite): File object of the composite to split up into tiles
-        bridge_locations (gpd.array.GeometryArray): Contains the location of each bridge that there is ground truth data for
+        bridge_locations (gpd.array.GeometryArray): Contains the location of each bridge that there is ground truth data
+         for
         tqdm_pos (int): Progress pointer
         tqdm_update_rate (float): Progress update rate
-        remove_tiff (bool): Defaults to true. If true then tiff files used to determine tile bounding boxes will be removed. These are only useful for visually inspecting tiles for validation
-        tile_size (int): Size that each tile should be in meters. For example, if tile_size is 300 then each tile will be 300x300 meters
+        remove_tiff (bool): Defaults to true. If true then tiff files used to determine tile bounding boxes will be
+        removed. These are only useful for visually inspecting tiles for validation
+        tile_size (int): Size that each tile should be in meters. For example, if tile_size is 300 then each tile will
+        be 300x300 meters
     Returns:
-        df (pd.DataFrame): Dataframe with file and geographic location of each tile, its bounding box, and if there was ground truth data, whether the tile contains a bridge or not
+        df (pd.DataFrame): Dataframe with file and geographic location of each tile, its bounding box, and if there was
+        ground truth data, whether the tile contains a bridge or not
     """
     grid_geoloc_file = SingleRegionTileMatch(tile_size)
 
-    grid_geoloc_path = grid_geoloc_file.archive_path(composite.region, composite.district, composite.mgrs, create_dir=True)
+    grid_geoloc_path = grid_geoloc_file.archive_path(composite.region, composite.district, composite.mgrs,
+                                                     create_dir=True)
     if os.path.exists(grid_geoloc_path):
         df = pd.read_csv(grid_geoloc_path)
         return df
@@ -353,9 +363,11 @@ def composite_to_tiles(composite: MultiVariateComposite, bridge_locations: Union
         for xmin in xsteps:
             for ymin in ysteps:
                 tile_tiff = Tile(x_min=xmin, y_min=ymin)
-                tile_tiff_path = tile_tiff.archive_path(composite.region, composite.district, composite.mgrs, tile_size=tile_size, create_dir=True)
+                tile_tiff_path = tile_tiff.archive_path(composite.region, composite.district, composite.mgrs,
+                                                        tile_size=tile_size, create_dir=True)
                 pt_file = PyTorch(x_min=xmin, y_min=ymin)
-                pt_file_path = pt_file.archive_path(composite.region, composite.district, composite.mgrs, tile_size=tile_size)
+                pt_file_path = pt_file.archive_path(composite.region, composite.district, composite.mgrs,
+                                                    tile_size=tile_size)
                 if not os.path.isfile(tile_tiff_path):
                     gdal.Translate(
                         tile_tiff_path,
@@ -394,11 +406,11 @@ def composite_to_tiles(composite: MultiVariateComposite, bridge_locations: Union
 def transform_point(src_wkt, dst_wkt, x, y):
     src_crs = CRS.from_wkt(src_wkt)
     dst_crs = CRS.from_wkt(dst_wkt)
-    print(x, y)
+
     # Convert source UTM coordinates to latitude and longitude
     transformer_latlon = pyproj.Transformer.from_crs(src_crs, CRS.from_epsg(4326), always_xy=True)
     lon, lat = transformer_latlon.transform(x, y)
-    print(lon, lat, 'latlontransform')
+
     # Convert latitude and longitude to destination UTM zone
     transformer_dest = pyproj.Transformer.from_crs(CRS.from_epsg(4326), dst_crs, always_xy=True)
     transformed_point = transformer_dest.transform(lon, lat)
@@ -409,7 +421,6 @@ def subsample_geo_tiff(low_resolution_path: str, high_resolution_path: str):
     low_res = gdal.Open(low_resolution_path)
     high_res = gdal.Open(high_resolution_path)
 
-    print(low_resolution_path)
     # Access the data
     low_res_band = low_res.GetRasterBand(1)
     low_res_data = low_res_band.ReadAsArray()
@@ -458,8 +469,6 @@ def get_geo_locations_from_tif(geo_transform: List[float], x_size: int, y_size: 
     dy = geo_transform[5]
     x_origin = geo_transform[0]
     y_origin = geo_transform[3]
-
-    print(dx, dy, x_origin, y_origin, 'geotransform', x_size, y_size)
 
     # Get geolocation of each data point
     lats = []

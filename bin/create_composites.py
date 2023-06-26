@@ -1,6 +1,7 @@
 """
-Creates the multivariate composites for input regions, districts, and mgrs tiles. Multivariate composites are comprised of 
-Sentinel2 red, green, blue, infrared, osm water, osm admin boundaries, elevation, and slope data respectively for a single region. 
+Creates the multivariate composites for input regions, districts, and mgrs tiles. Multivariate composites are comprised
+ of Sentinel2 red, green, blue, infrared, osm water, osm admin boundaries, elevation, and slope data respectively for a
+  single region.
 """
 import argparse
 import multiprocessing as mp
@@ -117,6 +118,7 @@ def mgrs_task(args: Namespace) -> None:
     mgrs_elevation_outfile.create_archive_dir()
     if not mgrs_elevation_outfile.exists:
         # Clip to bbox so can convert to meters
+        print('Creating elevation file')
         bbox = tiff_to_bbox(args.four_band_optical)
         mgrs_bbox = [bbox[3][1], bbox[3][0], bbox[1][1], bbox[1][0]]
         elevation_api.download_bbox(mgrs_elevation_outfile.archive_path, mgrs_bbox, buffer=5000)
@@ -130,6 +132,7 @@ def mgrs_task(args: Namespace) -> None:
     if mgrs_elevation_outfile.exists:
         # Calculate slope from elevation gradient before up-sampling elevation data
         if not mgrs_slope_outfile.exists:
+            print('Creating slope file')
             elevation_to_slope(mgrs_elevation_outfile.archive_path, mgrs_slope_outfile.archive_path)
             elevation_api.lat_lon_to_meters(mgrs_slope_outfile.archive_path)
             high_res_slope = subsample_geo_tiff(mgrs_slope_outfile.archive_path, args.four_band_optical)
@@ -144,16 +147,11 @@ def mgrs_task(args: Namespace) -> None:
     # No elevation or slope, most likely won't be osm either so just skip this tile altogether
     else:
         return
-        # shape = four_band_tiff.GetRasterBand(1).ReadAsArray().shape
-        # data = np.zeros(shape, dtype=np.uint8)
-        # numpy_array_to_raster(mgrs_elevation_outfile.archive_path, data, geo_transform, projection)
-        # numpy_array_to_raster(mgrs_slope_outfile.archive_path, data, geo_transform, projection)
 
-    # Create the OSM file. If it fails then most likely the region is over water
-    try:
-        osm_file = create_osm_composite(four_band_optical)
-    except Exception as e:
-        print(str(e))
+    # Create the OSM file. If it fails then most likely the region is over water and the function will have returned
+    # due to no elevation data
+    print('Creating OSM file')
+    osm_file = create_osm_composite(four_band_optical)
 
     # Combine the files into the multivariate file
     multivariate_file = MultiVariateCompositeFile(region, district, four_band_optical.mgrs)
@@ -240,7 +238,7 @@ def create_multivariate_composites(s3_bucket_name: str = CONFIG.AWS.BUCKET, core
                     if not rgb_optical.exists:
                         create_optical_composites(region, bands=['B02', 'B03', 'B04'], mgrs=[mgrs_grid],
                                                   districts=[district], buffer=0, slices=slices, n_cores=cores)
-                    else:
+                    elif not ir_optical.exists:
                         create_optical_composites(region, bands=['B08'], mgrs=[mgrs_grid], districts=[district],
                                                   buffer=0, slices=slices, n_cores=cores)
                     combine_bands(rgb_optical.archive_path, four_band_optical.archive_path, 3)
@@ -249,14 +247,14 @@ def create_multivariate_composites(s3_bucket_name: str = CONFIG.AWS.BUCKET, core
             task_args.append(Namespace(four_band_optical=four_band_optical.archive_path, region=region,
                                        district=district))
 
-        for arg in task_args:
-            mgrs_task(arg)
+        # for arg in task_args:
+        #     mgrs_task(arg)
 
-        # process_map(
-        #     mgrs_task,
-        #     task_args,
-        #     max_workers=cores
-        # )
+        process_map(
+            mgrs_task,
+            task_args,
+            max_workers=cores
+        )
 
 
 if __name__ == "__main__":

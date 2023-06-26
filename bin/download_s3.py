@@ -28,14 +28,18 @@ if __name__ == "__main__":
 
     # Composite file arguments
     composite_parser = subparsers.add_parser('composites')
-    composite_parser.add_argument('--region', '-r', type=str, required=False, help='Name of the region to upload composites for. Defualt'
+    composite_parser.add_argument('--region', '-r', type=str, required=False, help='Name of the region to upload '
+                                                                                   'composites for. Defualt'
                                   'is all regions in the archive')
     composite_parser.add_argument('--district', '-d', type=str, required=False,
-                                  help='Name of the district to upload the composites for. Defualt is all districts per input region.')
+                                  help='Name of the district to upload the composites for. Defualt is all districts '
+                                       'per input region.')
     composite_parser.add_argument('--mgrs', '-m', type=str, nargs='+', required=False,
-                                  help='Name of the mgrs tile(s) to download for regions and districts. Default is all tiles')
+                                  help='Name of the mgrs tile(s) to download for regions and districts. Default is all'
+                                       ' tiles')
     composite_parser.add_argument('--bands', '-b', type=str, nargs='+', required=False,
-                                  help='Optical band combination (B02, B03, B08) etc to download. If not specifed then all combinations are downloaded')
+                                  help='Optical band combination (B02, B03, B08) etc to download. If not specifed then'
+                                       ' all combinations are downloaded')
 
     # Inference file arguments
     inference_parser = argparse.ArgumentParser(add_help=False)

@@ -1,7 +1,8 @@
 """
-Runs inference over a set of regions given a certain input model. Inference results are output to both csv and shapefile formats.
-If there is truth data for the set of regions, the truth data flag can be set and the target for each prediction will be added to the
-results files.
+Runs inference over a set of regions given a certain input model. Inference results are output to both csv and
+shapefile formats.
+If there is truth data for the set of regions, the truth data flag can be set and the target for each prediction will
+be added to the results files.
 """
 import argparse
 import os
@@ -19,11 +20,14 @@ def run_inference(model_file_path: str, regions: List[str], truth_data: bool,
                   batch_size: int = CONFIG.TORCH.INFERENCE.BATCH_SIZE,
                   num_workers: int = CONFIG.TORCH.INFERENCE.NUM_WORKERS, print_frequency: int = 100) -> None:
     """
-    Runs inference over a set of regions given a certain input model. Inference results are output to both csv and shapefile formats.
+    Runs inference over a set of regions given a certain input model. Inference results are output to both csv and
+    shapefile formats.
     Args:
-        model_file_path (str): Path to the pytorch model file that will be used to run inference over the specified input regions
+        model_file_path (str): Path to the pytorch model file that will be used to run inference over the specified
+        input regions
         regions (list): Region(s) to run inference over. Must be in regions_info.yaml file
-        truth_data (bool): If set truth data will be searched for the input regions and a target row will be added to the output csv file
+        truth_data (bool): If set truth data will be searched for the input regions and a target row will be added to
+        the output csv file
         batch_size (int): Batch size for inference 
         num_workers(int): Number of workers to use for running inference
         print_requency (int): Frequency of progress updates printed to the console
@@ -69,8 +73,9 @@ def run_inference(model_file_path: str, regions: List[str], truth_data: bool,
         truth_data=truth_data
     )
 
-    results_shapefile = InferenceResultsShapefile(regions=regions, architecture=model_file.architecture, layers=model_file.layers,
-                                                  epoch=model_file.epoch, ratio=model_file.ratio, tile_size=model_file.tile_size,
+    results_shapefile = InferenceResultsShapefile(regions=regions, architecture=model_file.architecture,
+                                                  layers=model_file.layers, epoch=model_file.epoch,
+                                                  ratio=model_file.ratio, tile_size=model_file.tile_size,
                                                   best=model_file.best)
     results_shapefile.create_archive_dir()
     results_csv_to_shapefile(results_csv.archive_path, results_shapefile.archive_path)

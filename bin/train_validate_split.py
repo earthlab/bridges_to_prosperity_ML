@@ -33,8 +33,9 @@ def create_dset_csv(regions: List[str], ratio: int, tile_size: int) -> None:
     for region in regions:
         df = SingleRegionTileMatch(region=region, tile_size=tile_size)
         if not df.exists:
-            raise LookupError(f'Could not find tile match file at {df.archive_path} for region {region} and tile size {tile_size}.'
-                              f' Run tiles_from_composites.py with the region set to {region} and tile size set to {tile_size} to create this file')
+            raise LookupError(
+                f'Could not find tile match file at {df.archive_path} for region {region} and tile size {tile_size}.'
+                f' Run tiles_from_composites.py with the region set to {region} and tile size set to {tile_size} to create this file')
         matched_df = pd.read_csv(df.archive_path)
 
         # Create training sets and validation sets separate the training and validation into separate files
@@ -67,7 +68,7 @@ def create_dset_csv(regions: List[str], ratio: int, tile_size: int) -> None:
     joined_matched_df = filter_non_unique_bridge_locations(pd.concat(matched_dfs, ignore_index=True))
 
     train_csv = TrainSplit(regions, ratio, tile_size)
-    val_csv = ValidateSplit(regions, ratio,  tile_size)
+    val_csv = ValidateSplit(regions, ratio, tile_size)
     matched_df = MultiRegionTileMatch(regions, tile_size)
     train_csv.create_archive_dir()
     val_csv.create_archive_dir()
@@ -88,7 +89,6 @@ if __name__ == '__main__':
     parser.add_argument('--training_ratio', type=int, required=False, default=70, help='Percentage of data to use as'
                                                                                        ' training data. Default is 70')
     parser.add_argument('--tile_size', type=int, nargs='+', required=False, default=300,
-        help='Size of the tiles to be used for training the model. The size is in meters and the tiles and tile match file for the input tile size should already' 
-             'exist'
-    )
+                        help='Size of the tiles to be used for training the model. The size is in meters and the tiles'
+                             ' and tile match file for the input tile size should already exist')
     args = parser.parse_args()

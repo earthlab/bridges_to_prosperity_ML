@@ -90,7 +90,6 @@ def tiles_from_composites(no_truth: bool, cores: int, region: str, tile_size: in
     unique_bridge_locations.to_csv(regional_tile_match_file.archive_path)
 
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--region', required=True, type=str, help='Name of region to make tiles for. Must be in the '
@@ -100,6 +99,7 @@ if __name__ == '__main__':
     parser.add_argument('--cores', required=False, type=int, default=mp.cpu_count() - 1,
                         help='The number of cores to use to create tiles in parallel. Default is cpu_count - 1')
     parser.add_argument('--tile_size', required=False, type=int, default=300,
-                        help='The size to make the tiles in meters. Ex. 300 will split the composite into 300x300m tiles')
+                        help='The size to make the tiles in meters. Ex. 300 will split the composite into 300x300m'
+                             ' tiles')
     args = parser.parse_args()
     tiles_from_composites(args.no_truth, args.cores, args.region, args.tile_size)

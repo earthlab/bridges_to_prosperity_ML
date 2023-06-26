@@ -8,7 +8,8 @@ from src.utilities.config_reader import CONFIG
 import os
 
 from src.utilities.aws import upload_files
-from file_types import MultiVariateComposite, TrainedModel, InferenceResultsCSV, InferenceResultsShapefile, File
+from file_types import MultiVariateComposite, TrainedModel, InferenceResultsCSV, InferenceResultsShapefile, File,\
+    InferenceResultsTarfile
 
 
 if __name__ == "__main__":
@@ -34,17 +35,23 @@ if __name__ == "__main__":
     # Inference file arguments
     inference_parser = argparse.ArgumentParser(add_help=False)
     inference_parser.add_argument('--regions', nargs='+', required=False,
-                                  help='If specified, only files made from these regions will be uploaded, otherwise all region combinations will be found')
+                                  help='If specified, only files made from these regions will be uploaded, otherwise'
+                                       ' all region combinations will be found')
     inference_parser.add_argument('--architecture', required=False, type=str,
-                                  help='If specified, only files of this architecture will be uploaded, otherwise all architectures will be found')
+                                  help='If specified, only files of this architecture will be uploaded, otherwise all '
+                                       'architectures will be found')
     inference_parser.add_argument('--layers', required=False, nargs='+',
-                                  help='If specified, only files made from these layers will be uploaded, otherwise all layer combinations will be found')
+                                  help='If specified, only files made from these layers will be uploaded, otherwise '
+                                       'all layer combinations will be found')
     inference_parser.add_argument('--epoch', required=False, type=int,
-                                  help='If specified, only files from this epoch will be uploaded, otherwise all epochs will be found')
+                                  help='If specified, only files from this epoch will be uploaded, otherwise all epochs'
+                                       ' will be found')
     inference_parser.add_argument('--ratio', required=False, type=float,
-                                  help='If specified only files of this no bridge / bridge ratio will be uploaded, otherwise all ratios will be found')
+                                  help='If specified only files of this no bridge / bridge ratio will be uploaded,'
+                                       ' otherwise all ratios will be found')
     inference_parser.add_argument('--tile_size', required=False, type=int,
-                                  help='If specified only files of this tile size will be uploaded, otherwise all tile sizes will be found')
+                                  help='If specified only files of this tile size will be uploaded, otherwise all tile'
+                                       ' sizes will be found')
     inference_parser.add_argument('--best', required=False, action='store_true',
                                   help='If set, only files marked as best will be uploaded')
     
@@ -56,18 +63,27 @@ if __name__ == "__main__":
     if args.file_type == 'composites':
         files = MultiVariateComposite.find_files(region=args.region, district=args.district, mgrs=args.mgrs)
     elif args.file_type == 'models':
-        files = TrainedModel.find_files(regions=args.regions, architecture=args.architecture, layers=args.layers, epoch=args.epoch, ratio=args.ratio, tile_size=args.tile_size, best=args.best)
+        files = TrainedModel.find_files(regions=args.regions, architecture=args.architecture, layers=args.layers,
+                                        epoch=args.epoch, ratio=args.ratio, tile_size=args.tile_size, best=args.best)
     elif args.file_type == 'inference_results':
-        shape_files = InferenceResultsShapefile.find_files(regions=args.regions, architecture=args.architecture, layers=args.layers, epoch=args.epoch, ratio=args.ratio, tile_size=args.tile_size, best=args.best)
+        shape_files = InferenceResultsShapefile.find_files(regions=args.regions, architecture=args.architecture,
+                                                           layers=args.layers, epoch=args.epoch, ratio=args.ratio,
+                                                           tile_size=args.tile_size, best=args.best)
         files = []
         for shape_file in shape_files:
-            if not os.path.exists(shape_file.tar_file.archive_path):
-                shape_file.create_tar_file()
-            files.append(shape_file.tar_file.archive_path)
-        files += InferenceResultsCSV.find_files(regions=args.regions, architecture=args.architecture, layers=args.layers, epoch=args.epoch, ratio=args.ratio, tile_size=args.tile_size, best=args.best)
+            shape_file_object = InferenceResultsShapefile.create(shape_file)
+            if not shape_file_object.tar_file.exists:
+                shape_file_object.create_tar_file()
+            files.append(shape_file_object.tar_file.archive_path)
+        files += InferenceResultsCSV.find_files(regions=args.regions, architecture=args.architecture,
+                                                layers=args.layers, epoch=args.epoch, ratio=args.ratio,
+                                                tile_size=args.tile_size, best=args.best)
     else:
-        raise ValueError('Missing first positional argument for file type. Must be one of [composites, models, inference_results]')
+        raise ValueError('Missing first positional argument for file type. Must be one of [composites, models,'
+                         ' inference_results]')
 
     print(f'Found {len(files)} files to upload')
+
+    # TODO: Parallelize this
 
     upload_files([File.create(f) for f in files], args.s3_bucket_name)

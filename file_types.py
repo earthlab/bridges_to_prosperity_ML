@@ -952,7 +952,9 @@ class InferenceResultsShapefile(_BaseInferenceFiles):
     def __init__(self, regions: List[str], architecture: str, layers: List[str], epoch: int, ratio: float,
                  tile_size: int, best: bool = False):
         super().__init__(regions, architecture, layers, epoch, ratio, tile_size, best)
-        self.tar_file = InferenceResultsTarfile(regions=self.regions, architecture=self.architecture, layers=self.layers, epoch=self.epoch, ratio=self.ratio, tile_size=self.tile_size, best=self.best)
+        self.tar_file = InferenceResultsTarfile(regions=self.regions, architecture=self.architecture,
+                                                layers=self.layers, epoch=self.epoch, ratio=self.ratio,
+                                                tile_size=self.tile_size, best=self.best)
 
     @property
     def name(self) -> str:

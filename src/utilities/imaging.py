@@ -318,15 +318,14 @@ def composite_to_tiles(composite: MultiVariateComposite, bridge_locations: Union
         df (pd.DataFrame): Dataframe with file and geographic location of each tile, its bounding box, and if there was
         ground truth data, whether the tile contains a bridge or not
     """
-    grid_geoloc_file = SingleRegionTileMatch(tile_size)
+    grid_geoloc_file = SingleRegionTileMatch(region=composite.region, tile_size=tile_size, district=composite.district,
+                                             military_grid=composite.mgrs)
 
-    grid_geoloc_path = grid_geoloc_file.archive_path(composite.region, composite.district, composite.mgrs,
-                                                     create_dir=True)
-    if os.path.exists(grid_geoloc_path):
-        df = pd.read_csv(grid_geoloc_path)
+    if grid_geoloc_file.exists:
+        df = pd.read_csv(grid_geoloc_file.archive_path)
         return df
 
-    rf = gdal.Open(composite.archive_path())
+    rf = gdal.Open(composite.archive_path)
     _, xres, _, _, _, yres = rf.GetGeoTransform()
     nxpix = int(tile_size / abs(xres))
     nypix = int(tile_size / abs(yres))
@@ -334,7 +333,7 @@ def composite_to_tiles(composite: MultiVariateComposite, bridge_locations: Union
     ysteps = np.arange(0, rf.RasterYSize, nypix).astype(np.int64).tolist()
 
     if bridge_locations is not None:
-        bbox = tiff_to_bbox(composite.archive_path())
+        bbox = tiff_to_bbox(composite.archive_path)
         this_bridge_locs = []
         p = polygon.Polygon(bbox)
         for loc in bridge_locations:
@@ -362,34 +361,32 @@ def composite_to_tiles(composite: MultiVariateComposite, bridge_locations: Union
         k = 0
         for xmin in xsteps:
             for ymin in ysteps:
-                tile_tiff = Tile(x_min=xmin, y_min=ymin)
-                tile_tiff_path = tile_tiff.archive_path(composite.region, composite.district, composite.mgrs,
-                                                        tile_size=tile_size, create_dir=True)
-                pt_file = PyTorch(x_min=xmin, y_min=ymin)
-                pt_file_path = pt_file.archive_path(composite.region, composite.district, composite.mgrs,
-                                                    tile_size=tile_size)
-                if not os.path.isfile(tile_tiff_path):
+                tile_tiff = Tile(region=composite.region, district=composite.district, military_grid=composite.mgrs,
+                                 tile_size=tile_size, x_min=xmin, y_min=ymin)
+                pt_file = PyTorch(region=composite.region, district=composite.district, military_grid=composite.mgrs,
+                                  tile_size=tile_size, x_min=xmin, y_min=ymin)
+                if not tile_tiff.exists:
                     gdal.Translate(
-                        tile_tiff_path,
+                        tile_tiff.archive_path,
                         rf,
                         srcWin=(xmin, ymin, nxpix, nypix),
                     )
-                bbox = tiff_to_bbox(tile_tiff_path)
-                df.at[k, 'tile'] = pt_file_path
+                bbox = tiff_to_bbox(tile_tiff.archive_path)
+                df.at[k, 'tile'] = pt_file.archive_path
                 df.at[k, 'bbox'] = bbox
                 if bridge_locations is not None:
                     df.at[k, 'is_bridge'], df.at[k, 'bridge_loc'], ix = bridge_in_bbox(bbox, this_bridge_locs)
                     if ix is not None:
                         this_bridge_locs.pop(ix)
-                if not os.path.exists(pt_file_path):
-                    with rasterio.open(tile_tiff_path, 'r') as tmp:
+                if not pt_file.exists:
+                    with rasterio.open(tile_tiff.archive_path, 'r') as tmp:
                         scale_img = tmp.read()
                         scale_img = np.moveaxis(scale_img, 0, -1)  # make dims be c, w, h
                         scale_img = scale(scale_img)
                         tensor = torch_transformer(scale_img)
-                        torch.save(tensor, pt_file_path)
+                        torch.save(tensor, pt_file.archive_path)
                 if remove_tiff:
-                    os.remove(tile_tiff_path)
+                    os.remove(tile_tiff.archive_path)
                 k += 1
                 if k % tqdm_update_rate == 0:
                     pbar.update(tqdm_update_rate)
@@ -397,9 +394,9 @@ def composite_to_tiles(composite: MultiVariateComposite, bridge_locations: Union
                 if k % int(round(numTiles / 4)) == 0 and k < numTiles - 1:
                     percent = int(round(k / int(round(numTiles)) * 100))
                     pbar.set_description(f'Saving {composite.mgrs} {percent}%')
-                    df.to_csv(grid_geoloc_path, index=False)
+                    df.to_csv(grid_geoloc_file.archive_path, index=False)
         pbar.set_description(f'Saving to file {grid_geoloc_file}')
-    df.to_csv(grid_geoloc_path, index=False)
+    df.to_csv(grid_geoloc_file.archive_path, index=False)
     return df
 
 

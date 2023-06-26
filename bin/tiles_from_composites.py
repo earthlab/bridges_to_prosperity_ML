@@ -25,14 +25,14 @@ def create_tiles(args) -> pd.DataFrame:
         args.composite_files (str): Composite paths to create tiles out of
         args.bridge_locs (gpd.array.GeometryArray): Geometry array containing locations of bridges in ground truth data files
         args.pos (int): pointer for tqdm progress 
-        tile_size (int): Height and width to make the tiles into in meters 
+        args.tile_size (int): Height and width to make the tiles into in meters
     Returns:
         df (pd.DataFrame): Dataframe containing path to each tile, whether it is a bridge or not, and its bounding box
     """
     composite_files, bridge_locs, pos, tile_size = args
     df = []
     for composite_path in tqdm(composite_files, position=0, leave=True):
-        df_i = composite_to_tiles(composite_path, bridge_locs, pos, tile_size=tile_size)
+        df_i = composite_to_tiles(MultiVariateComposite.create(composite_path), bridge_locs, pos, tile_size=tile_size)
         df.append(df_i)
     df = pd.concat(df, ignore_index=True)
     return df

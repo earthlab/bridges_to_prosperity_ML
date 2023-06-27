@@ -117,9 +117,6 @@ def main_worker(gpu: bool, ngpus_per_node: int, args: Namespace) -> None:
     else:
         print("=> creating model '{}'".format(args.architecture))
         model = torchvision.models.__dict__[args.architecture]()
-        # num_channels = 3
-        # model.conv1 = torch.nn.Conv2d(num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        # torch.nn.init.kaiming_normal_(model.conv1.weight, mode='fan_out', nonlinearity='relu')
 
     if not torch.cuda.is_available() and not torch.backends.mps.is_available():
         print('using CPU, this will be slow')

@@ -35,7 +35,7 @@ def upload_files(files: List[Type], s3_bucket_name: str) -> None:
             )
 
 
-def s3_download_task(location_request_info: Tuple[str, int, int, str]) -> None:
+def s3_download_task(location_request_info: List[Tuple[str, int, int, str]]) -> None:
     """
     Downloads file from s3 storage given s3 path and local destination path.
     Args:

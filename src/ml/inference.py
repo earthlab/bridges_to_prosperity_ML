@@ -1,6 +1,7 @@
 """
-Performs inference over a set of tiles defined by the input tile match file. The input model is specified as well as the results output file. If there is truth data
-for the tiles that inference is being run over, the truth_data parameter should be set to True so that a target column is created in the results file.
+Performs inference over a set of tiles defined by the input tile match file. The input model is specified as well as the
+ results output file. If there is truth data for the tiles that inference is being run over, the truth_data parameter
+  should be set to True so that a target column is created in the results file.
 """
 import time
 from typing import Union
@@ -13,16 +14,22 @@ from src.ml.util import B2PNoTruthDataset, B2PTruthDataset, AverageMeter, Progre
 from file_types import TrainedModel, SingleRegionTileMatch, MultiRegionTileMatch, InferenceResultsCSV
 
 
-def inference_torch(model_file: TrainedModel, tile_match_file: Union[SingleRegionTileMatch, MultiRegionTileMatch], results_file: InferenceResultsCSV, truth_data: bool, 
-                    batch_size: int = None, gpu=None, num_workers: int = None, print_frequency: int = 100, args=DEFAULT_ARGS) -> None:
+def inference_torch(model_file: TrainedModel, tile_match_file: Union[SingleRegionTileMatch, MultiRegionTileMatch],
+                    results_file: InferenceResultsCSV, truth_data: bool, batch_size: int = None, gpu=None,
+                    num_workers: int = None, print_frequency: int = 100, args=DEFAULT_ARGS) -> None:
     """
-    Performs inference over a set of tiles defined by the input tile match file. The input model is specified as well as the results output file. If there is truth data
-    for the tiles that inference is being run over, the truth_data parameter should be set to True so that a target column is created in the results file.
+    Performs inference over a set of tiles defined by the input tile match file. The input model is specified as well
+     as the results output file. If there is truth data
+    for the tiles that inference is being run over, the truth_data parameter should be set to True so that a target
+     column is created in the results file.
     Args:
         model_file (TrainedModel): File object for the trained pytorch model file that will be used to perform inference
-        tile_match_file (SingleRegionTileMatch, MultiRegionTileMatch): File object for csv file defining the physical and file location of each tile to run inference on
-        results_file (InferenceResultsCSV): File object for csv that will store the inference results for each tile in tile match file
-        truth_data (bool): If True, truth data for the input tiles will be searched for and used to include a target column in the results csv 
+        tile_match_file (SingleRegionTileMatch, MultiRegionTileMatch): File object for csv file defining the physical
+         and file location of each tile to run inference on
+        results_file (InferenceResultsCSV): File object for csv that will store the inference results for each tile in
+         tile match file
+        truth_data (bool): If True, truth data for the input tiles will be searched for and used to include a target
+         column in the results csv
         batch_size (int): Set the batch size for the amount of tiles to run inference over
         gpu (bool): If True and machine has a GPU then it will be used to run inference
     """
@@ -60,7 +67,8 @@ def inference_torch(model_file: TrainedModel, tile_match_file: Union[SingleRegio
 
     model.load_state_dict(checkpoint['state_dict'], strict=False)
 
-    dset = B2PTruthDataset(tile_match_file.archive_path, layers=args.layers) if truth_data else B2PNoTruthDataset(tile_match_file.archive_path, layers=args.layers)
+    dset = B2PTruthDataset(tile_match_file.archive_path, layers=args.layers) if truth_data else B2PNoTruthDataset(
+        tile_match_file.archive_path, layers=args.layers)
     dloader = torch.utils.data.DataLoader(
         dset,
         batch_size=args.batch_size,
@@ -94,6 +102,8 @@ def inference_torch(model_file: TrainedModel, tile_match_file: Union[SingleRegio
             output = model(data)
             probs = torch.softmax(output, dim=1)
             conf, pred = torch.max(probs, 1)
+
+            print(pred)
 
             # store res to file
             ix = range(

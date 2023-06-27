@@ -90,7 +90,7 @@ def create_composites(region: str, bands: List[str], buffer: int, slices: int, n
     for district in districts:
         bounds = region_info[region]['districts'][district]['bbox']
         print('Downloading Sentinel2 data')
-        # for date in dates:
-        #     download_sentinel2(region, district, bounds, date[0], date[1], buffer, bands)
+        #for date in dates:
+        #    download_sentinel2(region, district, bounds, date[0], date[1], buffer, bands)
 
         sentinel2_to_composite(region, district, slices, n_cores, bands, mgrs)

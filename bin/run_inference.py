@@ -85,7 +85,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_file_path', required=True, type=str,
                         help='Path to the model used to run inference')
-    parser.add_argument('--inference_regions', required=True, type=str,
+    parser.add_argument('--inference_regions', required=True, type=str, nargs='+',
                         help='Region(s) to run inference over')
     parser.add_argument('--truth_data', action='store_true',
                         help='If set then truth data will be read in and target column will be included in results csv')

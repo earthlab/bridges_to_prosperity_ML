@@ -38,9 +38,6 @@ if __name__ == "__main__":
     composite_parser.add_argument('--mgrs', '-m', type=str, nargs='+', required=False,
                                   help='Name of the mgrs tile(s) to download for regions and districts. Default is all'
                                        ' tiles')
-    composite_parser.add_argument('--bands', '-b', type=str, nargs='+', required=False,
-                                  help='Optical band combination (B02, B03, B08) etc to download. If not specified then'
-                                       ' all combinations are downloaded')
 
     # Inference file arguments
     inference_parser = argparse.ArgumentParser(add_help=False)
@@ -73,9 +70,7 @@ if __name__ == "__main__":
     files_to_download = []
     if args.file_type == 'composites':
         s3_files = list_s3_files(MultiVariateComposite.ROOT_S3_DIR, args.s3_bucket_name)
-        multivariate_files = MultiVariateComposite.filter_files(s3_files, args.region, args.district, args.mgrs)
-        optical_files = OpticalComposite.filter_files(s3_files, args.region, args.district, args.bands, args.mgrs)
-        files_to_download = multivariate_files + optical_files
+        files_to_download = MultiVariateComposite.filter_files(s3_files, args.region, args.district, args.mgrs)
     elif args.file_type == 'models':
         s3_files = list_s3_files(TrainedModel.ROOT_S3_DIR, args.s3_bucket_name)
         files_to_download = TrainedModel.filter_files(s3_files, args.regions, args.architecture, args.layers,

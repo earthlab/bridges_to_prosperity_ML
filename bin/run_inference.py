@@ -16,7 +16,7 @@ from src.utilities.files import results_csv_to_shapefile, filter_non_unique_brid
 from file_types import InferenceResultsCSV, TrainedModel, MultiRegionTileMatch, SingleRegionTileMatch, InferenceResultsShapefile
 
 
-def run_inference(model_file_path: str, regions: List[str], truth_data: bool,
+def run_inference(model_file_path: str, regions: List[str],
                   batch_size: int = CONFIG.TORCH.INFERENCE.BATCH_SIZE,
                   num_workers: int = CONFIG.TORCH.INFERENCE.NUM_WORKERS, print_frequency: int = 100) -> None:
     """
@@ -50,6 +50,10 @@ def run_inference(model_file_path: str, regions: List[str], truth_data: bool,
             dfs.to_csv(all_region_tile_match.archive_path)
     else:
         all_region_tile_match = SingleRegionTileMatch(region=regions[0], tile_size=model_file.tile_size)
+
+    df = pd.read_csv(all_region_tile_match.archive_path)
+    truth_data = 'target' in df.keys()
+    df = None
 
     results_csv = InferenceResultsCSV(regions=regions, architecture=model_file.architecture, layers=model_file.layers,
                                       epoch=model_file.epoch, ratio=model_file.ratio, tile_size=model_file.tile_size,
@@ -87,8 +91,6 @@ if __name__ == '__main__':
                         help='Path to the model used to run inference')
     parser.add_argument('--inference_regions', required=True, type=str, nargs='+',
                         help='Region(s) to run inference over')
-    parser.add_argument('--truth_data', action='store_true',
-                        help='If set then truth data will be read in and target column will be included in results csv')
     parser.add_argument('--batch_size', required=False, type=int, default=CONFIG.TORCH.INFERENCE.BATCH_SIZE,
                         help='Batch size for inference')
     parser.add_argument('--num_workers', '-w', required=False, type=int, default=CONFIG.TORCH.INFERENCE.NUM_WORKERS,
@@ -98,4 +100,4 @@ if __name__ == '__main__':
 
     run_inference(model_file_path=args.model_file_path, regions=args.inference_regions,
                   batch_size=args.batch_size, num_workers=args.num_workers,
-                  print_frequency=args.print_frequency, truth_data=args.truth_data)
+                  print_frequency=args.print_frequency)

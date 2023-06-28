@@ -40,7 +40,7 @@ def train_models(regions: List[str], training_ratio: int, layers: List[str], til
                           f'train_validate_split.py with the specified regions, training ratio, and tile size to create'
                           f' it')
 
-    validate_csv_file = ValidateSplit(regions=regions, ratio=1-training_ratio, tile_size=tile_size)
+    validate_csv_file = ValidateSplit(regions=regions, ratio=100-training_ratio, tile_size=tile_size)
     validate_csv_file.create_archive_dir()
     if not validate_csv_file.exists:
         raise LookupError(f'Could not find validate split csv in {TRAIN_VALIDATE_SPLIT_DIR}. Run '

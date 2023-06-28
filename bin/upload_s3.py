@@ -8,8 +8,7 @@ from src.utilities.config_reader import CONFIG
 import os
 
 from src.utilities.aws import upload_files
-from file_types import MultiVariateComposite, TrainedModel, InferenceResultsCSV, InferenceResultsShapefile, File,\
-    InferenceResultsTarfile
+from file_types import MultiVariateComposite, TrainedModel, InferenceResultsCSV, InferenceResultsShapefile, File
 
 
 if __name__ == "__main__":
@@ -18,7 +17,8 @@ if __name__ == "__main__":
     # Base arguments
     parser.add_argument('--s3_bucket_name', '-b', type=str, required=False, default=CONFIG.AWS.BUCKET,
                         help='Name of the s3 bucket to upload the tiles to. Default is bucket specified in config.yaml')
-    subparsers = parser.add_subparsers(help='File type to upload. Can be composites, models, or inference_results', dest='file_type')
+    subparsers = parser.add_subparsers(help='File type to upload. Can be composites, models, or inference_results',
+                                       dest='file_type')
 
     # Composite file arguments
     composite_parser = subparsers.add_parser('composites')

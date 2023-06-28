@@ -11,7 +11,7 @@ from src.ml.train import train_torch
 from file_types import TrainedModel, TrainSplit, ValidateSplit
 
 ARCHITECTURES = ('resnet18', 'resnet34', 'resnet50')
-
+RATIOS = [0.5, 1.0, 2.0, 5.0]
 
 def train_models(regions: List[str], training_ratio: int, layers: List[str], tile_size: int,
                  architectures: List[str] = ARCHITECTURES,
@@ -30,7 +30,8 @@ def train_models(regions: List[str], training_ratio: int, layers: List[str], til
          resnet50
         no_bridge_to_bridge_ratios (list): List of class ratios (no_bridge / bridge) to use when training the models
     """
-    if not 100 < training_ratio < 0:
+    print(training_ratio)
+    if not 100 > training_ratio > 0:
         raise ValueError('Training ratio must be between 0 and 100')
 
     training_csv_file = TrainSplit(regions=regions, ratio=training_ratio, tile_size=tile_size)
@@ -40,7 +41,8 @@ def train_models(regions: List[str], training_ratio: int, layers: List[str], til
                           f'train_validate_split.py with the specified regions, training ratio, and tile size to create'
                           f' it')
 
-    validate_csv_file = ValidateSplit(regions=regions, ratio=1-training_ratio, tile_size=tile_size)
+    validate_csv_file = ValidateSplit(regions=regions, ratio=int(100-training_ratio), tile_size=tile_size)
+    print(validate_csv_file.archive_path)
     validate_csv_file.create_archive_dir()
     if not validate_csv_file.exists:
         raise LookupError(f'Could not find validate split csv in {TRAIN_VALIDATE_SPLIT_DIR}. Run '
@@ -78,10 +80,10 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--class_ratios',
-        '-r',
         type=float,
         nargs='+',
         required=False,
+        default=RATIOS,
         help='List of or single ratio(s) of no_bridge to bridge data to fix class balance in test / validation set. '
              'Model will be trained for each ratio specified i.e. 0.5,1,1.5,5.'
     )
@@ -113,7 +115,6 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--layers',
-        type=list,
         nargs='+',
         required=True,
         default=None,
@@ -129,9 +130,9 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
-    if not 0 < args.layers < 4:
+    if not 0 < len(args.layers) < 4:
         raise ValueError('Must pick between between 1 and 3 layers')
-
+    print(args.layers)
     if not all([layer in LAYER_TO_IX for layer in args.layers]):
         raise ValueError(f'Invalid layer(s). Valid layers to choose from are: {LAYER_TO_IX}')
 
@@ -141,5 +142,5 @@ if __name__ == '__main__':
         tile_size=args.tile_size,
         training_ratio=args.training_ratio,
         architectures=args.architectures,
-        layers=args.layers
+        layers=sorted(args.layers)
     )

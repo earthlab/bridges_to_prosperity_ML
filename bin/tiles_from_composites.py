@@ -34,9 +34,10 @@ def create_tiles(args) -> pd.DataFrame:
     for composite_path in tqdm(composite_files, position=0, leave=True):
         df_i = composite_to_tiles(MultiVariateComposite.create(composite_path), bridge_locs, pos, tile_size=tile_size)
         df.append(df_i)
-    df = pd.concat(df, ignore_index=True)
-    return df
-
+    if df:
+        df = pd.concat(df, ignore_index=True)
+        return df
+    return []
 
 def tiles_from_composites(no_truth: bool, cores: int, region: str, tile_size: int) -> None:
     """
@@ -54,11 +55,12 @@ def tiles_from_composites(no_truth: bool, cores: int, region: str, tile_size: in
     with open(REGION_FILE_PATH, 'r') as f:
         region_info = yaml.safe_load(f)
         districts = list(region_info[region]['districts'].keys())
-
+    
     dfs = []
     for district in districts:
         composites = MultiVariateComposite.find_files(region, district)
-
+        if not composites:
+            continue
         if cores == 1:
             matched_df = create_tiles((composites, bridge_locations, 1))
         else:
@@ -69,22 +71,20 @@ def tiles_from_composites(no_truth: bool, cores: int, region: str, tile_size: in
                     n,
                     tile_size
                 )
-                for n, cs in enumerate(np.array_split(composites, cores))]
+                for n, cs in enumerate(np.array_split(composites, cores if len(composites)> cores else len(composites)))]
             matched_df = process_map(
                 create_tiles,
                 inputs,
                 max_workers=cores
             )
             matched_df = pd.concat(matched_df, ignore_index=True)
-
         tile_match_file = SingleRegionTileMatch(region, tile_size, district)
         tile_match_file.create_archive_dir()
         if not no_truth:
             matched_df = filter_non_unique_bridge_locations(matched_df)
-        print(matched_df, type(matched_df))
         dfs.append(matched_df)
         matched_df.to_csv(tile_match_file.archive_path)
-
+    dfs = [m for m in dfs if isinstance(m, pd.core.frame.DataFrame)]
     regional_matched_df = pd.concat(dfs, ignore_index=True)
     if not no_truth:
         regional_matched_df = filter_non_unique_bridge_locations(regional_matched_df)

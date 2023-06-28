@@ -68,7 +68,7 @@ def create_dset_csv(regions: List[str], ratio: int, tile_size: int) -> None:
     joined_matched_df = filter_non_unique_bridge_locations(pd.concat(matched_dfs, ignore_index=True))
 
     train_csv = TrainSplit(regions, ratio, tile_size)
-    val_csv = ValidateSplit(regions, ratio, tile_size)
+    val_csv = ValidateSplit(regions, int(100-ratio), tile_size)
     matched_df = MultiRegionTileMatch(regions, tile_size)
     train_csv.create_archive_dir()
     val_csv.create_archive_dir()
@@ -92,3 +92,5 @@ if __name__ == '__main__':
                         help='Size of the tiles to be used for training the model. The size is in meters and the tiles'
                              ' and tile match file for the input tile size should already exist')
     args = parser.parse_args()
+
+    create_dset_csv(args.regions, args.training_ratio, args.tile_size)

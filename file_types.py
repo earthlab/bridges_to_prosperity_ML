@@ -848,7 +848,7 @@ class _BaseInferenceFiles(File):
                 continue
             if best and group_dict['best'] is None:
                 continue
-            if epoch is not None and epoch != group_dict['epoch']:
+            if epoch is not None and epoch != int(group_dict['epoch']):
                 continue
             if tile_size is not None and tile_size != int(group_dict['tile_size']):
                 continue

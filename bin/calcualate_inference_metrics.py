@@ -23,3 +23,7 @@ if __name__ == '__main__':
     parser.add_argument('--inference_results', type=str, required=True, help='Path to inference results csv file')
     parser.add_argument('--validation_set', type=str, required=True, help='Path to validation dataset')
     parser.add_argument('--out_path', type=str, required=True, help='Path to save the ROC plot to')
+
+    args = parser.parse_args()
+
+    calculate_inference_metrics(args.inference_results, args.validation_set, args.out_path)

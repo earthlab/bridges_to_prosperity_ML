@@ -3,4 +3,4 @@ aws:
 torch:
   inference:
     batch_size: 100
-    num_workers: 12
+    num_workers: 5

@@ -102,7 +102,7 @@ def inference_torch(model_file: TrainedModel, tile_match_file: Union[SingleRegio
             output = model(data)
             probs = torch.softmax(output, dim=1)
             conf, pred = torch.max(probs, 1)
-
+            print(data.shape)
             print(pred)
 
             # store res to file

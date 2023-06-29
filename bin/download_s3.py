@@ -11,7 +11,7 @@ from tqdm.contrib.concurrent import process_map
 
 from src.utilities.config_reader import CONFIG
 from src.utilities.aws import list_s3_files, s3_download_task
-from file_types import OpticalComposite, MultiVariateComposite, InferenceResultsCSV, InferenceResultsTarfile,\
+from file_types import MultiVariateComposite, InferenceResultsCSV, InferenceResultsTarfile,\
     TrainedModel, File
 
 

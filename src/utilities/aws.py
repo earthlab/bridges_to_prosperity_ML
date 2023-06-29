@@ -168,18 +168,18 @@ def initialize_s3_client(bucket_name: str = CONFIG.AWS.BUCKET):
             
 
 def parse_aws_credentials():
+    credentials_path = os.path.join(pathlib.Path().home(), '.aws', 'credentials')
+    if not os.path.exists(credentials_path):
+        raise FileNotFoundError(f"Could not find aws credentials file at "
+                                f"{os.path.join(pathlib.Path().home(), '.aws', 'credentials')}. Please configure the "
+                                f"AWS cli or run this code from an EC2 instance with an IAM profile with full s3 "
+                                f"permissions")
     with open(os.path.join(pathlib.Path().home(), '.aws', 'credentials'), 'r') as f:
-        start = False
 
         f1 = False
         f2 = False
         f3 = False
         for line in f.readlines():
-            if line == '[saml]\n':
-                start = True
-            if not start:
-                continue
-
             if line.startswith('aws_access_key_id'):
                 os.environ['AWS_ACCESS_KEY_ID'] = str(line.split('= ')[1].strip('\n'))
                 f1 = True

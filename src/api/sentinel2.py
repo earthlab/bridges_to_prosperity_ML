@@ -39,123 +39,6 @@ def _download_task(namespace: Namespace) -> None:
                      )
 
 
-class APIAuth:
-    """
-    Contains methods for creating temporary auth credentials through saml2aws. Currently supports all Earth Lab AWS
-    accounts. saml2aws authentication is not necessary when making requests from an EC2 instance with the properly
-    configured IAM profile.
-    Ex.,
-        auth = APIAuth()
-        s3 = auth.login(aws_account='b2p')
-
-    """
-    # TODO: Remove this
-    SAML2AWS_INSTALL_ERROR_STR = "Error configuring saml2aws. Is it installed? Check for installation by running" \
-                                 " 'saml2aws version'\n If not installed follow instructions at " \
-                                 "https://curc.readthedocs.io/en/iaasce-954_grouper/cloud/aws/getting-started/" \
-                                 "aws-cli-saml2aws.html"
-    MAX_SESSION_DURATION = 7200
-
-    ACCOUNT_TO_ARN = {
-        'b2p': 'arn:aws:iam::120656651053:role/Shibboleth-Customer-Admin',
-        'career': 'arn:aws:iam::031843903858:role/Shibboleth-Customer-Admin',
-        'cnh': 'arn:aws:iam::756129716358:role/Shibboleth-Customer-Admin',
-        'deloitte': 'arn:aws:iam::819721361220:role/Shibboleth-Customer-Admin',
-        'grandchallenge': 'arn:aws:iam::325229007483:role/Shibboleth-Customer-Admin',
-        'jsfp': 'arn:aws:iam::276588439095:role/Shibboleth-Customer-Admin',
-        'macrosystems': 'arn:aws:iam::973137535535:role/Shibboleth-Customer-Admin',
-        'nccasc': 'arn:aws:iam::454742582098:role/Shibboleth-Customer-Admin',
-        'opp': 'arn:aws:iam::080475411655:role/Shibboleth-Customer-Admin'
-    }
-
-    def __init__(self, identikey: str, no_auth: bool = False) -> None:
-        """
-        Queries the user for identikey password and configures saml2aws for CU AWS authentication
-        Args:
-            identikey (str): CU identikey used to log into AWS accounts
-        """
-        if not no_auth:
-            self._identikey = identikey
-            self._password = getpass.getpass('identikey password:')
-            self._configure_saml2aws()
-
-    def login(self, aws_account: str, ttl: int = MAX_SESSION_DURATION) -> boto3.client:
-        """
-        Creates a temporary credential to the specified AWS account and returns a boto3 s3 client object that can be
-        used to make requests.
-        Args:
-            aws_account (str): Which AWS account to log in to. Must be a key in the ACCOUNT_TO_ARN dictionary
-            ttl (int): How long the credentials will be valid for in seconds. Max is 7200 (2 hours)
-        Returns:
-            (boto3.client): AWS client objects that can be used to make requests to the account
-        """
-        self._configure_session_ttl(ttl)
-        try:
-            if aws_account not in self.ACCOUNT_TO_ARN.keys():
-                raise ValueError(f'{aws_account} is not a valid account string. Please input one of the following:\n '
-                                 f'{self.ACCOUNT_TO_ARN.keys()}')
-
-            sp.call([
-                'saml2aws', 'login', f'--username={self._identikey}', f'--password={self._password}',
-                f'--role={self.ACCOUNT_TO_ARN[aws_account]}', '--skip-prompt', '--force'
-            ])
-
-            parse_aws_credentials()
-
-            return boto3.client(
-                's3',
-                aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
-                aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
-                aws_session_token=os.environ['AWS_SESSION_TOKEN']
-            )
-
-        except FileNotFoundError:
-            print(self.SAML2AWS_INSTALL_ERROR_STR)
-            return
-
-    def _configure_session_ttl(self, ttl: int) -> None:
-        """
-        Sets how long the login credentials will be valid for in the ~/.saml2aws configuration file.
-        Args:
-             ttl (int): How long the login credentials will be valid for in seconds. Max is 7200 (2 hours)
-        """
-        if ttl > self.MAX_SESSION_DURATION:
-            print(f'Requested TTL exceeds max of {self.MAX_SESSION_DURATION}. Using max duration.')
-            ttl = self.MAX_SESSION_DURATION
-
-        saml2aws_path = os.path.join(pathlib.Path.home(), '.saml2aws')
-        if not os.path.exists(saml2aws_path):
-            print(f'Could not find .saml2aws file at {saml2aws_path}. Is saml2aws installed? If not installed follow'
-                  f' instructions at "\
-                  "https://curc.readthedocs.io/en/iaasce-954_grouper/cloud/aws/getting-started/aws-cli-saml2aws.html"')
-            return
-
-        with open(saml2aws_path, 'r') as f:
-            lines = f.readlines()
-
-        for i, line in enumerate(lines):
-            if line.startswith('aws_session_duration'):
-                lines[i] = f'aws_session_duration    = {ttl}\n'
-
-        with open(saml2aws_path, 'w') as f:
-            f.writelines(lines)
-
-        print(f'Set ttl to {ttl} seconds')
-
-    def _configure_saml2aws(self):
-        """
-        Sets the saml2aws configuration for authenticating with CU AWS accounts
-        """
-        try:
-            sp.call([
-                'saml2aws', 'configure', '--idp-provider=ShibbolethECP', '--mfa=push',
-                '--url=https://fedauth.colorado.edu/idp/profile/SAML2/SOAP/ECP',
-                f'--username={self._identikey}', f'--password={self._password}', '--skip-prompt'
-            ])
-        except FileNotFoundError:
-            print(self.SAML2AWS_INSTALL_ERROR_STR)
-
-
 class SinergiseSentinelAPI:
     """
     Contains methods for downloading data from the Sinergise Sentinel2 LC1 data hosted on AWS. On EC2 instances with
@@ -165,22 +48,17 @@ class SinergiseSentinelAPI:
         api = SinergiseSentinelAPI()
         api.download([27.876, -45.678, 28.012, -45.165], 1000, '/example/outdir', '2021-01-01', '2021-02-01')
     """
-    def __init__(self, identikey: str = None) -> None:
+    def __init__(self) -> None:
         """
         Creates a boto3 client object for making requests. If using a CU AWS account the user's identikey can be input
         to create temporary credentials.
-            Args:
-                identikey (str): If not None, will be used to create temporary credentials for the CU AWS B2P account.
         """
         self._bucket_name = 'sentinel-s2-l1c'
 
         # When the API is not used from an EC2 instance with the proper IAM profile configured credentials need to be
         # created
-        if identikey is not None:
-            auth = APIAuth(identikey=identikey)
-            self._s3 = auth.login(aws_account='b2p')
-        else:
-            self._s3 = initialize_s3_client()
+
+        self._s3 = initialize_s3_client()
 
     def download(self, bounds: List[float], buffer: float, region: str, district: str, start_date: str, end_date: str,
                  bands=None) -> None:

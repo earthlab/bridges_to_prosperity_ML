@@ -13,10 +13,10 @@ sudo chmod 666 /var/run/docker.sock
 ``` -->
 
 open screen and start docker container
-<!-- ``` bash 
+``` bash 
 screen -S dockerRun
 docker run <image_path> -n b2p -d -P 8888:8888
-``` -->
+```
 exit with cntl+a+d
 
 exec into the docker container
@@ -32,12 +32,12 @@ clone code
 
 install anaconda and move to 3.10
 <https://phoenixnap.com/kb/how-to-install-anaconda-centos-7>
-<!-- ``` bash 
+``` bash 
 cd bridges_to_prosperity_ML
 conda install python=3.10
-conda create --name b2p --file=enviornment.yml python=3.10 `
+conda env create --name b2p --file=environment.yml python=3.10 `
 source env.sh
-``` -->
+```
 
 It is worth noting that this method is not advised
 
@@ -46,14 +46,14 @@ It is worth noting that this method is not advised
 ## Running the code
 
 This application is designed to be interacted with through its command line executables. These programs are in the bin directory and can be run with
-<!-- ``` bash 
+``` bash 
 python <path_to_.py_script>
-``` -->
+```
 
-To see a descrition of each program's input parameters, run the program with the --help flag like so
-<!-- ``` bash 
+To see a description of each program's input parameters, run the program with the --help flag like so
+``` bash 
 python <path_to_.py_script> --help
-``` -->
+```
 A description of each of these programs is included further down in this README
 
 ## Configuring S3
@@ -70,10 +70,10 @@ Each new region and its districts for which the user would like to create compos
 
 ## Composite data APIs
 
-In general we get data from three seperate sources:
-    - Sentinel2: The most time consuming data source to use, but shows considerable promise. Both the visual light bands and near infrared both come from this source.
-    - SRTM: This is a NASA database that provides elevation data. Slope is computed via finite difference methods from here
-    - OSM: there is a convient python api that is leveraged to obtain this data source
+In general we get data from three sources:  
+    - Sentinel2: The most time consuming data source to use, but shows considerable promise. Both the visual light bands and near infrared both come from this source.  
+    - SRTM: This is a NASA database that provides elevation data. Slope is computed via finite difference methods from here  
+    - OSM: there is a convenient python api that is leveraged to obtain this data source  
 
 There code for each of these data sources are scripts located in the src/api directory named sentinel2.py, lp_daac.py, and osm.py respectively. The specifics of these apis are abstracted away through the programs in bin, although the APIs may be used as stand alone modules for downloading data if the user wishes.
 Documentation has been added to each of these modules and is sufficient for learning how to use them.
@@ -114,14 +114,14 @@ is compressed and then the resulting tar file is uploaded. These files are store
 # Programs
 
 Creating new composites, tiles, models, and running inference can be accomplished with the programs executable programs in the bin directory. Each of these programs is run with the command  
-<!-- ``` bash 
+``` bash 
 python <path_to_.py_script>
-``` -->
+```
 
-And a descrition of each program's input parameters can be found by running the program with the --help flag like so
-<!-- ``` bash 
+And a description of each program's input parameters can be found by running the program with the --help flag like so
+``` bash 
 python <path_to_.py_script> --help
-``` -->
+```
 
 Each program has several optional flags for tuning the run to a specific location, for example. A more thorough description of each program and its input parameters can be found below
 
@@ -129,38 +129,38 @@ Each program has several optional flags for tuning the run to a specific locatio
 
 Used to download composites, trained models, or inference results from the s3 bucket configured to the project. One of these file types must be specified when calling this program.
 
-Example usage for downloading existing files in s3 of a certain type
+Example usage for downloading existing files in s3 of a certain type:
 
-### composites
-<!-- ``` bash 
+### composites:
+``` bash 
 python bin/download_s3.py composites
-``` -->
+``` 
 This will download all existing composites. To further refine your download, specify any combination of region, district, or utm tile:
 
-<!-- ``` bash 
+``` bash 
 python bin/download_s3.py composites --region Uganda
-``` -->
+```
 Will download all composites for Uganda only
 
-<!-- ``` bash 
+``` bash 
 python bin/download_s3.py composites --region Uganda --district Kasese
-``` -->
+```
 Will download all composites for Uganda in the Kasese district only
 
-<!-- ``` bash 
+``` bash 
 python bin/download_s3.py composites --mgrs 35NRA
-``` -->
+```
 Will download all composites that belong to the 35NRA UTM tile, regardless of region or district
 
 ### models:
-<!-- ``` bash 
+``` bash 
 python bin/download_s3.py models
-``` -->
+```
 
 ### inference_results:
-<!-- ``` bash 
+``` bash 
 python bin/download_s3.py results
-``` -->
+```
 
 
 ## Jupyter notebook

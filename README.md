@@ -1,45 +1,120 @@
 # 
 # Getting started 
 
-## With Docker (recommended)
+## With Docker on AWS EC2 Instance (recommended)
 
-Installing Docker on EC2 instance with AWS Linux 2023 AMI
-<!-- ``` bash 
+### EC2 Security Group Configuration
+Along with provisioning the code runtime environment, the container also 
+starts a Jupyterlab server on port 8888. If you would like to use the Jupyter
+server to interact with the code, make sure that the EC2 instance's security group has
+an inbound rule set allowing traffic on port 8888.
+
+
+### EC2 IAM Profile Configuration
+In order to transfer data to and from the EC2 instance and S3 storage, the 
+EC2 instance must be initialized with an IAM profile which has the S3FullAccessPermissions role.
+This role can then be attached to the instance in the IAM Profile Settings section of the Advanced 
+Settings when starting an instance.
+
+
+### Installing Docker and Screen on EC2 instance with AWS Linux 2023 AMI
+``` bash 
 screen -S dockerRun
 sudo yum update 
 sudo yum install docker
+sudo yum install screen
+```
+
+### Running Docker and B2P Container
+``` bash 
 sudo service docker start
 sudo chmod 666 /var/run/docker.sock
-``` -->
-
-open screen and start docker container
-``` bash 
-screen -S dockerRun
-docker run <image_path> -n b2p -d -P 8888:8888
+sudo docker container run 
 ```
+
+### Open screen and start Docker Container
+Make sure to replace <server_password> with a password of your choice
+``` bash 
+screen -S docker
+sudo docker run -p 8888:8888 -e JUPYTER_TOKEN=<server_password> earthlabcu/b2p
+```
+To put screen in background
+``` bash 
 exit with cntl+a+d
-
-exec into the docker container
-``` bash 
-screen -S dockerExec
-docker exec -it b2p /bin/bash
 ```
+
+### Using the container application
+
+#### Connect to Jupyter server
+Use your browser to go to <ec2_instance_public_ipv4_address>:8888  
+You should be prompted to input the server token. Input the JUPYTER_TOKEN that was 
+used to start the container  
+Once on the server, the terminal application can be used to run the programs in bin. See the 
+Running the Code section below for further instructions.  
+Jupyter notebooks can also be used to import functions into and run code.
+
+
+#### Exec into container to use command line 
+If you prefer to use only the command line to interact with the application, use the
+following command from within the EC2 instance.
+``` bash 
+sudo docker exec -it b2p /bin/bash
+```
+This will start a session in the docker container's bash shell
 
 ## Without Docker 
 
-clone code 
-`git clone https://github.com/earthlab/bridges_to_prosperity_ML`
-
-install anaconda and move to 3.10
-<https://phoenixnap.com/kb/how-to-install-anaconda-centos-7>
+If Conda is not already installed, install with:
 ``` bash 
-cd bridges_to_prosperity_ML
-conda install python=3.10
-conda env create --name b2p --file=environment.yml python=3.10 `
-source env.sh
+wget https://repo.anaconda.com/archive/Anaconda3-2023.03-1-Linux-x86_64.sh
 ```
 
-It is worth noting that this method is not advised
+This will download a file called Anaconda3-2023.03-1-Linux-x86_64.sh in the directory that you ran the wget command in.
+Update the file permissions with:
+``` bash 
+wget -v +x Anaconda*.sh
+```
+
+Run the installer file by running the command:
+``` bash 
+./Anaconda3-2023.03-1-Linux-x86_64.sh
+```
+You will have to press enter and type yes to get through the licensing / prompts
+
+Add conda to your path and initialize base environment by running:
+``` bash 
+source ~/.bashrc
+```
+You will now be in the base conda environment
+
+Install git and clone the GitHub repo
+Install git with:
+``` bash 
+sudo yum install git
+```
+Clone the repo with:
+``` bash 
+git clone https://github.com/earthlab/bridges_to_prosperity_ML
+``` 
+
+cd into repo
+``` bash 
+cd bridges_to_prosperity_ML
+```
+
+Create the new environment with:
+``` bash 
+conda env create -n b2p --file environment.yml
+```
+
+Activate the conda env with:
+``` bash 
+conda activate b2p 
+```
+
+If not using an EC2 instance with a properly configured IAM profile (recommended)
+you must install the AWS CLI and authenticate with the AWS account whose S3 bucket 
+will be configured to the project
 
 # Overview
 

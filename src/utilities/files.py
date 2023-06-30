@@ -26,8 +26,10 @@ def filter_non_unique_bridge_locations(matched_df: pd.DataFrame) -> pd.DataFrame
 
     return matched_df.drop(rows_to_delete)
 
+
 def list_of_vertices(in_list):
-    return [[in_list[0], in_list[1]], [in_list[2], in_list[3]], [in_list[4], in_list[5]], [in_list[6], in_list[7]]]
+    # min lon, min lat, max lon, max lat
+    return [[in_list[1], in_list[0]], [in_list[3], in_list[2]], [in_list[5], in_list[4]], [in_list[7], in_list[6]]]
 
 
 def results_csv_to_shapefile(csv_path: str, out_path: str):

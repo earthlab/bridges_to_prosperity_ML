@@ -49,7 +49,7 @@ source env.sh
 
 # Suggested Workflow 
 
-Singing a Jupyter notebook is sometimes preferential to running scripts in the terminal. Computations such as creating input data, tiling, or training and to a lesser extent inference. It is suggested that you create a screen and run the provided scripts. this will allow for code to run for a long time without fear of the ssh tunnel being closed and stopping your progress. for smaller tasks such as plotting it may be nice to work in a Jupyter notebook. Examples include downloading/uploading files from S3 or creating plots/metrics. An example Jupyter notebook `sandbox.ipynb` is left with some example code.
+Singing a Jupyter notebook is sometimes preferential to running scripts in the terminal. Computations such as creating input data, tiling, or training and to a lesser extent inference. It is suggested that you create a screen and run the provided scripts. This will allow for code to run for a long time without fear of the ssh tunnel being closed and stopping your progress. For smaller tasks such as plotting it may be nice to work in a Jupyter notebook. Examples include downloading/uploading files from S3 or creating plots/metrics. An example Jupyter notebook `sandbox.ipynb` is left with some example code.
 
 ## Using screens
 Upon entering the virtual machine. Start a screen that will run your docker container. Then open a separate screen and exec into the docker instance to run scripts.

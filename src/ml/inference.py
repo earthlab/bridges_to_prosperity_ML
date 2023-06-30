@@ -1,21 +1,43 @@
-import os
+"""
+Performs inference over a set of tiles defined by the input tile match file. The input model is specified as well as the
+ results output file. If there is truth data for the tiles that inference is being run over, the truth_data parameter
+  should be set to True so that a target column is created in the results file.
+"""
 import time
+from typing import Union
 
 import pandas as pd
 import torch
 import torchvision
 
 from src.ml.util import B2PNoTruthDataset, B2PTruthDataset, AverageMeter, ProgressMeter, DEFAULT_ARGS
+from file_types import TrainedModel, SingleRegionTileMatch, MultiRegionTileMatch, InferenceResultsCSV
 
 
-def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: str, truth_data: bool, 
-                    batch_size: int = None, gpu=None, num_workers: int = None, print_frequency: int = 100, args=DEFAULT_ARGS):
-    res_dir,_ = os.path.split(results_csv_path)
-    os.makedirs(res_dir, exist_ok=True)
-    architecture = os.path.basename(model_file_path).split('.')[0]
-    print("Using pre-trained model '{}'".format(architecture))
-    model = torchvision.models.__dict__[architecture](pretrained=True)
-    args.layers = os.path.basename(model_file_path).split('.')[1].split('_')
+def inference_torch(model_file: TrainedModel, tile_match_file: Union[SingleRegionTileMatch, MultiRegionTileMatch],
+                    results_file: InferenceResultsCSV, truth_data: bool, batch_size: int = None, gpu=None,
+                    num_workers: int = None, print_frequency: int = 100, args=DEFAULT_ARGS) -> None:
+    """
+    Performs inference over a set of tiles defined by the input tile match file. The input model is specified as well
+     as the results output file. If there is truth data
+    for the tiles that inference is being run over, the truth_data parameter should be set to True so that a target
+     column is created in the results file.
+    Args:
+        model_file (TrainedModel): File object for the trained pytorch model file that will be used to perform inference
+        tile_match_file (SingleRegionTileMatch, MultiRegionTileMatch): File object for csv file defining the physical
+         and file location of each tile to run inference on
+        results_file (InferenceResultsCSV): File object for csv that will store the inference results for each tile in
+         tile match file
+        truth_data (bool): If True, truth data for the input tiles will be searched for and used to include a target
+         column in the results csv
+        batch_size (int): Set the batch size for the amount of tiles to run inference over
+        gpu (bool): If True and machine has a GPU then it will be used to run inference
+    """
+
+    print("Using pre-trained model '{}'".format(model_file.architecture))
+    model = torchvision.models.__dict__[model_file.architecture](pretrained=True)
+    args.layers = model_file.layers
+
     if batch_size is not None: 
         args.batch_size = batch_size
     if not torch.cuda.is_available() and not torch.backends.mps.is_available():
@@ -28,24 +50,25 @@ def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: 
         model = model.to(device)
     else:
         # DataParallel will divide and allocate batch_size to all available GPUs
-        if architecture.startswith('alexnet') or architecture.startswith('vgg'):
+        if model_file.architecture.startswith('alexnet') or model_file.architecture.startswith('vgg'):
             model.features = torch.nn.DataParallel(model.features)
             model.cuda()
         else:
             model = torch.nn.DataParallel(model).cuda()
 
     if gpu is None:
-        checkpoint = torch.load(model_file_path)
+        checkpoint = torch.load(model_file.archive_path)
     elif torch.cuda.is_available():
         # Map model to be loaded to specified single gpu.
         loc = 'cuda:{}'.format(gpu)
-        checkpoint = torch.load(model_file_path, map_location=loc)
+        checkpoint = torch.load(model_file.archive_path, map_location=loc)
     else:
         assert False, "Shouldn't happen"
 
     model.load_state_dict(checkpoint['state_dict'], strict=False)
 
-    dset = B2PTruthDataset(tile_csv_path, layers=args.layers) if truth_data else B2PNoTruthDataset(tile_csv_path, layers=args.layers)
+    dset = B2PTruthDataset(tile_match_file.archive_path, layers=args.layers) if truth_data else B2PNoTruthDataset(
+        tile_match_file.archive_path, layers=args.layers)
     dloader = torch.utils.data.DataLoader(
         dset,
         batch_size=args.batch_size,
@@ -79,6 +102,8 @@ def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: 
             output = model(data)
             probs = torch.softmax(output, dim=1)
             conf, pred = torch.max(probs, 1)
+            print(data.shape)
+            print(pred)
 
             # store res to file
             ix = range(
@@ -100,5 +125,5 @@ def inference_torch(model_file_path: str, tile_csv_path: str, results_csv_path: 
             if i % print_frequency == 0:
                 progress.display(i + 1)
 
-    res_df.to_csv(results_csv_path)
+    res_df.to_csv(results_file.archive_path)
     return res_df

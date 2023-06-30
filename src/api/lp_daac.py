@@ -11,18 +11,17 @@ import re
 import shutil
 import tempfile
 import urllib
-import zipfile
 from abc import ABC
 from argparse import Namespace
 from http.cookiejar import CookieJar
-from typing import Tuple, List, Any
+from typing import Tuple, List
 from src.utilities.imaging import get_utm_epsg
 
 import numpy as np
 import rasterio
 import yaml
 from netCDF4 import Dataset
-from osgeo import gdal, gdalconst
+from osgeo import gdal
 from osgeo import osr, ogr
 from rasterio.merge import merge
 from tqdm import tqdm
@@ -41,27 +40,29 @@ def _base_download_task(task_args: Namespace) -> None:
             task_args.password (str): NASA EarthData password
             task_args.dest (str): Path to where the data will be written
     """
-    link = task_args.link
+    try:
+        link = task_args.link
+        pm = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+        pm.add_password(None, "https://urs.earthdata.nasa.gov", task_args.username, task_args.password)
+        cookie_jar = CookieJar()
+        opener = urllib.request.build_opener(
+            urllib.request.HTTPBasicAuthHandler(pm),
+            urllib.request.HTTPCookieProcessor(cookie_jar)
+        )
+        urllib.request.install_opener(opener)
+        myrequest = urllib.request.Request(link)
+        response = urllib.request.urlopen(myrequest)
+        response.begin()
 
-    pm = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-    pm.add_password(None, "https://urs.earthdata.nasa.gov", task_args.username, task_args.password)
-    cookie_jar = CookieJar()
-    opener = urllib.request.build_opener(
-        urllib.request.HTTPBasicAuthHandler(pm),
-        urllib.request.HTTPCookieProcessor(cookie_jar)
-    )
-    urllib.request.install_opener(opener)
-    myrequest = urllib.request.Request(link)
-    response = urllib.request.urlopen(myrequest)
-    response.begin()
-
-    with open(task_args.dest, 'wb') as fd:
-        while True:
-            chunk = response.read()
-            if chunk:
-                fd.write(chunk)
-            else:
-                break
+        with open(task_args.dest, 'wb') as fd:
+            while True:
+                chunk = response.read()
+                if chunk:
+                    fd.write(chunk)
+                else:
+                    break
+    except Exception as e:
+        print(str(e))
 
 
 # Functions for elevation parallel data processing
@@ -83,6 +84,10 @@ def _elevation_download_task(task_args: Namespace) -> None:
     dest = os.path.join(task_args.out_dir, os.path.basename(task_args.link))
     task_args.dest = dest
     _base_download_task(task_args)
+
+    # Sometimes the files will not exist, as in the case of a swath over water
+    if not os.path.exists(task_args.dest):
+        return
 
     _nc_to_tif(task_args.dest, task_args.top_left_coord, task_args.out_dir)
 
@@ -321,7 +326,6 @@ class Elevation(BaseAPI):
         src_crs.ImportFromEPSG(4326)  # Lat / lon
 
         geo_transform = input_tiff_file.GetGeoTransform()
-        print(geo_transform, 'gglatlon')
         dst_epsg = get_utm_epsg(geo_transform[3], geo_transform[0])
         dst_crs = osr.SpatialReference()
         dst_crs.ImportFromEPSG(dst_epsg)
@@ -353,17 +357,13 @@ class Elevation(BaseAPI):
         bbox[2] += buffer
         bbox[3] += buffer
 
-        print(bbox)
-
         temp_dir = tempfile.mkdtemp(prefix='b2p')
 
         try:
             # 1) Download all overlapping files and convert to tiff in parallel
             file_names = self._resolve_filenames(bbox)
-            print(file_names)
             task_args = []
             for file_name in file_names:
-                print((os.path.join(self.BASE_URL, file_name)))
                 task_args.append(
                     Namespace(
                         link=(os.path.join(self.BASE_URL, file_name)),
@@ -373,7 +373,8 @@ class Elevation(BaseAPI):
                         password=self._password
                     )
                 )
-            with mp.Pool(mp.cpu_count() - 1) as pool:
+            # If you make too many requests in parallel the server will stop you
+            with mp.Pool(1) as pool:
                 for _ in tqdm(pool.imap(_elevation_download_task, task_args), total=len(task_args)):
                     pass
 
@@ -452,7 +453,6 @@ class Elevation(BaseAPI):
             max_lat_ord = 'n'
             round_max_lat = math.floor(max_lat)
 
-        print(round_min_lat, round_max_lat, min_lat_ord, max_lat_ord)
         lon_substrings = self._create_substrings(round_min_lon, round_max_lon, min_lon_ord, max_lon_ord, 3)
         lat_substrings = self._create_substrings(round_min_lat, round_max_lat, min_lat_ord, max_lat_ord, 2)
 

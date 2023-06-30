@@ -1,9 +1,15 @@
-import os
+"""
+Given a composite tiff file get the corresponding waterways and governmental boundaries from OSM, 
+then write the bands to output OSM file
+"""
+
 import osmnx as ox
 import rasterio
 from rasterio import features
 from src.utilities.coords import tiff_to_bbox
 from osgeo import gdal
+from file_types import OpticalComposite, MultiVariateComposite, OSM
+from typing import Union
 
 TAGS_WATER = {
     'water': True,
@@ -14,55 +20,58 @@ TAGS_BOUNDARY = {
     'admin_level': True
 }
 
-"""
-    Given a tiff from from sentinel2 get the corresponding waterways and governmental boundaries from OSM, then combine the two into a hypercube
-"""
 
-
-def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
-    assert os.path.isfile(s2_tiff), f'{s2_tiff} DNE'
-    # the bounding box that shapely uses is a set of 4 (x,y) pairs, ox wants ymax, ymin, xmax, xmin
-    (tl,tr,br,bl) = tiff_to_bbox(s2_tiff)
+def create_osm_composite(input_composite_file: Union[OpticalComposite, MultiVariateComposite]) -> OSM:
+    """
+    Given a composite tiff file get the corresponding waterways and governmental boundaries from OSM, 
+    then write the bands to output OSM file
+    Args:
+        input_composite_file (OpticalComposite, MultiVariateComposite): Composite file object for the file thats bounds will be used
+            to download the OSM data
+    Returns:
+        osm_file (OSM): Output OSM file object 
+    """  
+    # The bounding box that shapely uses is a set of 4 (x,y) pairs, ox wants ymax, ymin, xmax, xmin
+    tl, _, br, _ = tiff_to_bbox(input_composite_file.archive_path)
     bbox = [tl[0], br[0], br[1], tl[1]]
-    s2_tiff_file = gdal.Open(s2_tiff)
-    epsg_code = rasterio.CRS.from_wkt(s2_tiff_file.GetProjection()).to_epsg()
+    input_tiff_file = gdal.Open(input_composite_file.archive_path)
+    epsg_code = rasterio.CRS.from_wkt(input_tiff_file.GetProjection()).to_epsg()
 
-    print(bbox)
     # Call to ox api to get geometries for specific tags
-    if debug: print('Getting water from osm')
     water = ox.geometries.geometries_from_bbox(*bbox, TAGS_WATER)
-    if debug: print('Getting boundary from osm')
     boundary = ox.geometries.geometries_from_bbox(*bbox, TAGS_BOUNDARY)
+    
     # Remove anything with nan
     water_trim = water.loc[:,['geometry', 'waterway']].dropna()
     boundary_trim = boundary.loc[:,['geometry', 'boundary']].dropna()
     boundary_trim = boundary_trim[boundary_trim['geometry'].geom_type == 'LineString']
-    # convert to crs that matches the sentinel2
-
+   
+    # Convert to crs that matches the sentinel2
     water_trim = water_trim.to_crs(f'epsg:{epsg_code}')
     boundary_trim = boundary_trim.to_crs(f'epsg:{epsg_code}')
+    
     # Turn this into an iterable that will be used later by features 
-    water_shapes = ((geom,1) for j,geom in enumerate(water_trim['geometry']) )
-    boundary_shapes = ((geom,1) for j,geom in enumerate(boundary_trim['geometry']) )
+    water_shapes = ((geom, 1) for geom in water_trim['geometry'])
+    boundary_shapes = ((geom, 1) for geom in boundary_trim['geometry'])
 
-    with rasterio.open(s2_tiff, 'r') as src:
+    osm_file = OSM(input_composite_file.region, input_composite_file.district, input_composite_file.mgrs)
+    osm_file.create_archive_dir()
+    with rasterio.open(input_composite_file.archive_path, 'r') as src:
         meta = src.meta.copy()
         meta['count'] = 2
         meta.update(
             compress='lzw'
         )
 
-        with rasterio.open(dst_tiff, 'w+', **meta) as dst:
+        with rasterio.open(osm_file.archive_path, 'w+', **meta) as dst:
             # Rasterize water shapes
-            if debug: print('Rasterizing water')
             water_arr = features.rasterize(
                 shapes=water_shapes,
                 fill=0,
                 out=dst.read(1),
                 transform=src.transform
             )
-            print(water_arr)
-            if debug: print('Writing water to hypercube tiff')
+
             dst.write_band(1, water_arr)
 
             # Rasterize boundary shapes
@@ -73,4 +82,5 @@ def getOsm(s2_tiff: str, dst_tiff: str, debug: bool = False):
                 transform=src.transform
             )
             dst.write_band(2, boundary_arr)
-            print('boundary set', set(boundary_arr.flatten()))
+
+    return osm_file

@@ -1,3 +1,8 @@
+"""
+Functions for training a classification model for a certain model architecture. The inputs for model training are multivariate tiles of a certain size.
+Each tile is classified as either bridge or no bridge.
+"""
+
 import os
 import shutil
 import time
@@ -17,25 +22,37 @@ from torch import nn
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import Subset
 
-from src.ml.util import AverageMeter, ProgressMeter, Summary, accuracy, B2PTruthDataset, TFORM, MODEL_NAME, DEFAULT_ARGS
+from src.ml.util import AverageMeter, ProgressMeter, Summary, accuracy, B2PTruthDataset, TFORM, DEFAULT_ARGS
+from file_types import TrainedModel
+from argparse import Namespace
 
 BEST_ACC1 = 0
 
 
-def train_torch(results_dir: str, train_csv_path: str, test_csv_path: str, architecture: str,
-                bridge_no_bridge_ratio: Union[None, float], layers: Union[None, List[str]]=None, seed: Union[None, int] = None):
+def train_torch(train_csv_path: str, test_csv_path: str, regions: List[str], architecture: str,
+                bridge_no_bridge_ratio: Union[None, float], layers: List[str], tile_size: int,
+                seed: Union[None, int] = None) -> None:
+    """
+    Starts off the training of the model in parallel
+    Args:
+        train_csv_path (str): Path to the csv containing the training subset of the tile data
+        test_csv_path (str): Path to the csv containing the test / validation subset of the tile data
+        regions (list): The list of regions containing the tiles used in the train / validation data
+        architecture (str): Model architecture to use when training the model ex. resnet18
+        bridge_no_bridge_ratio (float): The ratio of no bridge tile examples to bridge tile examples to include when training
+        layers (list): The names of the layers to use from the multivariate tiles (red, green, osm-water, etc.)
+        tile_size (int): The size of the tiles used for training in meters
+        seed (int): Seed used for randomization in training
+    """
     # Configure the namespace for this run
-
     args = DEFAULT_ARGS
-    args.results_dir = results_dir
     args.train_csv_path = train_csv_path
     args.test_csv_path = test_csv_path
     args.architecture = architecture
     args.bridge_no_bridge_ratio = bridge_no_bridge_ratio
-    if layers is not None: 
-        args.layers = layers
-
-    os.makedirs(results_dir, exist_ok=True)
+    args.layers = layers
+    args.tile_size = tile_size
+    args.regions = regions
 
     if seed is not None:
         torch.manual_seed(seed)
@@ -45,7 +62,6 @@ def train_torch(results_dir: str, train_csv_path: str, test_csv_path: str, archi
                       'which can slow down your training considerably! You may see unexpected behavior when '
                       'restarting from checkpoints.')
 
-    # TODO: Maybe make these configurable from the CLI / signature
     if args.gpu is not None:
         warnings.warn('You have chosen a specific GPU. This will completely disable data parallelism.')
 
@@ -70,7 +86,14 @@ def train_torch(results_dir: str, train_csv_path: str, test_csv_path: str, archi
         main_worker(args.gpu, ngpus_per_node, args)
 
 
-def main_worker(gpu, ngpus_per_node, args):
+def main_worker(gpu: bool, ngpus_per_node: int, args: Namespace) -> None:
+    """
+    Parallel task for training classification model
+    Args:
+        gpu (bool): If true and machine has GPU then it will be used for training
+        ngpus_per_node (int): Number of GPU per compute node if machine has GPUs
+        args (Namespace): Namespace defining run configuration
+    """
     global BEST_ACC1
     BEST_ACC1 = 0
     args.gpu = gpu
@@ -94,9 +117,6 @@ def main_worker(gpu, ngpus_per_node, args):
     else:
         print("=> creating model '{}'".format(args.architecture))
         model = torchvision.models.__dict__[args.architecture]()
-        # num_channels = 3
-        # model.conv1 = torch.nn.Conv2d(num_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        # torch.nn.init.kaiming_normal_(model.conv1.weight, mode='fan_out', nonlinearity='relu')
 
     if not torch.cuda.is_available() and not torch.backends.mps.is_available():
         print('using CPU, this will be slow')
@@ -217,8 +237,7 @@ def main_worker(gpu, ngpus_per_node, args):
             num_workers=args.workers, pin_memory=True, sampler=val_sampler)
         validate(val_loader, model, criterion, args)
         return
-    
-    layers_str = '_'.join(args.layers)
+
     for epoch in range(args.start_epoch, args.epochs):
 
         train_loader = torch.utils.data.DataLoader(
@@ -246,7 +265,7 @@ def main_worker(gpu, ngpus_per_node, args):
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                                                     and args.rank % ngpus_per_node == 0):
             save_checkpoint(
-                {
+                state={
                     'epoch': epoch + 1,
                     'arch': args.architecture,
                     'state_dict': model.state_dict(),  # this was full of NaN with all the training data
@@ -257,14 +276,22 @@ def main_worker(gpu, ngpus_per_node, args):
                     'optimizer': optimizer.state_dict(),
                     'scheduler': scheduler.state_dict()
                 },
-                is_best,
-                os.path.join(args.results_dir, f'{args.architecture}.{layers_str}.chkpt{epoch + 1}.tar')
+                architecture=args.architecture,
+                regions=args.regions,
+                layers=args.layers,
+                epoch=epoch,
+                ratio=args.bridge_no_bridge_ratio,
+                is_best=is_best,
+                tile_size=args.tile_size
             )
         train_dataset.update()
         val_dataset.update()
 
 
 def train(train_loader, model, criterion, optimizer, epoch, device, args):
+    """
+    Training portion of parallel process
+    """
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
@@ -377,16 +404,11 @@ def validate(val_loader, model, criterion, args):
     return total_mt.avg, bridge_mt.avg, no_bridge_mt.avg
 
 
-def save_checkpoint(state, is_best, filename):
-    root, _ = os.path.split(filename)
-    if not os.path.isdir(root):
-        os.makedirs(root)
-    torch.save(state, filename)
+def save_checkpoint(state, architecture, regions, layers, epoch, ratio, is_best, tile_size):
+    model_file = TrainedModel(regions=regions, architecture=architecture, layers=layers, epoch=epoch, ratio=ratio, tile_size=tile_size)
+    model_file.create_archive_dir()
+    torch.save(state, model_file.archive_path)
     if is_best:
-        d = os.path.dirname(filename)
-        f = os.path.basename(filename)
-        prts = f.split('.chkpt')
-        shutil.copyfile(
-            filename,
-            os.path.join(d, '.'.join([prts[0], 'best']) + ".tar")
-        )
+        best_filename = TrainedModel(regions=regions, architecture=architecture, layers=layers, epoch=epoch, ratio=ratio, best=True, tile_size=tile_size)
+        best_filename.create_archive_dir()
+        shutil.copyfile(model_file.archive_path, best_filename.archive_path)

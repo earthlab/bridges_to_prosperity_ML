@@ -1,7 +1,5 @@
 """
 Contains classes and functions for calculating inference accuracy metrics
-
-Copyright 2023 by Erick Verleye, CU Boulder Earth Lab.
 """
 
 import warnings
@@ -41,22 +39,18 @@ def is_in_set_pnb(a, b):
     return result.reshape(shape)
 
 
-# TODO: Things could be sped up by leveraging past calculations / adding more input parameters. The pieces are here
-#  though
-# TODO: Needs unit tests
-
-
 class Metrics:
     """
     Contains methods for calculating metrics (true positive, true negative, false positive, false negative, etc.) of the
      model inference results.
     """
+
     def __init__(self, inference_results_set: str, validation_set: str, subset_key: str = 'tile',
                  confidence_column: str = 'conf', prediction_column: str = 'pred', validation_column: str = 'is_bridge',
                  confidence: float = 0.834):
         """
         Initializes DataFrames for inference result set and validation set. Subsets inference results to only the rows
-        in the validation set. 'subset_key' is used indicate the column that should be used to match columns in both
+        in the validation set. 'subset_key' is used indicate the column that should be used to match rows in both
         datasets.
         Args:
             inference_results_set (str): Path to the inference results file. Must be able to be read in as a Pandas
@@ -151,9 +145,9 @@ class Metrics:
         """
         if confidence not in self.conf_dic:
             self.conf_dic[confidence] = [
-            1 if self._inference_subset[self._confidence_column].iloc[i] >= confidence and val else 0
-            for i, val in enumerate(self._inference_subset[self._prediction_column])
-        ]
+                1 if self._inference_subset[self._confidence_column].iloc[i] >= confidence and val else 0
+                for i, val in enumerate(self._inference_subset[self._prediction_column])
+            ]
         return self.conf_dic[confidence]
 
     def _subset(self, key: str) -> pd.DataFrame:
@@ -165,7 +159,8 @@ class Metrics:
         """
         prediction_key_array = self._inference_results_set[key].to_numpy()
         is_in_result = is_in_set_pnb(prediction_key_array,
-                                     self._validation_set[key].to_numpy()); prediction_key_array[is_in_result]
+                                     self._validation_set[key].to_numpy());
+        prediction_key_array[is_in_result]
 
         return self._inference_results_set.iloc[np.where(is_in_result)].sort_values(key)
 
@@ -291,39 +286,40 @@ class Metrics:
         recall = self.calculate_recall(confidence)
 
         return precision + recall
-    def compute_accurary(self, confidence: Union[None, float] = None) -> float:
+
+    def compute_accuracy(self, confidence: Union[None, float] = None) -> float:
         """
-        Calculates total accurary 
+        Calculates total accuracy
         Args:
             confidence (float): When set to default value of None, the predictions above confidence values calculated on
              instantiation will be used. Otherwise, predictions above confidence will be recalculated for result.
         Returns:
-            accuracy (float): (true_positives + true_negatives) / (true_positives + true_positives + false_negatives + false_positives)
+            accuracy (float): (true_positives + true_negatives) / (true_positives + true_positives + false_negatives +
+             false_positives)
         """
         tp = self.calculate_true_positives(confidence)
-        tn = self.calculate_true_negatives(confidence) 
+        tn = self.calculate_true_negatives(confidence)
         fp = self.calculate_false_positives(confidence)
         fn = self.calculate_false_negatives(confidence)
         return (tp + tn) / (tp + tn + fp + fn)
+
     def _get_fpr_trp_thresh(self):
-        positive_confidences = [1-conf if not self._inference_subset[self._prediction_column].iloc[i] else conf for
+        positive_confidences = [1 - conf if not self._inference_subset[self._prediction_column].iloc[i] else conf for
                                 i, conf in enumerate(self._inference_subset[self._confidence_column])]
 
         fpr, tpr, thresholds = metrics.roc_curve(self._validation_set[self._validation_column], positive_confidences)
         return fpr, tpr, thresholds
 
-    def plot_roc(self, outpath: str = None, confusionMatrix: bool = True, titleStr: Union[str, None] = None):
-        
+    def plot_roc(self, outpath: str = None, confusionMatrix: bool = True, title_str: Union[str, None] = None):
         fpr, tpr, thresholds = self._get_fpr_trp_thresh()
         plt.subplots()
         plt.plot(fpr, tpr, label='ROC')
         if confusionMatrix:
-            thresholdOpt, gmeanOpt, fprOpt, tprOpt, precision, f1, acc = self.confusion_matrix(fpr=fpr, tpr=tpr, thresholds=thresholds)
+            _, _, fprOpt, tprOpt, _, _, _ = self.confusion_matrix(fpr=fpr, tpr=tpr, thresholds=thresholds)
             plt.plot(fprOpt, tprOpt, marker="*", markersize=10, markerfacecolor="red", label='Point At Threshold')
         plt.plot([0, 1], [0, 1], linestyle='--', label="Random Classifier")
-        if titleStr is None:
-            titleStr = 'Receiver operating characteristic (ROC) curve' 
-        plt.title(titleStr)
+        title_str = 'Receiver operating characteristic (ROC) curve' if title_str is None else title_str
+        plt.title(title_str)
         plt.ylabel('True positive rate')
         plt.xlabel('False positive rate')
 
@@ -334,8 +330,10 @@ class Metrics:
             plt.show()
 
         return fpr, tpr, thresholds
-    def confusion_matrix(self, confidence : Union[float, None]=None, fpr : Union[List, None]=None, tpr : Union[List, None]=None, thresholds : Union[List, None]=None):
-        if fpr is None or tpr is None or thresholds is None: 
+
+    def confusion_matrix(self, confidence: Union[float, None] = None, fpr: Union[List, None] = None,
+                         tpr: Union[List, None] = None, thresholds: Union[List, None] = None):
+        if fpr is None or tpr is None or thresholds is None:
             fpr, tpr, thresholds = self._get_fpr_trp_thresh()
         if confidence is None:
             gmean = np.sqrt(tpr * (1 - fpr))
@@ -343,7 +341,7 @@ class Metrics:
             index = np.argmax(gmean)
         else:
             assert 0 < thresholds < 1, 'Confidence must be set between zero and 1'
-            IX = np.where(thresholds < confidence )
+            IX = np.where(thresholds < confidence)
             assert len(IX) > 0, 'Something bad happended, this list should be non-empty'
             index = IX[-1]
         thresholdOpt = round(thresholds[index], ndigits=4)

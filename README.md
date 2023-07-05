@@ -234,15 +234,3 @@ python bin/download_s3.py models
 ``` bash 
 python bin/download_s3.py results
 ```
-
-
-## Jupyter notebook
-The docker container should have started a jupyter server for you so that you can use the jupyter notebook on your local device. This means that you can run python code on the remote machine while editing and seeing results through a local web browers. There are alternative solutions through IDE's like VSCode that allow you to edit code and ipython notebook while on the remote. Depending on the user one may be more preferential than another. 
-
-In a docker 
-`docker exec -it hella bash`
-May need to make b2p visible
-`ln -s /b2p /work/b2p`
-`jupyter notebook list `  -> gives a URL 
-Take URL open in browser back on personal machine
-EX: http://0.0.0.0:8888/?token=38e9d27171d4c02e1841b90ab5f003848ffa0dedb8b7172a

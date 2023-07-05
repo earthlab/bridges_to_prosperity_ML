@@ -19,17 +19,15 @@ Settings when starting an instance.
 
 ### Installing Docker and Screen on EC2 instance with AWS Linux 2023 AMI
 ``` bash 
-screen -S dockerRun
 sudo yum update 
 sudo yum install docker
 sudo yum install screen
 ```
 
-### Running Docker and B2P Container
+### Running Docker
 ``` bash 
 sudo service docker start
 sudo chmod 666 /var/run/docker.sock
-sudo docker container run 
 ```
 
 ### Open screen and start Docker Container

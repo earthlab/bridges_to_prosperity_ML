@@ -1,8 +1,7 @@
 """
 Runs inference over a set of regions given a certain input model. Inference results are output to both csv and
 shapefile formats.
-If there is truth data for the set of regions, the truth data flag can be set and the target for each prediction will
-be added to the results files.
+If there is truth data for the set of regions, the target for each prediction will be added to the results files.
 """
 import argparse
 import os
@@ -18,7 +17,7 @@ from file_types import InferenceResultsCSV, TrainedModel, MultiRegionTileMatch, 
 
 def run_inference(model_file_path: str, regions: List[str],
                   batch_size: int = CONFIG.TORCH.INFERENCE.BATCH_SIZE,
-                  num_workers: int = CONFIG.TORCH.INFERENCE.NUM_WORKERS, print_frequency: int = 100) -> None:
+                  num_workers: int = CONFIG.TORCH.INFERENCE.NUM_WORKERS) -> None:
     """
     Runs inference over a set of regions given a certain input model. Inference results are output to both csv and
     shapefile formats.
@@ -26,11 +25,8 @@ def run_inference(model_file_path: str, regions: List[str],
         model_file_path (str): Path to the pytorch model file that will be used to run inference over the specified
         input regions
         regions (list): Region(s) to run inference over. Must be in regions_info.yaml file
-        truth_data (bool): If set truth data will be searched for the input regions and a target row will be added to
-        the output csv file
         batch_size (int): Batch size for inference 
         num_workers(int): Number of workers to use for running inference
-        print_requency (int): Frequency of progress updates printed to the console
     """
     model_file = TrainedModel.create(model_file_path)
     if model_file is None:
@@ -73,7 +69,6 @@ def run_inference(model_file_path: str, regions: List[str],
         results_file=results_csv,
         batch_size=batch_size,
         num_workers=num_workers,
-        print_frequency=print_frequency,
         truth_data=truth_data
     )
 
@@ -95,9 +90,7 @@ if __name__ == '__main__':
                         help='Batch size for inference')
     parser.add_argument('--num_workers', '-w', required=False, type=int, default=CONFIG.TORCH.INFERENCE.NUM_WORKERS,
                         help='Number of workers for inference')
-    parser.add_argument('--print_frequency', '-p', required=False, type=int, default=100)
     args = parser.parse_args()
 
     run_inference(model_file_path=args.model_file_path, regions=args.inference_regions,
-                  batch_size=args.batch_size, num_workers=args.num_workers,
-                  print_frequency=args.print_frequency)
+                  batch_size=args.batch_size, num_workers=args.num_workers)

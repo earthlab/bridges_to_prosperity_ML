@@ -1,5 +1,6 @@
 """
-Calculautes receiver operator characteristic curve for inference results. Also outputs the optimal confidence threshold based on the G-Mean.
+Calculates receiver operator characteristic curve for inference results. Also outputs the optimal confidence threshold
+ based on the G-Mean.
 """
 import argparse
 from src.ml.metrics import Metrics

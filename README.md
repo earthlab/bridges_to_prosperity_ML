@@ -200,7 +200,8 @@ Each program has several optional flags for tuning the run to a specific locatio
 
 ## download_s3.py
 
-Used to download composites, trained models, or inference results from the s3 bucket configured to the project. One of these file types must be specified when calling this program.
+Used to download composites, trained models, or inference results from the s3 bucket configured to the project. 
+One of these file types must be specified when calling this program.
 
 Example usage for downloading existing files in s3 of a certain type:
 
@@ -208,7 +209,7 @@ Example usage for downloading existing files in s3 of a certain type:
 ``` bash 
 python bin/download_s3.py composites
 ``` 
-This will download all existing composites. To further refine your download, specify any combination of region, district, or utm tile:
+Will download all existing composites. To further refine your download, specify any combination of region, district, or utm tile:
 
 ``` bash 
 python bin/download_s3.py composites --region Uganda
@@ -230,7 +231,207 @@ Will download all composites that belong to the 35NRA UTM tile, regardless of re
 python bin/download_s3.py models
 ```
 
+Will download all available trained PyTorch models
+
 ### inference_results:
 ``` bash 
-python bin/download_s3.py results
+python bin/download_s3.py inference_results
 ```
+
+Will download all available sets of inference result csv and shapefiles  
+
+To refine the download criteria for both model and inference results files, specify any combination of 
+regions, architecture, layers, epoch, ratio, tile size, or 'best' model
+
+``` bash 
+python bin/download_s3.py models --regions Rwanda Uganda
+```
+
+Will download all models trained on districts from Rwanda and Uganda only
+
+``` bash 
+python bin/download_s3.py inference_results --regions Rwanda Uganda --architecture resnet50 --layers elevation nir 
+osm-water --epoch 27 --ratio 2.0 --tile_size 250 --best
+```
+
+Will download inference results for runs over Rwanda and Uganda that used resnet50 models trained on elevation, near IR, 
+and OSM water layers. Further, only epoch 27, which must also be marked as best, for a bridge / no bridge ratio of 2 and
+tile size of 250 m will be downloaded
+
+The name of the s3 bucket as well as the number of cores can be changed from their project configuration values by 
+specifying the following flags 
+
+``` bash 
+python bin/download_s3.py --s3_bucket_name backup_bucket --cores 10 composites 
+```
+
+Will download all composites from the s3 bucket names backup bucket and will use 10 cores to download the files in
+parallel
+
+## calculate_inference_metrics.py
+Used for calculating receiver operator characteristic curve for a set of inference results over an area which was used
+to train a model. By combining the inference results with the training validation set, various performance metrics can
+be calculated, such as the optimal confidence threshold based on the G-Mean. 
+
+There are 3 arguments-- inference_results, validation_set, and out_path, which must be specified:
+
+``` bash 
+python bin/calculate_inference_metrics.py --inference_results data/inference_results/Rwanda_Uganda/resnet18/r2.0/Rwanda_Uganda_resnet18_r2.0_ts300_elevation_nir_osm-water_epoch25_best.csv --validation_set data/tiles/train_validate_split/validate_Rwanda_Uganda_2.0_ts300.csv --out_path data/Rwanga_Uganda_300_roc.png
+```
+
+## create_composites.py
+Creates the multivariate composites for input regions, districts, and mgrs tiles. Multivariate composites are comprised
+of Sentinel2 red, green, blue, infrared, osm water, osm admin boundaries, elevation, and slope data respectively for a
+single region. Any existing optical only composites will be searched for in s3 storage. Any remaining bands are created
+as files and then merged together to create the final multivariate composite.
+
+Composite creation can be done for a set of regions, districts, or UTM tiles. A slices parameter can be set in order to 
+split up the file creation in memory. Creating cloud corrected optical layers can take a lot of memory, and 
+specifying a greater amount of slices will lower the amount used at one time.
+
+``` bash 
+python bin/create_composites.py 
+```
+
+This will create composites for all regions, districts, and mgrs tiles in the region_info.yaml file with the default 
+amount of cores and slices
+
+``` bash 
+python bin/create_composites.py --regions Uganda --districts Kasese Kibaale
+```
+
+This will create composites for the Kasese and Kibaale districts in Uganda 
+
+``` bash 
+python bin/create_composites.py --mgrs 35MRV --slices 20 --cores 5 
+```
+
+Creates a composites for UTM tile 35MRV found in any of the input regions. 20 slices will be used to create the cloud 
+cleaned optical composites and 5 cores will be used to create the composites in parallel
+
+## run_inference.py
+A set of regions can be specified to run inference over, and a set of results files (csv and shapefile) will be output
+for each one. If there is ground truth data for a region, a target column indicating whether a bride exists at the 
+location will be output to the files. The batch size and number of workers can be set as input parameters.
+
+Note that tiles of the same size as the model must already exist for all the specified inference regions
+
+
+``` bash 
+python bin/run_inference.py --model_file_path data/trained_models/Rwanda_Uganda/resnet18/r2.0/Rwanda_Uganda_resnet18_r2.0_ts300_elevation_nir_osm-water_epoch25_best.tar --inference_regions "Cote d'Ivoire" --batch_size 80 --num_workers 10
+```
+
+Will use the resnet18 model trained over Rwanda and Uganda with a tile size of 300m to run inference over each district 
+in Cote d'Ivoire with a batch size of 80 and 10 workers
+
+## tiles_from_composites.py 
+
+Creates tiff tile files from the specified region's composites. By default, this will crawl the data/composites
+directory and make tiles for all composites and write them to the appropriate location in data/tiles. A tile match csv 
+file will also be written for each UTM tile. The UTM tile match files will be concatenated for each region, and
+ultimately a tile match file for the region will be output. 
+
+``` bash 
+python bin/tiles_from_composites.py
+```
+
+Will create tiles for each existing composites in data/tiles with the default size of 300m,
+utilizing the amount of available cores - 1.
+
+``` bash 
+python bin/tiles_from_composites.py --region Zambia --cores 3 --tile_size 200
+```
+
+Will create tiles with a tile size of 200m for each existing composite in Zambia. 3 cores will be utilized for creating
+the tiles in parallel 
+
+## train_models.py 
+
+Performs model training in order to infer bridge locations and outputs the models to data/trained_models. The input
+regions, architecture, no bridge / bridge ratio, and layers used to train the model can be specified. 
+
+``` bash 
+python bin/train_models.py --regions Uganda Rwanda --layers elevation nir osm-water
+```
+
+Will train several models using the tiles for Uganda and Rwanda. A model will be trained for each of the default bridge
+/ no bridge ratios (0.5, 1.0, 2.0, 5.0) and architectures ('resnet18', 'resnet34', 'resnet50'). The default tile size of
+300m will be used with a train / validate split of 70 / 30 respectively. The elevation, near infrared, and OSM water
+features will be used as the input tensors for training.
+
+``` bash 
+python bin/train_models.py --regions Uganda Rwanda --layers elevation nir osm-water --class_ratios 2 --tile_size 250 --training_ratio 60 --architectures resnet18
+```
+
+Will train several models using the tiles for Uganda and Rwanda. A model will be trained for 
+a bridge / no bridge ratio of 2.0 and resnet18 architecture. A tile size of 250m will be used with a train / validate
+split of 60 / 40 respectively. The elevation, near infrared, and OSM water features will be used as the input tensors
+for training.
+
+## train_validate_split.py
+
+Creates a train / validation csv set from a single tile match file for a given ratio of training to validation data. 
+The tile match file for each region and tile size must already exist.
+
+``` bash 
+python bin/train_validate_split.py --regions "Cote d'Ivoire" Rwanda Uganda
+```
+
+Will create a train / validate csv set for the three input regions. The training ratio will be the default (70%) and the
+tile size searched for will be the default (300m).
+
+``` bash 
+python bin/train_validate_split.py --regions "Cote d'Ivoire" Rwanda Uganda --training_ratio 50 --tile_size 100
+```
+
+Will create a train / validate csv set for the three input regions. The training ratio will be 50% and the
+tile size searched for will be 100m.
+
+
+## upload_s3.py
+
+Uploads different file types to s3 storage including composite, trained model, and inference result files. Several 
+parameters can be specified in order to make the uploaded file set more specific. The s3 bucket will default to the 
+bucket configured to the project. If the s3_bucket_name argument is specified from the command line, this value will
+override the default.
+
+### composites 
+
+``` bash 
+python bin/upload_s3.py composites
+``` 
+Will upload all existing composites. To further refine your upload, specify any combination of region, district,
+or utm tile:
+
+``` bash 
+python bin/upload_s3.py composites --region Uganda
+```
+Will upload all composites for Uganda only
+
+``` bash 
+python bin/upload_s3.py composites --region Uganda --district Kasese
+```
+Will upload all composites for Uganda in the Kasese district only
+
+``` bash 
+python bin/upload_s3.py composites --mgrs 35NRA
+```
+Will upload all composites that belong to the 35NRA UTM tile, regardless of region or district
+
+### models:
+``` bash 
+python bin/upload_s3.py models
+```
+
+Will upload all available trained PyTorch models
+
+### inference_results:
+``` bash 
+python bin/upload_s3.py inference_results
+```
+
+Will upload all available sets of inference result csv and shapefiles  
+
+To refine the upload criteria for both model and inference results files, specify any combination of 
+regions, architecture, layers, epoch, ratio, tile size, or 'best' model
+

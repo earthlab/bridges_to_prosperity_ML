@@ -1,5 +1,6 @@
 """
-Uploads
+Uploads different file types to s3 storage including composite, trained model, and inference result files. Several
+parameters can be specified in order to make the uploaded file set more specific.
 """
 import argparse
 

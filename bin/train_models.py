@@ -13,6 +13,7 @@ from file_types import TrainedModel, TrainSplit, ValidateSplit
 ARCHITECTURES = ('resnet18', 'resnet34', 'resnet50')
 RATIOS = [0.5, 1.0, 2.0, 5.0]
 
+
 def train_models(regions: List[str], training_ratio: int, layers: List[str], tile_size: int,
                  architectures: List[str] = ARCHITECTURES,
                  no_bridge_to_bridge_ratios: Union[None, List[float]] = None) -> None:
